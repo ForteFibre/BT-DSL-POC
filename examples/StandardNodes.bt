@@ -1,0 +1,7 @@
+//! Converted from TreeNodesModel XML
+//! This file contains only `declare ...` statements.
+
+declare Action FindEnemy(in range: float, out pos: Vector3, out found: bool)
+declare Action AttackAction(in loc: Vector3, ref val: int)
+declare Action MoveToPos(in target: Vector3, in speed: float)
+declare Condition HasAmmo(in minAmount: int, in current: int)

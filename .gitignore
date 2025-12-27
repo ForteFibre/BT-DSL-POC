@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+out/
+dist/
+build/
+
+# Generated files
+src/language/generated/
+
+# Logs
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+.vscode-test/
+
+# Editor (個人設定のみ除外、launch.jsonは共有)
+.vscode/settings.json

@@ -1,0 +1,43 @@
+/// Built-in nodes from BehaviorTree.CPP library
+
+// Actions
+declare Action AlwaysFailure()
+declare Action AlwaysSuccess()
+/// Sleep for specified milliseconds
+declare Action Sleep(in msec: int)
+/// Check if entry was updated
+declare Action WasEntryUpdated(in entry: any)
+
+// Control nodes
+declare Control Fallback()
+/// Execute children in parallel
+declare Control Parallel(
+    /// number of children that need to fail to trigger a FAILURE
+    in failure_count: int,
+    /// number of children that need to succeed to trigger a SUCCESS
+    in success_count: int
+)
+declare Control ReactiveFallback()
+declare Control ReactiveSequence()
+declare Control Sequence()
+declare Control SequenceWithMemory()
+
+// Decorators
+/// Tick the child after a few milliseconds
+declare Decorator Delay(in delay_msec: int)
+declare Decorator ForceFailure()
+declare Decorator ForceSuccess()
+declare Decorator Inverter()
+declare Decorator KeepRunningUntilFailure()
+/// Repeat a successful child up to N times. Use -1 to create an infinite loop.
+declare Decorator Repeat(in num_cycles: int)
+/// Execute again a failing child up to N times. Use -1 to create an infinite loop.
+declare Decorator RetryUntilSuccessful(in num_attempts: int)
+/// If true, skip after the first execution
+declare Decorator RunOnce(in then_skip: bool)
+/// Skip unless entry was updated
+declare Decorator SkipUnlessUpdated(in entry: any)
+/// After a certain amount of time, halt() the child if it is still running.
+declare Decorator Timeout(in msec: int)
+/// Wait for entry value update
+declare Decorator WaitValueUpdate(in entry: any)

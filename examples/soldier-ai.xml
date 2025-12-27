@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="Main">
+    <TreeNodesModel>
+        <SubTree ID="SearchAndDestroy">
+            <inout_port name="target" type="Vector3" />
+            <inout_port name="ammo" type="int" />
+            <inout_port name="alert" type="bool" />
+        </SubTree>
+    </TreeNodesModel>
+
+    <BehaviorTree ID="Main">
+        <Metadata>
+            <item key="description" value="兵士のメインループ"/>
+        </Metadata>
+        <Repeat>
+            <Sequence>
+                <SearchAndDestroy target="{TargetPos}" ammo="{Ammo}" alert="{IsAlerted}" />
+                <Fallback>
+                    <AlwaysFailure />
+                    <AlwaysSuccess />
+                </Fallback>
+                <AlwaysSuccess />
+            </Sequence>
+        </Repeat>
+    </BehaviorTree>
+
+    <BehaviorTree ID="SearchAndDestroy">
+        <Sequence>
+            <FindEnemy pos="{target}" found="{alert}" _description="敵を探す (Manifest定義: pos=Out, found=Out)" />
+            <AttackAction loc="{target}" val="{ammo}" _description="攻撃 (Manifest定義: loc=In, val=ref)" />
+        </Sequence>
+    </BehaviorTree>
+
+</root>

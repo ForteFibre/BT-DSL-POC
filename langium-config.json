@@ -1,0 +1,16 @@
+{
+    "projectName": "BtDsl",
+    "languages": [
+        {
+            "id": "bt-dsl",
+            "grammar": "src/language/bt-dsl.langium",
+            "fileExtensions": [
+                ".bt"
+            ],
+            "textMate": {
+                "out": "syntaxes/bt-dsl.tmLanguage.json"
+            }
+        }
+    ],
+    "out": "src/language/generated"
+}
