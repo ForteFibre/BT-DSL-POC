@@ -9,4 +9,3 @@ VitePressでBT-DSL仕様を閲覧するためのドキュメントサイトで�
 - `pnpm docs:dev`
 - `pnpm docs:build`
 - `pnpm docs:preview`
-

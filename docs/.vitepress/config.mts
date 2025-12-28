@@ -69,9 +69,7 @@ export default defineConfig({
       },
       {
         text: 'ライブラリ',
-        items: [
-          { text: '標準ノード', link: '/standard-library' },
-        ],
+        items: [{ text: '標準ノード', link: '/standard-library' }],
       },
     ],
 

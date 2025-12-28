@@ -163,7 +163,7 @@ jobs:
       - name: Run clang-tidy
         run: |
           find core/src -name '*.cpp' | \
-            xargs clang-tidy -p core/build --warnings-as-errors=''
+            xargs clang-tidy -p core/build
 
   # 5. Core Native Build & Test (Skip if only frontend changed)
   test-core-native:

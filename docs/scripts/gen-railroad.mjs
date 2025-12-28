@@ -1,17 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import rr from 'railroad-diagrams';
 
-const {
-  Diagram,
-  Choice,
-  Sequence,
-  Terminal,
-  NonTerminal,
-  OneOrMore,
-  ZeroOrMore,
-  Optional,
-  Skip,
-} = rr;
+const { Diagram, Choice, Sequence, Terminal, NonTerminal, OneOrMore, ZeroOrMore, Optional, Skip } =
+  rr;
 
 // The upstream `railroad-diagrams` library expects its CSS to be loaded by the host page.
 // However, our diagrams are referenced via `<img src="...">`, so the page CSS does NOT apply.
@@ -103,10 +94,7 @@ function renderSvg(ruleName, ruleNode) {
     // (Some browsers are picky when loading SVG via <img>.)
     let open = m;
     if (!/\sxmlns=/.test(open)) {
-      open = open.replace(
-        /^<svg\b/,
-        '<svg xmlns="http://www.w3.org/2000/svg"',
-      );
+      open = open.replace(/^<svg\b/, '<svg xmlns="http://www.w3.org/2000/svg"');
     }
     return `${open}<style>${RAILROAD_SVG_STYLE}</style><title>${ruleName}</title>`;
   });
@@ -147,9 +135,10 @@ export async function generateRailroadSvgs(grammarJsonPath, ruleNames = DEFAULT_
     try {
       svgs[name] = renderSvg(name, ruleNode);
     } catch (e) {
-      svgs[name] = `<svg xmlns="http://www.w3.org/2000/svg"><text x="10" y="20">Failed to render ${name}: ${String(
-        e,
-      )}</text></svg>`;
+      svgs[name] =
+        `<svg xmlns="http://www.w3.org/2000/svg"><text x="10" y="20">Failed to render ${name}: ${String(
+          e,
+        )}</text></svg>`;
     }
   }
 
