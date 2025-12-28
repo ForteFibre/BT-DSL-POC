@@ -368,3 +368,53 @@ jobs:
         run: xvfb-run -a node vscode/out-test/e2e/runTest.js
         env:
           DISPLAY: ':99.0'
+
+  # 11. Package VS Code Extension (VSIX)
+  package-vscode:
+    needs: [changes, build-grammar, build-wasm, build-formatter]
+    if: ${{ needs.changes.outputs.vscode == 'true' || needs.changes.outputs.formatter == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Download WASM Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: core-wasm-build
+          path: core/build-wasm
+
+      - name: Download Formatter Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: formatter-build
+          path: formatter
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build VSIX Package
+        run: pnpm --filter bt-dsl-vscode package
+
+      - name: Verify VSIX was created
+        run: |
+          ls -la vscode/*.vsix
+          test -f vscode/bt-dsl-vscode-*.vsix
+
+      - name: Upload VSIX Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-vsix
+          path: vscode/*.vsix
+          retention-days: 7

@@ -1,0 +1,19 @@
+# Source files (only need compiled output)
+src/**
+test/**
+scripts/**
+
+# Config files
+tsconfig.json
+tsconfig.test.json
+.gitignore
+
+# Build artifacts not needed
+out-test/**
+*.map
+
+# Node modules (bundled by esbuild)
+node_modules/**
+
+# Development files
+.vscode/**

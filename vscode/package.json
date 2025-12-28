@@ -45,7 +45,8 @@
     "test:e2e": "pnpm build && pnpm compile-tests && node ./out-test/e2e/runTest.js",
     "dev": "tsc -b --watch",
     "lint": "pnpm -w exec eslint vscode/src --max-warnings 0",
-    "lint:fix": "pnpm -w exec eslint vscode/src --max-warnings 0 --fix"
+    "lint:fix": "pnpm -w exec eslint vscode/src --max-warnings 0 --fix",
+    "package": "pnpm build && vsce package --no-dependencies --allow-missing-repository --skip-license"
   },
   "dependencies": {
     "@bt-dsl/formatter": "workspace:*",
@@ -56,6 +57,7 @@
     "@types/node": "~18.19.0",
     "@types/mocha": "^10.0.10",
     "@vscode/test-electron": "^2.5.0",
+    "@vscode/vsce": "^3.2.1",
     "glob": "^10.4.5",
     "mocha": "^10.8.2",
     "typescript": "~5.4.0",
