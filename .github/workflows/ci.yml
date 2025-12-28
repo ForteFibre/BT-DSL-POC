@@ -110,16 +110,12 @@ jobs:
       - name: Test Grammar
         run: pnpm --filter @bt-dsl/tree-sitter test
 
-  # 3. Build Core WASM (Always run - reasonably fast & required by downstream)
-  build-wasm:
+  # 3. Build Core native LSP server (required by VS Code extension)
+  build-lsp:
     needs: build-grammar
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: 4.0.22
 
       # Download Grammar Source (Required for C++ build)
       - name: Download Grammar Artifacts
@@ -128,16 +124,18 @@ jobs:
           name: grammar-build
           path: tree-sitter-bt-dsl
 
-      - name: Build WASM
-        run: ./core/scripts/build-wasm.sh
+      - name: Configure CMake (LSP server only)
+        run: cmake -S core -B core/build-lsp -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DBUILD_CLI=OFF -DBUILD_LSP_SERVER=ON
 
-      - name: Upload WASM Artifacts
+      - name: Build LSP server
+        run: cmake --build core/build-lsp -j$(nproc) --target bt_dsl_lsp_server
+
+      - name: Upload LSP Server Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: core-wasm-build
+          name: core-lsp-build
           path: |
-            core/build-wasm/bt_dsl_wasm.wasm
-            core/build-wasm/bt_dsl_wasm.js
+            core/build-lsp/bt_dsl_lsp_server
           retention-days: 1
 
   # 4. Lint Core (clang-format & clang-tidy)
@@ -156,7 +154,7 @@ jobs:
 
       - name: Check clang-format
         run: |
-          find core/src core/include core/wasm -name '*.cpp' -o -name '*.hpp' | \
+          find core/src core/include -name '*.cpp' -o -name '*.hpp' | \
             xargs clang-format --dry-run -Werror
 
       - name: Configure for clang-tidy
@@ -284,7 +282,7 @@ jobs:
 
   # 9. Test VS Code Extension
   test-vscode:
-    needs: [changes, build-grammar, build-wasm, build-formatter]
+    needs: [changes, build-grammar, build-lsp, build-formatter]
     if: ${{ needs.changes.outputs.vscode == 'true' || needs.changes.outputs.formatter == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
     steps:
@@ -303,11 +301,11 @@ jobs:
           name: grammar-build
           path: tree-sitter-bt-dsl
 
-      - name: Download WASM Artifacts
+      - name: Download LSP Server Artifact
         uses: actions/download-artifact@v4
         with:
-          name: core-wasm-build
-          path: core/build-wasm
+          name: core-lsp-build
+          path: core/build-lsp
 
       - name: Download Formatter Artifacts
         uses: actions/download-artifact@v4
@@ -325,7 +323,7 @@ jobs:
 
   # 10. E2E Tests (VS Code Extension)
   test-e2e:
-    needs: [changes, build-grammar, build-wasm, build-formatter]
+    needs: [changes, build-grammar, build-lsp, build-formatter]
     if: ${{ needs.changes.outputs.vscode == 'true' || needs.changes.outputs.formatter == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
     steps:
@@ -344,11 +342,11 @@ jobs:
           name: grammar-build
           path: tree-sitter-bt-dsl
 
-      - name: Download WASM Artifacts
+      - name: Download LSP Server Artifact
         uses: actions/download-artifact@v4
         with:
-          name: core-wasm-build
-          path: core/build-wasm
+          name: core-lsp-build
+          path: core/build-lsp
 
       - name: Download Formatter Artifacts
         uses: actions/download-artifact@v4
@@ -371,7 +369,7 @@ jobs:
 
   # 11. Package VS Code Extension (VSIX)
   package-vscode:
-    needs: [changes, build-grammar, build-wasm, build-formatter]
+    needs: [changes, build-grammar, build-lsp, build-formatter]
     if: ${{ needs.changes.outputs.vscode == 'true' || needs.changes.outputs.formatter == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
     steps:
@@ -389,11 +387,11 @@ jobs:
           name: grammar-build
           path: tree-sitter-bt-dsl
 
-      - name: Download WASM Artifacts
+      - name: Download LSP Server Artifact
         uses: actions/download-artifact@v4
         with:
-          name: core-wasm-build
-          path: core/build-wasm
+          name: core-lsp-build
+          path: core/build-lsp
 
       - name: Download Formatter Artifacts
         uses: actions/download-artifact@v4

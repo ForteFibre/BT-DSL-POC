@@ -43,3 +43,27 @@ target_link_libraries(bt_dsl_tests PRIVATE
 # =============================================================================
 include(GoogleTest)
 gtest_discover_tests(bt_dsl_tests)
+
+# =============================================================================
+# Native LSP server (JSON-RPC over stdio) integration tests
+# =============================================================================
+
+if(UNIX AND TARGET bt_dsl_lsp_server)
+    add_executable(bt_dsl_lsp_server_tests
+        lsp_server/test_lsp_server_jsonrpc.cpp
+    )
+
+    add_dependencies(bt_dsl_lsp_server_tests bt_dsl_lsp_server)
+
+    target_link_libraries(bt_dsl_lsp_server_tests PRIVATE
+        GTest::gtest_main
+        nlohmann_json::nlohmann_json
+    )
+
+    target_compile_definitions(bt_dsl_lsp_server_tests PRIVATE
+        BT_DSL_LSP_SERVER_PATH="$<TARGET_FILE:bt_dsl_lsp_server>"
+        BT_DSL_STDLIB_PATH="${CMAKE_SOURCE_DIR}/stdlib/StandardNodes.bt"
+    )
+
+    gtest_discover_tests(bt_dsl_lsp_server_tests)
+endif()
