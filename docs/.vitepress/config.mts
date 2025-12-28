@@ -32,7 +32,7 @@ export default defineConfig({
 
   // GitHub Pages用の設定
   // リポジトリ名がbt-dslの場合のパス設定
-  base: '/bt-dsl/',
+  base: '/BT-DSL-POC/',
 
   // Railroad 図は構文ガイド内に埋め込む方針のため、
   // standalone ページはビルド対象から除外する。
