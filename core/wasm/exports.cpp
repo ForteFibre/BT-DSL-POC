@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "bt_dsl/lsp.hpp"
+#include "bt_dsl/lsp/lsp.hpp"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>

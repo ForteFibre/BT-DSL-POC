@@ -11,14 +11,14 @@
 #include <utility>
 #include <vector>
 
-#include "bt_dsl/analyzer.hpp"
-#include "bt_dsl/ast.hpp"
-#include "bt_dsl/lsp.hpp"
-#include "bt_dsl/node_registry.hpp"
-#include "bt_dsl/parser.hpp"
-#include "bt_dsl/symbol_table.hpp"
-#include "bt_dsl/type_system.hpp"
-#include "completion_context.hpp"
+#include "bt_dsl/core/ast.hpp"
+#include "bt_dsl/core/symbol_table.hpp"
+#include "bt_dsl/lsp/completion_context.hpp"
+#include "bt_dsl/lsp/lsp.hpp"
+#include "bt_dsl/parser/parser.hpp"
+#include "bt_dsl/semantic/analyzer.hpp"
+#include "bt_dsl/semantic/node_registry.hpp"
+#include "bt_dsl/semantic/type_system.hpp"
 
 namespace bt_dsl::lsp
 {

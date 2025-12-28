@@ -156,7 +156,7 @@ jobs:
 
       - name: Check clang-format
         run: |
-          find core/src core/include core/cli core/wasm -name '*.cpp' -o -name '*.hpp' | \
+          find core/src core/include core/wasm -name '*.cpp' -o -name '*.hpp' | \
             xargs clang-format --dry-run -Werror
 
       - name: Configure for clang-tidy
@@ -164,7 +164,7 @@ jobs:
 
       - name: Run clang-tidy
         run: |
-          find core/src core/cli -name '*.cpp' | \
+          find core/src -name '*.cpp' | \
             xargs clang-tidy -p core/build --warnings-as-errors=''
 
   # 5. Core Native Build & Test (Skip if only frontend changed)

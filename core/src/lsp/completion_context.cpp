@@ -1,4 +1,4 @@
-#include "completion_context.hpp"
+#include "bt_dsl/lsp/completion_context.hpp"
 
 #include <tree_sitter/api.h>
 

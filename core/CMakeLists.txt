@@ -84,14 +84,13 @@ target_link_libraries(tree_sitter_bt_dsl PUBLIC tree-sitter)
 # Core library
 # =============================================================================
 set(BT_DSL_CORE_SOURCES
-    src/parser.cpp
-    src/diagnostic.cpp
-    src/symbol_table.cpp
-    src/type_system.cpp
-    src/node_registry.cpp
-    src/analyzer.cpp
-    src/xml_generator.cpp
-    src/manifest_converter.cpp
+    src/parser/parser.cpp
+    src/core/diagnostic.cpp
+    src/core/symbol_table.cpp
+    src/semantic/type_system.cpp
+    src/semantic/node_registry.cpp
+    src/semantic/analyzer.cpp
+    src/codegen/xml_generator.cpp
     src/lsp/completion_context.cpp
     src/lsp/workspace.cpp
 )
@@ -126,7 +125,11 @@ option(BUILD_CLI "Build CLI tool" ON)
 option(BUILD_WASM "Build WASM exports" OFF)
 
 if(BUILD_CLI)
-    add_executable(bt_dsl_cli cli/main.cpp)
+    add_executable(bt_dsl_cli
+        src/cli/main.cpp
+        src/cli/manifest_converter.cpp
+    )
+    target_include_directories(bt_dsl_cli PRIVATE src/cli)
     target_link_libraries(bt_dsl_cli PRIVATE bt_dsl_core)
     target_compile_options(bt_dsl_cli PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang>:
