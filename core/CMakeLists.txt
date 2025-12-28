@@ -104,8 +104,8 @@ target_link_libraries(bt_dsl_core PUBLIC tree_sitter_bt_dsl)
 target_link_libraries(bt_dsl_core PUBLIC tinyxml2)
 target_link_libraries(bt_dsl_core PUBLIC nlohmann_json::nlohmann_json)
 
-# Compiler warnings
-target_compile_options(bt_dsl_core PRIVATE
+# Common compiler warnings
+set(BT_DSL_COMPILE_OPTIONS
     $<$<CXX_COMPILER_ID:GNU,Clang>:
     -Wall -Wextra -Wpedantic
     -Wshadow -Wnon-virtual-dtor -Wold-style-cast
@@ -115,6 +115,8 @@ target_compile_options(bt_dsl_core PRIVATE
     >
     $<$<CXX_COMPILER_ID:MSVC>:/W4 $<$<BOOL:${WERROR}>:/WX>>
 )
+
+target_compile_options(bt_dsl_core PRIVATE ${BT_DSL_COMPILE_OPTIONS})
 
 # =============================================================================
 # CLI executable
@@ -131,16 +133,7 @@ if(BUILD_CLI)
     )
     target_include_directories(bt_dsl_cli PRIVATE src/cli)
     target_link_libraries(bt_dsl_cli PRIVATE bt_dsl_core)
-    target_compile_options(bt_dsl_cli PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang>:
-        -Wall -Wextra -Wpedantic
-        -Wshadow -Wnon-virtual-dtor -Wold-style-cast
-        -Wcast-align -Wunused -Woverloaded-virtual
-        -Wconversion -Wsign-conversion
-        $<$<BOOL:${WERROR}>:-Werror>
-        >
-        $<$<CXX_COMPILER_ID:MSVC>:/W4 $<$<BOOL:${WERROR}>:/WX>>
-    )
+    target_compile_options(bt_dsl_cli PRIVATE ${BT_DSL_COMPILE_OPTIONS})
 endif()
 
 # =============================================================================
@@ -152,16 +145,7 @@ if(BUILD_LSP_SERVER)
         src/lsp_server/main.cpp
     )
     target_link_libraries(bt_dsl_lsp_server PRIVATE bt_dsl_core)
-    target_compile_options(bt_dsl_lsp_server PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang>:
-        -Wall -Wextra -Wpedantic
-        -Wshadow -Wnon-virtual-dtor -Wold-style-cast
-        -Wcast-align -Wunused -Woverloaded-virtual
-        -Wconversion -Wsign-conversion
-        $<$<BOOL:${WERROR}>:-Werror>
-        >
-        $<$<CXX_COMPILER_ID:MSVC>:/W4 $<$<BOOL:${WERROR}>:/WX>>
-    )
+    target_compile_options(bt_dsl_lsp_server PRIVATE ${BT_DSL_COMPILE_OPTIONS})
 endif()
 
 # =============================================================================
