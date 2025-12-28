@@ -6,20 +6,21 @@
 
 ## 1. 記法
 
-本ドキュメントでは [ISO/IEC 14977 EBNF](https://www.w3.org/TR/REC-xml/#sec-notation) に準拠した記法を使用します。
+本ドキュメントでは [ISO/IEC 14977 EBNF](https://www.w3.org/TR/REC-xml/#sec-notation)
+に準拠した記法を使用します。
 
-| 記法 | 意味 |
-|:---|:---|
-| `=` | 定義 |
-| `;` | 定義の終了 |
-| `\|` | 選択（OR） |
-| `( )` | グループ化 |
-| `[ ]` | オプション（0回または1回） |
-| `{ }` | 繰り返し（0回以上） |
-| `"..."` | 終端記号（リテラル） |
-| `'...'` | 終端記号（リテラル） |
-| `/regex/` | 正規表現パターン |
-| `(*...*)` | コメント |
+| 記法      | 意味                       |
+| :-------- | :------------------------- |
+| `=`       | 定義                       |
+| `;`       | 定義の終了                 |
+| `\|`      | 選択（OR）                 |
+| `( )`     | グループ化                 |
+| `[ ]`     | オプション（0回または1回） |
+| `{ }`     | 繰り返し（0回以上）        |
+| `"..."`   | 終端記号（リテラル）       |
+| `'...'`   | 終端記号（リテラル）       |
+| `/regex/` | 正規表現パターン           |
+| `(*...*)` | コメント                   |
 
 ---
 
@@ -83,8 +84,8 @@ literal = string | float | integer | boolean ;
 
 <WithBaseImage src="/railroad/literal.svg" alt="Railroad diagram for literal" />
 
-> [!NOTE]
-> 字句解析において `float` は `integer` より優先されます。`123.456` は `float` として、`123` は `integer` として解析されます。
+> [!NOTE] 字句解析において `float` は `integer` より優先されます。`123.456` は `float` として、`123`
+> は `integer` として解析されます。
 
 ---
 
@@ -102,8 +103,7 @@ program = { inner_doc }
 
 <WithBaseImage src="/railroad/program.svg" alt="Railroad diagram for program" />
 
-> [!IMPORTANT]
-> 各セクションの順序は固定です。`import` 文が `Tree` の後に現れることは構文エラーです。
+> [!IMPORTANT] 各セクションの順序は固定です。`import` 文が `Tree` の後に現れることは構文エラーです。
 
 ### 3.2 Import 文
 
@@ -116,7 +116,7 @@ import_stmt = "import" , string ;
 ### 3.3 Declare 文
 
 ```ebnf
-declare_stmt      = { outer_doc } , "declare" , category , identifier , 
+declare_stmt      = { outer_doc } , "declare" , category , identifier ,
                     "(" , [ declare_port_list ] , ")" ;
 
 category          = identifier ;
@@ -146,7 +146,7 @@ global_var_decl = "var" , identifier , ":" , type ;
 ### 3.5 Tree 定義
 
 ```ebnf
-tree_def       = { outer_doc } , "Tree" , identifier , 
+tree_def       = { outer_doc } , "Tree" , identifier ,
                  "(" , [ param_list ] , ")" ,
                  "{" , { local_var_decl } , [ node_stmt ] , "}" ;
 
@@ -154,8 +154,8 @@ param_list     = param_decl , { "," , param_decl } ;
 
 param_decl     = [ port_direction ] , identifier , [ ":" , type ] ;
 
-local_var_decl = "var" , identifier , 
-                 [ ":" , type ] , 
+local_var_decl = "var" , identifier ,
+                 [ ":" , type ] ,
                  [ "=" , expression ] ;
 ```
 
@@ -248,14 +248,14 @@ primary_expr         = "(" , expression , ")"
 
 優先順位が高いほど強く結合します。すべて左結合です。
 
-| 優先順位 | 演算子 | 説明 |
-|---:|:---|:---|
-| 9 | `!` `-` (単項) | 論理否定、算術否定 |
-| 8 | `*` `/` `%` | 乗算、除算、剰余 |
-| 7 | `+` `-` | 加算、減算 |
-| 6 | `<` `<=` `>` `>=` | 比較 |
-| 5 | `==` `!=` | 等価 |
-| 4 | `&` | ビット AND |
-| 3 | `\|` | ビット OR |
-| 2 | `&&` | 論理 AND |
-| 1 | `\|\|` | 論理 OR |
+| 優先順位 | 演算子            | 説明               |
+| -------: | :---------------- | :----------------- |
+|        9 | `!` `-` (単項)    | 論理否定、算術否定 |
+|        8 | `*` `/` `%`       | 乗算、除算、剰余   |
+|        7 | `+` `-`           | 加算、減算         |
+|        6 | `<` `<=` `>` `>=` | 比較               |
+|        5 | `==` `!=`         | 等価               |
+|        4 | `&`               | ビット AND         |
+|        3 | `\|`              | ビット OR          |
+|        2 | `&&`              | 論理 AND           |
+|        1 | `\|\|`            | 論理 OR            |

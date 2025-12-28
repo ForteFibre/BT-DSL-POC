@@ -32,7 +32,8 @@ var IsAlerted: bool
 
 ## 3. TreeをSubTreeとして呼び出す
 
-`SearchAndDestroy` は `Tree SearchAndDestroy(ref target, ref ammo, ref alert) { ... }` として定義され、別Treeからはノード呼び出しとして使います。
+`SearchAndDestroy` は `Tree SearchAndDestroy(ref target, ref ammo, ref alert) { ... }`
+として定義され、別Treeからはノード呼び出しとして使います。
 
 ```bt-dsl
 SearchAndDestroy(
@@ -44,7 +45,8 @@ SearchAndDestroy(
 
 - `ref` を付けることで「書き込み意図」を明示。
 - 参照先が `Tree` パラメータではなくグローバル変数であっても、`ref/out` 指定自体は構文上可能。
-- ただし、宣言側ポートが `in` の場合に `ref` を付けると警告（入力専用ポートに対して書き込み意図を示しているため）。
+- ただし、宣言側ポートが `in` の場合に `ref`
+  を付けると警告（入力専用ポートに対して書き込み意図を示しているため）。
 
 ---
 
@@ -72,4 +74,3 @@ Fallback {
 
 - `Fallback` は Control なので `{ ... }` が必須。
 - `AlwaysFailure()` / `AlwaysSuccess()` は引数なしの Action ノード（子ブロックを持たない）。
-

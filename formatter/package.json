@@ -7,7 +7,7 @@
   "types": "./dist/src/index.d.ts",
   "files": [
     "dist",
-    "tree-sitter-bt-dsl.wasm"
+    "tree-sitter-bt_dsl.wasm"
   ],
   "scripts": {
     "prebuild": "mkdir -p dist && cp ../tree-sitter-bt-dsl/tree-sitter-bt_dsl.wasm dist/ || (echo 'Error: WASM not found. Run: pnpm build:grammar' && exit 1)",

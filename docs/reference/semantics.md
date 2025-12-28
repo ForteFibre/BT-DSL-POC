@@ -8,10 +8,10 @@
 
 ### 1.1 スコープの種類
 
-| スコープ | 含まれる宣言 |
-|:---|:---|
-| グローバル | `declare` 文、グローバル変数、`Tree` 定義 |
-| Tree ローカル | Tree パラメータ、ローカル変数 |
+| スコープ      | 含まれる宣言                              |
+| :------------ | :---------------------------------------- |
+| グローバル    | `declare` 文、グローバル変数、`Tree` 定義 |
+| Tree ローカル | Tree パラメータ、ローカル変数             |
 
 ### 1.2 名前解決の優先順位
 
@@ -51,13 +51,13 @@ Action, Condition, Control, Decorator, SubTree
 
 ### 2.2 カテゴリ別の制約
 
-| カテゴリ | 子ブロック `{...}` |
-|:---|:---|
-| `Control` | **必須** |
-| `Action` | 禁止 |
-| `Condition` | 禁止 |
+| カテゴリ    | 子ブロック `{...}`         |
+| :---------- | :------------------------- |
+| `Control`   | **必須**                   |
+| `Action`    | 禁止                       |
+| `Condition` | 禁止                       |
 | `Decorator` | 適用先ノードの子として機能 |
-| `SubTree` | 禁止 |
+| `SubTree`   | 禁止                       |
 
 ### 2.3 デコレータの使用位置
 
@@ -69,11 +69,11 @@ Action, Condition, Control, Decorator, SubTree
 
 ### 3.1 方向の定義
 
-| 方向 | 意味 |
-|:---|:---|
-| `in` | 読み取り専用（デフォルト） |
-| `out` | 書き込み専用 |
-| `ref` | 読み書き両用 |
+| 方向  | 意味                       |
+| :---- | :------------------------- |
+| `in`  | 読み取り専用（デフォルト） |
+| `out` | 書き込み専用               |
+| `ref` | 読み書き両用               |
 
 ### 3.2 引数とポートの方向整合性
 
@@ -81,11 +81,11 @@ Action, Condition, Control, Decorator, SubTree
 
 #### 整合性マトリクス
 
-| `arg_dir` \ `port_dir` | `in` | `out` | `ref` |
-|:---|:---:|:---:|:---:|
-| `in`（または省略） | ✓ | ✗ Error | ✗ Error |
-| `out` | ✗ Error | ✓ | ✗ Error |
-| `ref` | ⚠ Warning | ⚠ Warning | ✓ |
+| `arg_dir` \ `port_dir` |   `in`    |   `out`   |  `ref`  |
+| :--------------------- | :-------: | :-------: | :-----: |
+| `in`（または省略）     |     ✓     |  ✗ Error  | ✗ Error |
+| `out`                  |  ✗ Error  |     ✓     | ✗ Error |
+| `ref`                  | ⚠ Warning | ⚠ Warning |    ✓    |
 
 #### 詳細
 
@@ -106,11 +106,11 @@ Action, Condition, Control, Decorator, SubTree
 
 引数が Tree パラメータを参照する場合：
 
-| パラメータ方向 | 引数に `out`/`ref` を付与 |
-|:---|:---|
-| `in`（または省略） | **エラー** |
-| `out` | 許可 |
-| `ref` | 許可 |
+| パラメータ方向     | 引数に `out`/`ref` を付与 |
+| :----------------- | :------------------------ |
+| `in`（または省略） | **エラー**                |
+| `out`              | 許可                      |
+| `ref`              | 許可                      |
 
 ---
 
@@ -151,7 +151,8 @@ NodeName(port: out 123)  // エラー: リテラルに out は不可
 
 ### 6.1 `out`/`ref` パラメータの未使用
 
-`out` または `ref` として宣言された Tree パラメータが、Tree 内で一度も書き込み操作（代入または `out`/`ref` として渡す）に使用されない場合、警告が発生します。
+`out` または `ref` として宣言された Tree パラメータが、Tree 内で一度も書き込み操作（代入または
+`out`/`ref` として渡す）に使用されない場合、警告が発生します。
 
 ---
 
@@ -159,38 +160,38 @@ NodeName(port: out 123)  // エラー: リテラルに out は不可
 
 ### 7.1 エラー
 
-| ID | 条件 | メッセージ |
-|:---|:---|:---|
-| E001 | 無効なカテゴリ | `Invalid category: '{name}'. Valid categories are: Action, Condition, Control, Decorator, SubTree` |
-| E002 | Control ノードに子ブロックがない | `Control node '{name}' requires a children block` |
-| E003 | 非 Control ノードに子ブロック | `Node '{name}' is not a Control node and cannot have children` |
-| E004 | 未知のノード | `Unknown node: '{name}'` |
-| E005 | 未知のデコレータ | `Unknown decorator: '{name}'` |
-| E006 | 非 Decorator ノードを `@` で使用 | `'{name}' is not a Decorator` |
-| E007 | 未知の変数 | `Unknown variable: '{name}'` |
-| E008 | 未知のポート | `Unknown port: '{name}' on node '{node}'` |
+| ID   | 条件                             | メッセージ                                                                                               |
+| :--- | :------------------------------- | :------------------------------------------------------------------------------------------------------- |
+| E001 | 無効なカテゴリ                   | `Invalid category: '{name}'. Valid categories are: Action, Condition, Control, Decorator, SubTree`       |
+| E002 | Control ノードに子ブロックがない | `Control node '{name}' requires a children block`                                                        |
+| E003 | 非 Control ノードに子ブロック    | `Node '{name}' is not a Control node and cannot have children`                                           |
+| E004 | 未知のノード                     | `Unknown node: '{name}'`                                                                                 |
+| E005 | 未知のデコレータ                 | `Unknown decorator: '{name}'`                                                                            |
+| E006 | 非 Decorator ノードを `@` で使用 | `'{name}' is not a Decorator`                                                                            |
+| E007 | 未知の変数                       | `Unknown variable: '{name}'`                                                                             |
+| E008 | 未知のポート                     | `Unknown port: '{name}' on node '{node}'`                                                                |
 | E009 | ポート方向不整合（in → out/ref） | `Port '{name}' requires 'out' or 'ref' but argument is 'in'. Add 'out' or 'ref' to enable write access.` |
-| E010 | ポート方向不整合（out → in/ref） | `Port '{name}' is declared as 'out' but argument uses '{arg_dir}'` |
-| E011 | in パラメータを out/ref で渡す | `Parameter '{name}' is input-only and cannot be passed as '{arg_dir}'` |
-| E012 | in パラメータへの代入 | `Parameter '{name}' is input-only and cannot be assigned` |
-| E013 | リテラルに out/ref 付与 | `Cannot apply '{dir}' to literal value` |
-| E014 | 位置引数が2個以上 | `Multiple positional arguments are not allowed` |
-| E015 | 位置引数使用時にポートが複数 | `Positional argument requires exactly one port, but '{node}' has {count}` |
-| E016 | 型不整合（代入） | `Cannot assign {rhs_type} to {lhs_type}` |
-| E017 | 型不整合（演算） | `Operator '{op}' cannot be applied to {lhs_type} and {rhs_type}` |
-| E018 | 型不整合（単項演算） | `Operator '{op}' cannot be applied to {type}` |
-| E019 | ローカル変数に型も初期値もない | `Local variable '{name}' must have either a type annotation or initial value` |
-| E020 | 重複定義 | `Duplicate definition: '{name}'` |
+| E010 | ポート方向不整合（out → in/ref） | `Port '{name}' is declared as 'out' but argument uses '{arg_dir}'`                                       |
+| E011 | in パラメータを out/ref で渡す   | `Parameter '{name}' is input-only and cannot be passed as '{arg_dir}'`                                   |
+| E012 | in パラメータへの代入            | `Parameter '{name}' is input-only and cannot be assigned`                                                |
+| E013 | リテラルに out/ref 付与          | `Cannot apply '{dir}' to literal value`                                                                  |
+| E014 | 位置引数が2個以上                | `Multiple positional arguments are not allowed`                                                          |
+| E015 | 位置引数使用時にポートが複数     | `Positional argument requires exactly one port, but '{node}' has {count}`                                |
+| E016 | 型不整合（代入）                 | `Cannot assign {rhs_type} to {lhs_type}`                                                                 |
+| E017 | 型不整合（演算）                 | `Operator '{op}' cannot be applied to {lhs_type} and {rhs_type}`                                         |
+| E018 | 型不整合（単項演算）             | `Operator '{op}' cannot be applied to {type}`                                                            |
+| E019 | ローカル変数に型も初期値もない   | `Local variable '{name}' must have either a type annotation or initial value`                            |
+| E020 | 重複定義                         | `Duplicate definition: '{name}'`                                                                         |
 
 ### 7.2 警告
 
-| ID | 条件 | メッセージ |
-|:---|:---|:---|
-| W001 | `ref` を `in` ポートに渡す | `Port '{name}' is 'in' but argument uses 'ref'. Write operations will be ignored.` |
-| W002 | `ref` を `out` ポートに渡す | `Port '{name}' is 'out'. Consider using 'out' instead of 'ref'.` |
-| W003 | out/ref パラメータが書き込みに未使用 | `Parameter '{name}' is declared as '{dir}' but never used for write access` |
-| W004 | 未使用の変数 | `Variable '{name}' is declared but never used` |
-| W005 | 未使用のパラメータ | `Parameter '{name}' is declared but never used` |
+| ID   | 条件                                 | メッセージ                                                                         |
+| :--- | :----------------------------------- | :--------------------------------------------------------------------------------- |
+| W001 | `ref` を `in` ポートに渡す           | `Port '{name}' is 'in' but argument uses 'ref'. Write operations will be ignored.` |
+| W002 | `ref` を `out` ポートに渡す          | `Port '{name}' is 'out'. Consider using 'out' instead of 'ref'.`                   |
+| W003 | out/ref パラメータが書き込みに未使用 | `Parameter '{name}' is declared as '{dir}' but never used for write access`        |
+| W004 | 未使用の変数                         | `Variable '{name}' is declared but never used`                                     |
+| W005 | 未使用のパラメータ                   | `Parameter '{name}' is declared but never used`                                    |
 
 ---
 

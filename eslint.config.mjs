@@ -52,16 +52,6 @@ export default tseslint.config(
       },
     },
     rules: {
-      // Many framework/plugin hooks require fixed signatures; '_' prefix marks intentional unused.
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        {
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^_',
-        },
-      ],
-
       // Keep import hygiene tight.
       '@typescript-eslint/consistent-type-imports': [
         'error',

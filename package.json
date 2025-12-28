@@ -4,8 +4,7 @@
   "private": true,
   "description": "BehaviorTree DSL - Compiles to BehaviorTree.CPP XML",
   "repository": {
-    "type": "git",
-    "url": ""
+    "type": "git"
   },
   "license": "MIT",
   "scripts": {

@@ -77,7 +77,7 @@ pnpm test
 - `tree-sitter-bt-dsl/`: Tree-sitter文法定義
 - `vscode/`: VS Code拡張機能
 - `formatter/`: Prettierプラグイン
-- `examples/`: サンプルコード
+- `shared/examples/`: サンプルコード
 
 ## ライセンス
 
