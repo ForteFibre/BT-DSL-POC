@@ -12,7 +12,7 @@
     "build": "pnpm run build:grammar && pnpm -r build",
     "build:grammar": "pnpm --filter @bt-dsl/tree-sitter build",
     "build:core": "pnpm --filter core build",
-    "build:wasm": "pnpm --filter core build:wasm",
+    "build:lsp": "pnpm --filter core build:lsp",
     "dev": "pnpm -r --parallel dev",
     "lint": "pnpm -r --if-present lint",
     "lint:fix": "pnpm -r --if-present lint:fix",
@@ -21,7 +21,7 @@
     "format:check": "prettier . --check",
     "test": "pnpm -r test",
     "test:e2e": "pnpm build && pnpm --filter bt-dsl-vscode test:e2e",
-    "clean": "pnpm -r exec rm -rf out dist node_modules/.cache && rm -rf core/build core/build-wasm"
+    "clean": "pnpm -r exec rm -rf out dist node_modules/.cache && rm -rf core/build core/build-lsp"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

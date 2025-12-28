@@ -24,12 +24,8 @@ export default tseslint.config(
       '**/core/build-*/**',
       '**/tree-sitter-bt-dsl/build/**',
 
-      // generated / vendored
-      '**/core/build-wasm/bt_dsl_wasm.js',
-      '**/core/build-wasm/*.wasm',
       '**/vscode/out-test/**',
       '**/vscode/out-tsc/**',
-      '**/vscode/wasm/**',
 
       // test files not in tsconfig (use separate test tsconfig)
       '**/vscode/test/**',

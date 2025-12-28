@@ -121,8 +121,8 @@ target_compile_options(bt_dsl_core PRIVATE
 # =============================================================================
 option(BUILD_CLI "Build CLI tool" ON)
 
-# WASM build entrypoint (serverless): enabled by scripts/build-wasm.sh
-option(BUILD_WASM "Build WASM exports" OFF)
+# Native stdio Language Server (JSON-RPC / LSP)
+option(BUILD_LSP_SERVER "Build JSON-RPC LSP server executable" ON)
 
 if(BUILD_CLI)
     add_executable(bt_dsl_cli
@@ -144,40 +144,30 @@ if(BUILD_CLI)
 endif()
 
 # =============================================================================
+# Native LSP server executable (JSON-RPC over stdio)
+# =============================================================================
+
+if(BUILD_LSP_SERVER)
+    add_executable(bt_dsl_lsp_server
+        src/lsp_server/main.cpp
+    )
+    target_link_libraries(bt_dsl_lsp_server PRIVATE bt_dsl_core)
+    target_compile_options(bt_dsl_lsp_server PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang>:
+        -Wall -Wextra -Wpedantic
+        -Wshadow -Wnon-virtual-dtor -Wold-style-cast
+        -Wcast-align -Wunused -Woverloaded-virtual
+        -Wconversion -Wsign-conversion
+        $<$<BOOL:${WERROR}>:-Werror>
+        >
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 $<$<BOOL:${WERROR}>:/WX>>
+    )
+endif()
+
+# =============================================================================
 # Tests
 # =============================================================================
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
-endif()
-
-# =============================================================================
-# WASM target (serverless LSP exports)
-# =============================================================================
-
-if(BUILD_WASM)
-    if(NOT EMSCRIPTEN)
-        message(FATAL_ERROR "BUILD_WASM requires Emscripten toolchain (use emcmake).")
-    endif()
-
-    add_executable(bt_dsl_wasm
-        wasm/exports.cpp
-    )
-
-    target_link_libraries(bt_dsl_wasm PRIVATE bt_dsl_core)
-
-    # Produce a JS + WASM module (no main entrypoint)
-    target_link_options(bt_dsl_wasm PRIVATE
-        "SHELL:--no-entry"
-        "SHELL:-sALLOW_MEMORY_GROWTH=1"
-        "SHELL:-sMODULARIZE=1"
-        # VS Code extension host is Node.js (CJS). Keep the output require()-able.
-        "SHELL:-sEXPORT_ES6=0"
-        "SHELL:-sEXPORT_NAME=btDslWasmModule"
-        "SHELL:-sENVIRONMENT=node,web,worker"
-        # Runtime helpers used by the TS wrapper.
-        "SHELL:-sEXPORTED_RUNTIME_METHODS=['UTF8ToString','stringToUTF8','lengthBytesUTF8']"
-        # Exported functions (including malloc/free for passing strings in).
-        "SHELL:-sEXPORTED_FUNCTIONS=['_malloc','_free','_bt_workspace_create','_bt_workspace_destroy','_bt_workspace_set_document','_bt_workspace_remove_document','_bt_workspace_diagnostics_json','_bt_workspace_diagnostics_json_with_imports','_bt_workspace_completion_json','_bt_workspace_completion_json_with_imports','_bt_workspace_hover_json','_bt_workspace_hover_json_with_imports','_bt_workspace_definition_json','_bt_workspace_definition_json_with_imports','_bt_workspace_document_symbols_json','_bt_workspace_resolve_imports_json','_bt_workspace_document_highlights_json','_bt_workspace_document_highlights_json_with_imports','_bt_workspace_semantic_tokens_json','_bt_workspace_semantic_tokens_json_with_imports','_bt_free']"
-    )
 endif()

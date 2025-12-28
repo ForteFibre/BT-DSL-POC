@@ -38,8 +38,8 @@
     ]
   },
   "scripts": {
-    "prebuild": "if [ -f ../core/build-wasm/bt_dsl_wasm.wasm ]; then mkdir -p wasm && cp ../core/build-wasm/bt_dsl_wasm.wasm wasm/ && cp ../core/build-wasm/bt_dsl_wasm.js wasm/bt_dsl_wasm.cjs; else echo 'Warning: WASM not found, skipping copy. Extension requires WASM to function.'; fi && if [ -f ../tree-sitter-bt-dsl/tree-sitter-bt_dsl.wasm ]; then mkdir -p out && cp ../tree-sitter-bt-dsl/tree-sitter-bt_dsl.wasm out/; else echo 'Warning: tree-sitter WASM not found for formatter.'; fi",
-    "build": "tsc -b && esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:@bt-dsl/formatter --external:web-tree-sitter --external:prettier --format=esm --platform=node",
+    "prebuild": "if [ -f ../core/build-lsp/bt_dsl_lsp_server ]; then mkdir -p server && cp ../core/build-lsp/bt_dsl_lsp_server server/; else echo 'Warning: LSP server not found at ../core/build-lsp/bt_dsl_lsp_server (set BT_DSL_LSP_PATH for dev or build bt_dsl_lsp_server).'; fi && if [ -f ../tree-sitter-bt-dsl/tree-sitter-bt_dsl.wasm ]; then mkdir -p out && cp ../tree-sitter-bt-dsl/tree-sitter-bt_dsl.wasm out/; else echo 'Warning: tree-sitter WASM not found for formatter.'; fi",
+    "build": "tsc -b && esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:vscode-languageclient --external:vscode-languageclient/* --external:@bt-dsl/formatter --external:web-tree-sitter --external:prettier --format=esm --platform=node",
     "test": "node --test test/*.test.cjs",
     "compile-tests": "tsc -p tsconfig.test.json && node ./scripts/ensure-cjs.mjs",
     "test:e2e": "pnpm build && pnpm compile-tests && node ./out-test/e2e/runTest.js",
@@ -50,7 +50,8 @@
   },
   "dependencies": {
     "@bt-dsl/formatter": "workspace:*",
-    "prettier": "^3.4.2"
+    "prettier": "^3.4.2",
+    "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
     "@types/vscode": "^1.90.0",

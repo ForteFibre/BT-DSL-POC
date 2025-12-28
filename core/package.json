@@ -7,9 +7,9 @@
     "prebuild": "test -d ../tree-sitter-bt-dsl/src || (echo 'Error: tree-sitter grammar not found. Run: pnpm build:grammar' && exit 1)",
     "build": "pnpm run build:native",
     "build:native": "cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)",
-    "build:wasm": "./scripts/build-wasm.sh",
+    "build:lsp": "cmake -S . -B build-lsp -DBUILD_LSP_SERVER=ON -DBUILD_CLI=OFF -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-lsp -j$(nproc)",
     "test": "cd build && ctest --output-on-failure",
-    "clean": "rm -rf build build-wasm",
+    "clean": "rm -rf build build-lsp",
     "format": "find src include -name '*.cpp' -o -name '*.hpp' | xargs clang-format -i",
     "format:check": "find src include -name '*.cpp' -o -name '*.hpp' | xargs clang-format --dry-run --Werror",
     "lint:clang-tidy": "find src \\( -name '*.cpp' -o -name '*.c' \\) | xargs -r -P$(nproc) -n1 clang-tidy -p build"
