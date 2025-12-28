@@ -70,7 +70,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   client = new LanguageClient('bt-dsl', 'BT DSL Language Server', serverOptions, clientOptions);
   context.subscriptions.push({ dispose: () => void client?.stop() });
-  await client.start();
+
+  try {
+    await client.start();
+  } catch (err) {
+    // Avoid crashing the extension host (and therefore e2e) if the native server fails to start.
+    console.error('BT DSL: failed to start language server', err);
+    try {
+      await client.stop();
+    } catch {
+      // ignore
+    }
+    client = undefined;
+    void vscode.window.showErrorMessage(
+      'BT DSL: failed to start LSP server. See console output for details.',
+    );
+    return;
+  }
 
   // Keep formatter local (independent of LSP)
   registerBtDslFormattingProvider(context);

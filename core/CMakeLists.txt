@@ -27,7 +27,8 @@ endif()
 # =============================================================================
 include(FetchContent)
 
-# Tree-sitter core library
+# Tree-sitter core library (build as static)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     tree-sitter
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter.git
