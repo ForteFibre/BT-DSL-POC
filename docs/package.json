@@ -1,0 +1,16 @@
+{
+  "name": "bt-dsl-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen": "node scripts/gen-all.mjs",
+    "dev": "pnpm gen && vitepress dev .",
+    "build": "pnpm gen && vitepress build .",
+    "preview": "vitepress preview ."
+  },
+  "devDependencies": {
+    "railroad-diagrams": "^1.0.0",
+    "shiki": "^3.20.0",
+    "vitepress": "^1.6.4"
+  }
+}
