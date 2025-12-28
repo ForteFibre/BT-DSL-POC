@@ -1,0 +1,56 @@
+//! Soldier AI Definition v1.0
+
+import "./StandardNodes.bt"
+
+// 1. Global Blackboard
+// ここで定義された変数は全Treeからアクセス可能
+var TargetPos: Vector3
+var Ammo: int
+var IsAlerted: bool
+
+// 2. Main Tree
+/// 兵士のメインループ
+Tree Main() {
+  @Repeat
+  Sequence {
+    // グローバル変数の受け渡し
+    // 内部で書き換える変数には 'ref' を付ける
+    SearchAndDestroy(
+      target: ref TargetPos,
+      ammo: ref Ammo,
+      alert: ref IsAlerted
+    )
+
+    Fallback {
+      AlwaysFailure()
+      AlwaysSuccess()
+    }
+
+    Sequence {
+      AlwaysFailure()
+      SearchAndDestroy(
+        target: ref TargetPos,
+        ammo: ref Ammo,
+        alert: ref IsAlerted
+      )
+    }
+
+    AlwaysSuccess()
+
+    AlwaysSuccess()
+  }
+}
+
+// 3. Sub Tree
+// ref target: 敵の位置情報は更新される(Write)ため ref が必要
+// ref ammo:   弾薬は減る(Write)ため ref が必要
+// ref alert:  発見状態は変わる(Write)ため ref が必要
+Tree SearchAndDestroy(ref target, ref ammo, ref alert) {
+  Sequence {
+    /// 敵を探す (Manifest定義: pos=Out, found=Out)
+    FindEnemy(pos: out target, found: out alert)
+
+    /// 攻撃 (Manifest定義: loc=In, val=ref)
+    AttackAction(loc: target, val: ref ammo)
+  }
+}

@@ -1,0 +1,370 @@
+name: CI
+
+on:
+  push:
+    branches: ['main', 'master']
+  pull_request:
+    branches: ['main', 'master']
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # 1. Detect Changes
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      grammar: ${{ steps.filter.outputs.grammar }}
+      core: ${{ steps.filter.outputs.core }}
+      formatter: ${{ steps.filter.outputs.formatter }}
+      vscode: ${{ steps.filter.outputs.vscode }}
+      workflow: ${{ steps.filter.outputs.workflow }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            grammar:
+              - 'tree-sitter-bt-dsl/**'
+              - 'scripts/generate-grammar.sh'
+            core:
+              - 'core/**'
+              - 'CMakeLists.txt'
+            formatter:
+              - 'formatter/**'
+            vscode:
+              - 'vscode/**'
+            workflow:
+              - '.github/workflows/**'
+
+  # 2. Lint & Format Check (JS/TS) - Fast, no deps, always run
+  lint-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install
+      - name: ESLint
+        run: pnpm --filter '!@bt-dsl/core' lint
+      - name: Prettier
+        run: pnpm --filter '!@bt-dsl/core' format:check
+
+  # 3. Build Tree-sitter Grammar (Always run - fast & required)
+  build-grammar:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Grammar
+        run: |
+          npm install -g pnpm
+          pnpm install
+          pnpm run build:grammar
+
+      # Upload artifacts for other jobs
+      - name: Upload Grammar Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: grammar-build
+          path: |
+            tree-sitter-bt-dsl/tree-sitter-bt_dsl.wasm
+            tree-sitter-bt-dsl/src/
+            tree-sitter-bt-dsl/bindings/node/
+          retention-days: 1
+
+  # 3.5 Test Grammar (Run in parallel with other builds)
+  test-grammar:
+    needs: build-grammar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Test Grammar
+        run: pnpm --filter @bt-dsl/tree-sitter test
+
+  # 3. Build Core WASM (Always run - reasonably fast & required by downstream)
+  build-wasm:
+    needs: build-grammar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 4.0.22
+
+      # Download Grammar Source (Required for C++ build)
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Build WASM
+        run: ./core/scripts/build-wasm.sh
+
+      - name: Upload WASM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-wasm-build
+          path: |
+            core/build-wasm/bt_dsl_wasm.wasm
+            core/build-wasm/bt_dsl_wasm.js
+          retention-days: 1
+
+  # 4. Lint Core (clang-format & clang-tidy)
+  lint-core:
+    needs: [changes, build-grammar]
+    if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Check clang-format
+        run: |
+          find core/src core/include core/cli core/wasm -name '*.cpp' -o -name '*.hpp' | \
+            xargs clang-format --dry-run -Werror
+
+      - name: Configure for clang-tidy
+        run: cmake -S core -B core/build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Run clang-tidy
+        run: |
+          find core/src core/cli -name '*.cpp' | \
+            xargs clang-tidy -p core/build --warnings-as-errors=''
+
+  # 5. Core Native Build & Test (Skip if only frontend changed)
+  test-core-native:
+    needs: [changes, build-grammar]
+    if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download Grammar Source (Required for C++ build)
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Configure CMake (with WERROR)
+        run: cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release -DWERROR=ON
+
+      - name: Build Core Native
+        run: cmake --build core/build -j$(nproc)
+
+      - name: Test Core Native
+        run: cd core/build && ctest --output-on-failure
+
+  # 6. Core Sanitizer Tests
+  test-core-sanitizers:
+    needs: [changes, build-grammar]
+    if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Configure CMake (with Sanitizers)
+        run: cmake -S core -B core/build-san -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON
+
+      - name: Build Core with Sanitizers
+        run: cmake --build core/build-san -j$(nproc)
+
+      - name: Test Core with Sanitizers
+        run: cd core/build-san && ctest --output-on-failure
+
+  # 7. Build Formatter (Required for VS Code & Tests)
+  build-formatter:
+    needs: [changes, build-grammar]
+    if: ${{ needs.changes.outputs.formatter == 'true' || needs.changes.outputs.vscode == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Formatter
+        run: pnpm --filter @bt-dsl/formatter build
+
+      - name: Upload Formatter Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatter-build
+          path: |
+            formatter/dist/
+            formatter/package.json
+            formatter/tsconfig.json
+          retention-days: 1
+
+  # 8. Test Formatter
+  test-formatter:
+    needs: [changes, build-formatter]
+    if: ${{ needs.changes.outputs.formatter == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Download Formatter Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: formatter-build
+          path: formatter
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Test Formatter
+        run: pnpm --filter @bt-dsl/formatter test
+
+  # 9. Test VS Code Extension
+  test-vscode:
+    needs: [changes, build-grammar, build-wasm, build-formatter]
+    if: ${{ needs.changes.outputs.vscode == 'true' || needs.changes.outputs.formatter == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack
+        run: corepack enable
+
+      # Download artifacts needed for build
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Download WASM Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: core-wasm-build
+          path: core/build-wasm
+
+      - name: Download Formatter Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: formatter-build
+          path: formatter
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build & Test VS Code Extension
+        run: |
+          pnpm --filter bt-dsl-vscode build
+          pnpm --filter bt-dsl-vscode test
+
+  # 10. E2E Tests (VS Code Extension)
+  test-e2e:
+    needs: [changes, build-grammar, build-wasm, build-formatter]
+    if: ${{ needs.changes.outputs.vscode == 'true' || needs.changes.outputs.formatter == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack
+        run: corepack enable
+
+      # Download artifacts needed for build
+      - name: Download Grammar Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: grammar-build
+          path: tree-sitter-bt-dsl
+
+      - name: Download WASM Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: core-wasm-build
+          path: core/build-wasm
+
+      - name: Download Formatter Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: formatter-build
+          path: formatter
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build all packages
+        run: |
+          pnpm --filter bt-dsl-vscode build
+          pnpm --filter bt-dsl-vscode compile-tests
+
+      - name: Run E2E tests
+        run: xvfb-run -a node vscode/out-test/e2e/runTest.js
+        env:
+          DISPLAY: ':99.0'

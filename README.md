@@ -1,87 +1,83 @@
 # BT-DSL
 
-BehaviorTree.CPP v4向けの独自DSL（Domain-Specific Language）。XMLの可読性と保守性を改善し、コンパイル時エラー検出を提供します。
+BehaviorTree.CPP v4向けの独自DSL（Domain-Specific
+Language）。XMLの可読性と保守性を改善し、強力な静的解析とエディタサポートを提供します。
 
 ## 特徴
 
-- 🔍 **コンパイル時検証**: 変数のタイポ、型不一致、ref権限エラーをコンパイル時に検出
-- 📝 **可読性向上**: XMLより簡潔で、IDEのシンタックスハイライト対応
+- 🔍 **コンパイル時検証**: 変数のタイポ、型不一致、ref権限エラー、ポートの必須チェック等を検出
+- 📝 **可読性向上**: 冗長なXMLタグを排除した、クリーンなC++風の構文
 - 🔗 **シンボル解決**: Blackboard変数とTree引数の自動解決
-- 📖 **ドキュメントコメント**: `///`コメントがXMLの`_description`属性へ出力
+- ⚡ **高速なパース**: Tree-sitterベースの高速なパーサーとC++実装のコアロジック
 
-## インストール
+## アーキテクチャ
+
+本プロジェクトは以下のコンポーネントで構成されています：
+
+- **core**: C++17で記述されたコンパイラコア（パーサー、意味解析、XML生成）
+- **tree-sitter-bt-dsl**: Tree-sitter文法定義
+- **vscode**: VS Code拡張機能（LSPクライアント/サーバー）
+- **formatter**: Prettierプラグインによるコードフォーマッター
+
+## 必須要件
+
+- Node.js (pnpm推奨)
+- CMake 3.20以上
+- C++17 コンパイラ
+- Emscripten
+
+## インストールとビルド
 
 ```bash
-cd bt-dsl
-npm install
-npm run langium:generate
-npm run build
+# 依存関係のインストール
+pnpm install
+
+# 文法と全パッケージのビルド
+pnpm run build
 ```
 
 ## 使用方法
 
-### コンパイル
+### CLI (Command Line Interface)
+
+`core` ディレクトリでビルドされた `bt_dsl_cli` を使用して、検証や変換を行います。
 
 ```bash
-# XMLへコンパイル
-node out/cli/index.js generate <file.bt> -o <output.xml>
+# ビルドされたCLIのパス (例: Linux/macOS)
+export CLI=./core/build/bt_dsl_cli
 
-# 検証のみ
-node out/cli/index.js validate <file.bt>
+# 構文・意味解析のチェック
+$CLI check main.bt
+
+# XMLへのコンパイル
+$CLI convert main.bt -o main.xml
+
+# 既存のXMLマニフェストをBT-DSLへ変換
+$CLI xml-to-bt explicit_manifest.xml -o converted.bt
 ```
 
-### 例
+### VS Code 拡張機能
 
-```
-//! Soldier AI Definition v1.0
+`vscode` ディレクトリで開発用ビルドを実行できます。
 
-var TargetPos: Vector3
-var Ammo: Int
-
-/// メインツリー
-Tree Main() {
-    @Loop
-    Sequence {
-        AttackEnemy(target: TargetPos, ammo: ref Ammo)
-        ForceResult(result: "SUCCESS")
-    }
-}
-```
-
-出力XML:
-
-```xml
-<BehaviorTree ID="Main">
-    <Loop>
-        <Sequence>
-            <AttackEnemy target="{TargetPos}" ammo="{Ammo}" />
-            <ForceResult result="SUCCESS" />
-        </Sequence>
-    </Loop>
-</BehaviorTree>
-```
-
-## 文法
-
-### 型
-
-- リテラル: `"string"`, `42`, `3.14`, `true`/`false`
-- 変数参照: `varName` (読み取り), `ref varName` (書き込み)
+1. VS Codeで本リポジトリを開く
+2. デバッグビュー (F5) から "Run Extension" を実行
 
 ## 開発
 
+### テスト
+
 ```bash
-# Lint
-npm run lint
-npm run lint:fix
-
-# テスト
-npm test
-npm run test:watch
-
-# ビルド
-npm run build
+pnpm test
 ```
+
+### プロジェクト構成
+
+- `core/`: C++実装のコアライブラリとCLI
+- `tree-sitter-bt-dsl/`: Tree-sitter文法定義
+- `vscode/`: VS Code拡張機能
+- `formatter/`: Prettierプラグイン
+- `examples/`: サンプルコード
 
 ## ライセンス
 

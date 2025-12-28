@@ -1,8 +1,0 @@
-import "test-nodes.bt"
-
-var result: Bool
-
-Tree Main(){
-// cursor should complete here:
-TestAction(target:"enemy",done:ref result)
-}

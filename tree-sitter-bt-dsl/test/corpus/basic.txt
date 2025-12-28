@@ -1,0 +1,228 @@
+================================================================================
+Simple tree definition
+================================================================================
+
+Tree Main() {
+    Sequence {
+        Action1()
+        Action2()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (children_block
+        (node_stmt
+          name: (identifier)
+          (property_block))
+        (node_stmt
+          name: (identifier)
+          (property_block))))))
+
+================================================================================
+Declare statement
+================================================================================
+
+declare Action FindEnemy(out target: string)
+
+--------------------------------------------------------------------------------
+
+(program
+  (declare_stmt
+    category: (identifier)
+    name: (identifier)
+    (declare_port_list
+      (declare_port
+        (port_direction)
+        name: (identifier)
+        type: (identifier)))))
+
+================================================================================
+Tree with parameters
+================================================================================
+
+Tree AttackSequence(target: string, ref health: int) {
+    var damage: int = 10
+    Attack(target: target, damage: damage)
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    (param_list
+      (param_decl
+        name: (identifier)
+        type: (identifier))
+      (param_decl
+        (port_direction)
+        name: (identifier)
+        type: (identifier)))
+    (local_var_decl
+      name: (identifier)
+      type: (identifier)
+      init: (expression
+        (or_expr
+          (and_expr
+            (bitwise_or_expr
+              (bitwise_and_expr
+                (equality_expr
+                  (comparison_expr
+                    (additive_expr
+                      (multiplicative_expr
+                        (unary_expr
+                          (primary_expr
+                            (literal
+                              (integer))))))))))))))
+    body: (node_stmt
+      name: (identifier)
+      (property_block
+        (argument_list
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (blackboard_ref
+                name: (identifier))))
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (blackboard_ref
+                name: (identifier)))))))))
+
+================================================================================
+Decorator
+================================================================================
+
+Tree Main() {
+    @Retry(count: 3)
+    Action()
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      (decorator
+        name: (identifier)
+        (property_block
+          (argument_list
+            (argument
+              name: (identifier)
+              value: (value_expr
+                (literal
+                  (integer)))))))
+      name: (identifier)
+      (property_block))))
+
+================================================================================
+Import statement
+================================================================================
+
+import "StandardNodes.bt"
+
+Tree Main() {
+    Action()
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (import_stmt
+    path: (string))
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (property_block))))
+
+================================================================================
+Expression statement
+================================================================================
+
+Tree Counter() {
+    var count: int = 0
+    Sequence {
+        count += 1
+        Log(message: count)
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    (local_var_decl
+      name: (identifier)
+      type: (identifier)
+      init: (expression
+        (or_expr
+          (and_expr
+            (bitwise_or_expr
+              (bitwise_and_expr
+                (equality_expr
+                  (comparison_expr
+                    (additive_expr
+                      (multiplicative_expr
+                        (unary_expr
+                          (primary_expr
+                            (literal
+                              (integer))))))))))))))
+    body: (node_stmt
+      name: (identifier)
+      (children_block
+        (expression_stmt
+          (assignment_expr
+            target: (identifier)
+            op: (assignment_op)
+            value: (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (unary_expr
+                                (primary_expr
+                                  (literal
+                                    (integer)))))))))))))))
+        (node_stmt
+          name: (identifier)
+          (property_block
+            (argument_list
+              (argument
+                name: (identifier)
+                value: (value_expr
+                  (blackboard_ref
+                    name: (identifier)))))))))))
+
+================================================================================
+Documentation comments
+================================================================================
+
+/// This is a documented tree
+Tree Documented() {
+    /// This node does something
+    Action()
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    (outer_doc)
+    name: (identifier)
+    body: (node_stmt
+      (outer_doc)
+      name: (identifier)
+      (property_block))))

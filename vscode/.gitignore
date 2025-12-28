@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+out/
+out-tsc/
+out-test/
+/wasm/
+
+# VS Code extension packaging
+*.vsix
+
+# Test harness
+.vscode-test/
+
+# TS incremental build
+tsconfig.tsbuildinfo

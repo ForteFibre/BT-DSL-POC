@@ -1,0 +1,55 @@
+{
+  "name": "@bt-dsl/tree-sitter",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for BT DSL",
+  "main": "bindings/node",
+  "types": "bindings/node.d.ts",
+  "dependencies": {
+    "node-addon-api": "^8.3.0"
+  },
+  "scripts": {
+    "build": "tree-sitter generate --no-bindings && tree-sitter build --wasm",
+    "build:parser": "tree-sitter generate --no-bindings",
+    "build:node": "pnpm run build:parser && node-gyp build",
+    "build:wasm": "tree-sitter build --wasm",
+    "test": "tree-sitter test",
+    "parse": "tree-sitter parse",
+    "prebuildify": "prebuildify --napi --strip"
+  },
+  "keywords": [
+    "tree-sitter",
+    "parser",
+    "bt-dsl",
+    "behaviortree"
+  ],
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "prebuilds/**",
+    "bindings/node/*",
+    "queries/*",
+    "src/**"
+  ],
+  "devDependencies": {
+    "tree-sitter-cli": "^0.22.0",
+    "prebuildify": "^6.0.0"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.bt-dsl",
+      "file-types": [
+        "bt"
+      ],
+      "highlights": "queries/highlights.scm",
+      "locals": "queries/locals.scm"
+    }
+  ],
+  "peerDependencies": {
+    "tree-sitter": "^0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "tree-sitter": {
+      "optional": true
+    }
+  }
+}

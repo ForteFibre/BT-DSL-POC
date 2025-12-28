@@ -1,0 +1,64 @@
+{
+  "name": "bt-dsl-vscode",
+  "displayName": "BT DSL",
+  "description": "BehaviorTree DSL - VS Code Extension",
+  "version": "0.1.0",
+  "publisher": "bt-dsl",
+  "type": "module",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:bt-dsl"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "bt-dsl",
+        "aliases": [
+          "BT DSL",
+          "bt-dsl"
+        ],
+        "extensions": [
+          ".bt"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "bt-dsl",
+        "scopeName": "source.bt-dsl",
+        "path": "./syntaxes/bt-dsl.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "prebuild": "if [ -f ../core/build-wasm/bt_dsl_wasm.wasm ]; then mkdir -p wasm && cp ../core/build-wasm/bt_dsl_wasm.wasm wasm/ && cp ../core/build-wasm/bt_dsl_wasm.js wasm/bt_dsl_wasm.cjs; else echo 'Warning: WASM not found, skipping copy. Extension requires WASM to function.'; fi && if [ -f ../tree-sitter-bt-dsl/tree-sitter-bt_dsl.wasm ]; then mkdir -p out && cp ../tree-sitter-bt-dsl/tree-sitter-bt_dsl.wasm out/; else echo 'Warning: tree-sitter WASM not found for formatter.'; fi",
+    "build": "tsc -b && esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:@bt-dsl/formatter --external:web-tree-sitter --external:prettier --format=esm --platform=node",
+    "test": "node --test test/*.test.cjs",
+    "compile-tests": "tsc -p tsconfig.test.json && node ./scripts/ensure-cjs.mjs",
+    "test:e2e": "pnpm build && pnpm compile-tests && node ./out-test/e2e/runTest.js",
+    "dev": "tsc -b --watch",
+    "lint": "pnpm -w exec eslint vscode/src --max-warnings 0",
+    "lint:fix": "pnpm -w exec eslint vscode/src --max-warnings 0 --fix"
+  },
+  "dependencies": {
+    "@bt-dsl/formatter": "workspace:*",
+    "prettier": "^3.4.2"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/node": "~18.19.0",
+    "@types/mocha": "^10.0.10",
+    "@vscode/test-electron": "^2.5.0",
+    "glob": "^10.4.5",
+    "mocha": "^10.8.2",
+    "typescript": "~5.4.0",
+    "esbuild": "~0.20.0"
+  }
+}

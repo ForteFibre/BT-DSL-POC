@@ -1,8 +1,0 @@
-/// Test nodes for VS Code integration test
-
-declare Action TestAction(
-    /// Input target name
-    in target: string,
-    /// Completion/hover should understand this is a ref port
-    ref done: Bool
-)

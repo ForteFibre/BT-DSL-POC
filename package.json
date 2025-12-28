@@ -1,89 +1,42 @@
 {
-    "name": "bt-dsl",
-    "version": "0.1.0",
-    "publisher": "bt-dsl",
-    "displayName": "BT DSL",
-    "description": "BehaviorTree DSL - Compiles to BehaviorTree.CPP XML",
-    "categories": [
-        "Programming Languages"
-    ],
-    "engines": {
-        "vscode": "^1.90.0"
-    },
-    "contributes": {
-        "commands": [
-            {
-                "command": "bt-dsl.debug.requestCompletion",
-                "title": "BT DSL: Debug - Request Completion (LSP)"
-            }
-        ],
-        "languages": [
-            {
-                "id": "bt-dsl",
-                "aliases": [
-                    "BT DSL",
-                    "bt-dsl"
-                ],
-                "extensions": [
-                    ".bt"
-                ],
-                "configuration": "./language-configuration.json"
-            }
-        ],
-        "grammars": [
-            {
-                "language": "bt-dsl",
-                "scopeName": "source.bt-dsl",
-                "path": "./syntaxes/bt-dsl.tmLanguage.json"
-            }
-        ]
-    },
-    "keywords": [
-        "langium",
-        "dsl",
-        "behaviortree",
-        "xml"
-    ],
-    "author": "",
-    "license": "MIT",
-    "type": "module",
-    "main": "out/vscode-extension/extension.cjs",
-    "bin": {
-        "bt-dsl": "bin/cli.js"
-    },
-    "scripts": {
-        "build": "tsc -b tsconfig.json && node esbuild.mjs",
-        "build:vscode-test": "tsc -p tsconfig.vscode-test.json && node scripts/ensure-vscode-test-cjs.mjs",
-        "watch": "tsc -b tsconfig.json --watch",
-        "lint": "eslint src --ext ts",
-        "lint:fix": "eslint src --ext ts --fix",
-        "langium:generate": "langium generate",
-        "langium:watch": "langium generate --watch",
-        "test": "vitest run",
-        "test:vscode": "npm run build && npm run build:vscode-test && vscode-test",
-        "test:watch": "vitest",
-        "test:coverage": "vitest run --coverage"
-    },
-    "dependencies": {
-        "chalk": "~5.3.0",
-        "commander": "~11.1.0",
-        "fast-xml-parser": "^5.3.3",
-        "langium": "~3.3.0",
-        "prettier": "^3.4.2",
-        "vscode-languageclient": "^9.0.1"
-    },
-    "devDependencies": {
-        "@types/mocha": "^10.0.10",
-        "@types/node": "~18.19.0",
-        "@types/vscode": "^1.90.0",
-        "@typescript-eslint/eslint-plugin": "~7.0.0",
-        "@typescript-eslint/parser": "~7.0.0",
-        "@vscode/test-cli": "^0.0.12",
-        "@vscode/test-electron": "^2.5.0",
-        "esbuild": "~0.20.0",
-        "eslint": "~8.57.0",
-        "langium-cli": "~3.3.0",
-        "typescript": "~5.4.0",
-        "vitest": "~1.6.0"
-    }
+  "name": "bt-dsl",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BehaviorTree DSL - Compiles to BehaviorTree.CPP XML",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "pnpm run build:grammar && pnpm -r build",
+    "build:grammar": "pnpm --filter @bt-dsl/tree-sitter build",
+    "build:core": "pnpm --filter core build",
+    "build:wasm": "pnpm --filter core build:wasm",
+    "dev": "pnpm -r --parallel dev",
+    "lint": "pnpm -r --if-present lint",
+    "lint:fix": "pnpm -r --if-present lint:fix",
+    "lint:clang-tidy": "pnpm -r --if-present lint:clang-tidy",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm build && pnpm --filter bt-dsl-vscode test:e2e",
+    "clean": "pnpm -r exec rm -rf out dist node_modules/.cache && rm -rf core/build core/build-wasm"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "typescript": "~5.4.0",
+    "typescript-eslint": "^8.20.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "tree-sitter",
+      "tree-sitter-cli"
+    ]
+  }
 }

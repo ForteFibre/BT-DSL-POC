@@ -1,0 +1,536 @@
+================================================================================
+Empty children block
+================================================================================
+
+Tree Main() {
+    Sequence {}
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (children_block))))
+
+================================================================================
+Node with various literal types
+================================================================================
+
+Tree Main() {
+    Action(
+        text: "hello",
+        count: 42,
+        rate: 3.14,
+        active: true,
+        disabled: false
+    )
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (property_block
+        (argument_list
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (literal
+                (string))))
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (literal
+                (integer))))
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (literal
+                (float))))
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (literal
+                (boolean))))
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (literal
+                (boolean)))))))))
+
+================================================================================
+Multiple global variables
+================================================================================
+
+var TargetPos: Vector3
+var Ammo: int
+var IsAlerted: bool
+
+Tree Main() {
+    Action()
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (global_var_decl
+    name: (identifier)
+    type: (identifier))
+  (global_var_decl
+    name: (identifier)
+    type: (identifier))
+  (global_var_decl
+    name: (identifier)
+    type: (identifier))
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (property_block))))
+
+================================================================================
+Parameter without type annotation
+================================================================================
+
+Tree MyTree(ref target, amount) {
+    Sequence {}
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    (param_list
+      (param_decl
+        (port_direction)
+        name: (identifier))
+      (param_decl
+        name: (identifier)))
+    body: (node_stmt
+      name: (identifier)
+      (children_block))))
+
+================================================================================
+Decorator without arguments
+================================================================================
+
+Tree Main() {
+    @Inverter
+    @Repeat
+    Action()
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      (decorator
+        name: (identifier))
+      (decorator
+        name: (identifier))
+      name: (identifier)
+      (property_block))))
+
+================================================================================
+Multiple import statements
+================================================================================
+
+import "nodes.bt"
+import "actions.bt"
+
+Tree Main() {
+    Action()
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (import_stmt
+    path: (string))
+  (import_stmt
+    path: (string))
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (property_block))))
+
+================================================================================
+Inner documentation comment
+================================================================================
+
+//! This is a module documentation
+//! Second line of module doc
+
+Tree Main() {
+    Action()
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (inner_doc)
+  (inner_doc)
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (property_block))))
+
+================================================================================
+Local variable with initialization
+================================================================================
+
+Tree Main() {
+    var count: int = 0
+    var name = "test"
+    Sequence {}
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    (local_var_decl
+      name: (identifier)
+      type: (identifier)
+      init: (expression
+        (or_expr
+          (and_expr
+            (bitwise_or_expr
+              (bitwise_and_expr
+                (equality_expr
+                  (comparison_expr
+                    (additive_expr
+                      (multiplicative_expr
+                        (unary_expr
+                          (primary_expr
+                            (literal
+                              (integer))))))))))))))
+    (local_var_decl
+      name: (identifier)
+      init: (expression
+        (or_expr
+          (and_expr
+            (bitwise_or_expr
+              (bitwise_and_expr
+                (equality_expr
+                  (comparison_expr
+                    (additive_expr
+                      (multiplicative_expr
+                        (unary_expr
+                          (primary_expr
+                            (literal
+                              (string))))))))))))))
+    body: (node_stmt
+      name: (identifier)
+      (children_block))))
+
+================================================================================
+Nested children with mixed content
+================================================================================
+
+Tree Main() {
+    Sequence {
+        Fallback {
+            Action1()
+            Action2()
+        }
+        Action3()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (children_block
+        (node_stmt
+          name: (identifier)
+          (children_block
+            (node_stmt
+              name: (identifier)
+              (property_block))
+            (node_stmt
+              name: (identifier)
+              (property_block))))
+        (node_stmt
+          name: (identifier)
+          (property_block))))))
+
+================================================================================
+Complex binary expression
+================================================================================
+
+Tree Main() {
+    var result: int
+    Sequence {
+        result = a * b + c
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    (local_var_decl
+      name: (identifier)
+      type: (identifier))
+    body: (node_stmt
+      name: (identifier)
+      (children_block
+        (expression_stmt
+          (assignment_expr
+            target: (identifier)
+            op: (assignment_op)
+            value: (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (unary_expr
+                                (primary_expr
+                                  (identifier)))
+                              (unary_expr
+                                (primary_expr
+                                  (identifier))))
+                            (multiplicative_expr
+                              (unary_expr
+                                (primary_expr
+                                  (identifier))))))))))))))))))
+
+================================================================================
+Multiple declare statements
+declare Control MySequence()
+declare Decorator MyDecorator(in count: int)
+
+Tree Main() {
+    Sequence {}
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (declare_stmt
+    category: (identifier)
+    name: (identifier))
+  (declare_stmt
+    category: (identifier)
+    name: (identifier)
+    (declare_port_list
+      (declare_port
+        (port_direction)
+        name: (identifier)
+        type: (identifier))))
+  (declare_stmt
+    category: (identifier)
+    name: (identifier))
+  (declare_stmt
+    category: (identifier)
+    name: (identifier)
+    (declare_port_list
+      (declare_port
+        (port_direction)
+        name: (identifier)
+        type: (identifier))))
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (children_block))))
+
+================================================================================
+Positional argument
+================================================================================
+
+Tree Main() {
+    Action("hello")
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (property_block
+        (argument_list
+          (argument
+            value: (value_expr
+              (literal
+                (string)))))))))
+
+================================================================================
+Blackboard reference with direction
+================================================================================
+
+Tree Main() {
+    Action(
+        target: out myVar,
+        source: ref otherVar,
+        input: in thirdVar
+    )
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    body: (node_stmt
+      name: (identifier)
+      (property_block
+        (argument_list
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (blackboard_ref
+                (port_direction)
+                name: (identifier))))
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (blackboard_ref
+                (port_direction)
+                name: (identifier))))
+          (argument
+            name: (identifier)
+            value: (value_expr
+              (blackboard_ref
+                (port_direction)
+                name: (identifier)))))))))
+
+================================================================================
+Unary expression
+================================================================================
+
+Tree Main() {
+    var result: bool
+    Sequence {
+        result = !flag
+        result = -count
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    (local_var_decl
+      name: (identifier)
+      type: (identifier))
+    body: (node_stmt
+      name: (identifier)
+      (children_block
+        (expression_stmt
+          (assignment_expr
+            target: (identifier)
+            op: (assignment_op)
+            value: (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (unary_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (identifier)))))))))))))))
+        (expression_stmt
+          (assignment_expr
+            target: (identifier)
+            op: (assignment_op)
+            value: (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (unary_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (identifier)))))))))))))))))))
+
+================================================================================
+Comparison and logical operators
+================================================================================
+
+Tree Main() {
+    var result: bool
+    Sequence {
+        result = a > b && c < d
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    name: (identifier)
+    (local_var_decl
+      name: (identifier)
+      type: (identifier))
+    body: (node_stmt
+      name: (identifier)
+      (children_block
+        (expression_stmt
+          (assignment_expr
+            target: (identifier)
+            op: (assignment_op)
+            value: (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (unary_expr
+                                (primary_expr
+                                  (identifier)))))
+                          (additive_expr
+                            (multiplicative_expr
+                              (unary_expr
+                                (primary_expr
+                                  (identifier)))))))))
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (unary_expr
+                                (primary_expr
+                                  (identifier)))))
+                          (additive_expr
+                            (multiplicative_expr
+                              (unary_expr
+                                (primary_expr
+                                  (identifier))))))))))))))))))

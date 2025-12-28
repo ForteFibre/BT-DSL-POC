@@ -1,0 +1,9 @@
+declare Action TestAction(
+  /// position
+  in pos: int,
+  out found: bool
+)
+
+declare Decorator TestDeco(
+  in enabled: bool
+)
