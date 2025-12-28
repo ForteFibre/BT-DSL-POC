@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress';
+import type { LanguageRegistration } from 'shiki';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,15 +15,15 @@ const repoRoot = path.resolve(__dirname, '../..');
 // - `markdown.languages` expects Shiki's `LanguageRegistration` (IRawGrammar + `name`).
 //   (旧来の `{ id, grammar }` 形式は通りません)
 const btDslTmLanguagePath = path.join(repoRoot, 'vscode/syntaxes/bt-dsl.tmLanguage.json');
-const btDslTmLanguage = JSON.parse(fs.readFileSync(btDslTmLanguagePath, 'utf8')) as any;
+const btDslTmLanguage = JSON.parse(fs.readFileSync(btDslTmLanguagePath, 'utf8'));
 
-const btDslLanguage = {
+const btDslLanguage: LanguageRegistration = {
   ...btDslTmLanguage,
   name: 'bt-dsl',
   scopeName: btDslTmLanguage.scopeName ?? 'source.bt-dsl',
   // Do NOT include `name` itself here (would create a circular alias).
   aliases: ['bt', 'bt_dsl'],
-} as any;
+};
 
 export default defineConfig({
   lang: 'ja-JP',
