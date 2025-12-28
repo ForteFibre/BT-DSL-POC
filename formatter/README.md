@@ -10,7 +10,6 @@ DSL言語のPrettierプラグインです。Langiumに依存せず、スタン�
 ## インストール
 
 ```bash
-cd /home/kota/Documents/bt-dsl/formatter
 npm install
 npm run build
 ```

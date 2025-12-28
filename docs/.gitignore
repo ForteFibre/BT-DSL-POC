@@ -1,0 +1,9 @@
+node_modules
+.cache
+.vitepress/cache
+.vitepress/dist
+.vitepress/.temp
+
+# Auto-generated docs artifacts
+generated/
+public/railroad/

@@ -10,6 +10,10 @@ build/
 # Generated files
 src/language/generated/
 
+# Docs (auto-generated)
+docs/generated/
+docs/public/railroad/
+
 # Logs
 npm-debug.log*
 yarn-error.log*
