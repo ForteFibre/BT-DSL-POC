@@ -13,7 +13,7 @@
 - `import` により標準ノード定義（標準ライブラリ）を導入
 - グローバル黒板変数:
   - `TargetPos: Vector3`, `Ammo: int`, `IsAlerted: bool`
-- メインループは `@Repeat` + `Sequence { ... }`
+- メインループは `@[Repeat]` + `Sequence { ... }`
 
 ---
 
@@ -25,15 +25,14 @@ var Ammo: int
 var IsAlerted: bool
 ```
 
-- グローバル変数は全Treeから参照可能。
-- 型注釈は必須。
+- グローバル変数は全 tree から参照可能。
 
 ---
 
-## 3. TreeをSubTreeとして呼び出す
+## 3. tree を SubTree として呼び出す
 
-`SearchAndDestroy` は `Tree SearchAndDestroy(ref target, ref ammo, ref alert) { ... }`
-として定義され、別Treeからはノード呼び出しとして使います。
+`SearchAndDestroy` は `tree SearchAndDestroy(ref target, ref ammo, ref alert) { ... }`
+として定義され、別 tree からはノード呼び出しとして使います。
 
 ```bt-dsl
 SearchAndDestroy(
@@ -44,13 +43,13 @@ SearchAndDestroy(
 ```
 
 - `ref` を付けることで「書き込み意図」を明示。
-- 参照先が `Tree` パラメータではなくグローバル変数であっても、`ref/out` 指定自体は構文上可能。
+- 参照先が `tree` パラメータではなくグローバル変数であっても、`ref/out` 指定自体は構文上可能。
 - ただし、宣言側ポートが `in` の場合に `ref`
   を付けると警告（入力専用ポートに対して書き込み意図を示しているため）。
 
 ---
 
-## 4. outポートへの受け渡し
+## 4. out ポートへの受け渡し
 
 サンプル内には以下があります:
 
@@ -63,7 +62,7 @@ FindEnemy(pos: out target, found: out alert)
 
 ---
 
-## 5. Controlノード + childrenブロック
+## 5. Control ノード + children ブロック
 
 ```bt-dsl
 Fallback {
@@ -74,3 +73,25 @@ Fallback {
 
 - `Fallback` は Control なので `{ ... }` が必須。
 - `AlwaysFailure()` / `AlwaysSuccess()` は引数なしの Action ノード（子ブロックを持たない）。
+
+---
+
+## 6. デコレータの適用
+
+```bt-dsl
+@[Repeat(num_cycles: 3)]
+Sequence {
+  DoSomething()
+}
+
+// 複数デコレータの適用
+@[Timeout(duration: 5.0), Retry(max_attempts: 3)]
+TryConnect()
+
+// 引数なしデコレータ
+@[ForceSuccess]
+MayFail()
+```
+
+- `@[...]` でデコレータを適用
+- 複数デコレータはカンマ区切りで指定

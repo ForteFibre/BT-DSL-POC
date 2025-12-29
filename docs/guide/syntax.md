@@ -15,16 +15,16 @@ BT-DSL ファイルは以下の順序で構成されます：
 
 import "./other.bt"
 
-declare Action MyAction(port: int)
+extern action MyAction(port: int);
 
 var GlobalVar: string
 
-Tree Main() {
+tree Main() {
   MyAction(port: 42)
 }
 ```
 
-> [!NOTE] 順序は固定です。`import` は `Tree` より前に、`declare` は `var`
+> [!NOTE] 順序は固定です。`import` は `tree` より前に、`extern` は `var`
 > より前に書く必要があります。
 
 ---
@@ -43,38 +43,41 @@ import "../shared/common.bt"
 
 ---
 
-## 3. Declare（ノード宣言）
+## 3. extern（ノード宣言）
 
 カスタムノードの型を宣言します。
 
 ```bt-dsl
 /// プレイヤーの位置を取得（Outer Doc）
-declare Action GetPlayerPosition(
+extern action GetPlayerPosition(
   /// 取得した位置（ポートの Outer Doc）
   out position: Vector3
-)
+);
 
-declare Condition IsEnemyVisible(
+extern condition IsEnemyVisible(
   enemy_id: int,
   out visible: bool
-)
+);
 
-declare Control MySequence()
+extern control MySequence {
+  any(failure) => failure;
+  all(success) => success;
+}
 
-declare Decorator Timeout(
-  timeout_ms: int
-)
+extern decorator Timeout(timeout_ms: int) {
+  running => failure;
+}
 ```
 
 ### カテゴリ
 
-| カテゴリ    | 用途                           |
-| :---------- | :----------------------------- |
-| `Action`    | 動作を実行                     |
-| `Condition` | 条件を判定                     |
-| `Control`   | 子ノードを制御（`{...}` 必須） |
-| `Decorator` | 別のノードを修飾（`@` で使用） |
-| `SubTree`   | サブツリーの参照               |
+| カテゴリ    | 用途                                |
+| :---------- | :---------------------------------- |
+| `action`    | 動作を実行                          |
+| `condition` | 条件を判定                          |
+| `control`   | 子ノードを制御（`{...}` 必須）      |
+| `decorator` | 別のノードを修飾（`@[...]` で使用） |
+| `subtree`   | サブツリーの参照                    |
 
 ### ポート方向
 
@@ -84,26 +87,33 @@ declare Decorator Timeout(
 | `out` | 書き込み専用 | -          |
 | `ref` | 読み書き両用 | -          |
 
+詳細な書き込み保証（`out always`,
+`out on_failure`）については[初期化安全性](/reference/initialization-safety)を参照してください。
+
 ---
 
-## 4. グローバル変数
+## 4. グローバル変数・定数
 
 ```bt-dsl
 var PlayerHealth: int
 var TargetPosition: Vector3
 var IsAlerted: bool
+
+const MAX_HEALTH = 100
+const DEFAULT_SPEED: float = 1.5
 ```
 
-- 型注釈は必須
-- すべての Tree から参照可能
+- グローバル変数は型注釈または初期値が必要
+- すべての tree から参照可能
+- `const` はコンパイル時定数
 
 ---
 
-## 5. Tree 定義
+## 5. tree 定義
 
 ```bt-dsl
 /// このツリーの説明
-Tree SearchAndDestroy(ref target: Vector3, ref ammo: int) {
+tree SearchAndDestroy(ref target: Vector3, ref ammo: int) {
   var localCounter: int = 0
 
   Sequence {
@@ -117,7 +127,7 @@ Tree SearchAndDestroy(ref target: Vector3, ref ammo: int) {
 ### パラメータ
 
 ```bt-dsl
-Tree Example(
+tree Example(
   inputOnly: int,           // in（デフォルト）
   in explicitIn: int,       // in（明示）
   out outputOnly: int,      // out
@@ -127,15 +137,16 @@ Tree Example(
 }
 ```
 
-### ローカル変数
+### ローカル変数・定数
 
 ```bt-dsl
-Tree Example() {
+tree Example() {
   var count: int = 0       // 型と初期値
-  var name = "test"         // 型推論（string）
-  var flag: bool            // 初期値なし
+  var name = "test"        // 型推論（string）
+  var flag: bool           // 初期値なし（Uninit）
+  const LOCAL_MAX = 10     // ローカル定数
 
-  // var x                   ← エラー: 型か初期値が必要
+  // var x                  ← エラー: 型か初期値が必要
 }
 ```
 
@@ -173,7 +184,7 @@ Fallback {
   TryFallback()
 }
 
-Parallel(failure_count: 1, success_count: -1) {
+Parallel(failure_threshold: 1, success_threshold: -1) {
   MonitorCondition()
   ExecuteAction()
 }
@@ -185,23 +196,62 @@ Parallel(failure_count: 1, success_count: -1) {
 ### デコレータ
 
 ```bt-dsl
-@Repeat(num_cycles: 3)
-@Delay(delay_msec: 100)
+@[Repeat(num_cycles: 3), Delay(delay_msec: 100)]
 Sequence {
   DoSomething()
 }
 
 // 引数なしのデコレータ
-@ForceSuccess
+@[ForceSuccess]
 MayFail()
 ```
 
-- `@` に続けてデコレータ名
-- 複数のデコレータを重ねられる（上から順に適用）
+- `@[...]` でデコレータを適用
+- 複数のデコレータはカンマ区切り（上から順に適用）
 
 ---
 
-## 7. 式と代入
+## 7. 型
+
+### 基本型
+
+```bt-dsl
+var i: int32         // 32ビット整数
+var f: float64       // 64ビット浮動小数点
+var b: bool          // 真偽値
+var s: string        // 文字列
+```
+
+### 配列型
+
+```bt-dsl
+var arr: [int32; 5]       // 静的配列（固定サイズ5）
+var bounded: [int32; <=5] // 上限付き静的配列（最大5要素）
+var dynamic: vec<int32>   // 動的配列
+
+// 配列リテラル
+var a = [1, 2, 3]         // [int32; 3]
+var v = vec![1, 2, 3]     // vec<int32>
+```
+
+### Nullable型
+
+```bt-dsl
+var target: Pose?         // Nullable（null を許容）
+target = null             // OK
+
+@[Guard(target)]
+Sequence {
+  // このブロック内では target は Pose 型として扱える
+  MoveTo(target)
+}
+```
+
+詳細は[型システム](/reference/type-system)を参照してください。
+
+---
+
+## 8. 式と代入
 
 ### 代入文
 
@@ -231,6 +281,9 @@ Sequence {
 
   // ビット
   flags = mask & 0xFF
+
+  // キャスト
+  small = large as int8
 }
 ```
 
@@ -239,7 +292,7 @@ Sequence {
 
 ---
 
-## 8. コメント
+## 9. コメント
 
 ```bt-dsl
 // 行コメント
@@ -248,7 +301,7 @@ Sequence {
    複数行 OK */
 
 /// Outer Doc（宣言・ノードに付与）
-declare Action Example()
+extern action Example();
 
 //! Inner Doc（ファイル先頭に記述）
 ```
