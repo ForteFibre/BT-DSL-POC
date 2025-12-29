@@ -9,7 +9,7 @@
 ```bt-dsl
 // main.bt - 最も単純なビヘイビアツリー
 
-Tree Main() {
+tree Main() {
   AlwaysSuccess()
 }
 ```
@@ -25,7 +25,7 @@ BT-DSL には標準ノードが用意されています。import で読み込み
 ```bt-dsl
 import "./std.bt"
 
-Tree Main() {
+tree Main() {
   Sequence {
     Log(message: "Starting...")
     AlwaysSuccess()
@@ -64,11 +64,11 @@ Fallback {
 ### 3.3 デコレータで修飾
 
 ```bt-dsl
-@Repeat(num_cycles: 3)
+@[Repeat(num_cycles: 3)]
 DoSomething()
 ```
 
-`@` に続けてデコレータ名を書きます。
+`@[...]` でデコレータを適用します。複数のデコレータはカンマで区切ります：`@[Dec1, Dec2]`
 
 ---
 
@@ -80,7 +80,7 @@ DoSomething()
 var TargetPos: Vector3
 var Health: int
 
-Tree Main() {
+tree Main() {
   FindEnemy(pos: out TargetPos)
   MoveTo(goal: TargetPos)
 }
@@ -92,7 +92,7 @@ Tree Main() {
 ### 4.2 ローカル変数
 
 ```bt-dsl
-Tree Counter() {
+tree Counter() {
   var count: int = 0
 
   Sequence {
@@ -102,7 +102,7 @@ Tree Counter() {
 }
 ```
 
-Tree 内で `var` を宣言すると、その Tree だけで使えます。
+tree 内で `var` を宣言すると、その tree だけで使えます。
 
 ---
 
@@ -112,15 +112,15 @@ Tree 内で `var` を宣言すると、その Tree だけで使えます。
 
 ```bt-dsl
 /// 敵を探して位置を返す
-declare Action FindEnemy(
+extern action FindEnemy(
   /// 見つけた敵の位置
   out pos: Vector3
-)
+);
 
 /// 指定位置に移動
-declare Action MoveTo(
+extern action MoveTo(
   goal: Vector3
-)
+);
 ```
 
 ---

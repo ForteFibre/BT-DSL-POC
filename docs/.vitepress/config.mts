@@ -25,6 +25,16 @@ const btDslLanguage: LanguageRegistration = {
   aliases: ['bt', 'bt_dsl'],
 };
 
+// EBNF言語のTextMate文法を読み込む
+const ebnfTmLanguagePath = path.join(__dirname, 'ebnf.tmLanguage.json');
+const ebnfTmLanguage = JSON.parse(fs.readFileSync(ebnfTmLanguagePath, 'utf8'));
+
+const ebnfLanguage: LanguageRegistration = {
+  ...ebnfTmLanguage,
+  name: 'ebnf',
+  scopeName: ebnfTmLanguage.scopeName ?? 'source.ebnf',
+};
+
 export default defineConfig({
   lang: 'ja-JP',
   title: 'BT-DSL',
@@ -39,7 +49,7 @@ export default defineConfig({
   srcExclude: ['railroad.md', 'README.md'],
 
   markdown: {
-    languages: [btDslLanguage],
+    languages: [btDslLanguage, ebnfLanguage],
   },
 
   themeConfig: {
@@ -65,6 +75,7 @@ export default defineConfig({
           { text: '文法', link: '/reference/grammar' },
           { text: '型システム', link: '/reference/type-system' },
           { text: '意味制約', link: '/reference/semantics' },
+          { text: '初期化安全性', link: '/reference/initialization-safety' },
         ],
       },
       {
