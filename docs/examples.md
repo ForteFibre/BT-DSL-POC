@@ -31,20 +31,20 @@ var IsAlerted: bool
 
 ## 3. tree を SubTree として呼び出す
 
-`SearchAndDestroy` は `tree SearchAndDestroy(ref target, ref ammo, ref alert) { ... }`
+`SearchAndDestroy` は `tree SearchAndDestroy(mut target, mut ammo, mut alert) { ... }`
 として定義され、別 tree からはノード呼び出しとして使います。
 
 ```bt-dsl
 SearchAndDestroy(
-  target: ref TargetPos,
-  ammo: ref Ammo,
-  alert: ref IsAlerted
-)
+  target: mut TargetPos,
+  ammo: mut Ammo,
+  alert: mut IsAlerted
+);
 ```
 
-- `ref` を付けることで「書き込み意図」を明示。
-- 参照先が `tree` パラメータではなくグローバル変数であっても、`ref/out` 指定自体は構文上可能。
-- ただし、宣言側ポートが `in` の場合に `ref`
+- `mut` を付けることで「読み書き両用」を明示。
+- 読み取りのみの場合は `ref`、書き込み専用の場合は `out` を使用。
+- 宣言側ポートが `in` の場合に `mut`
   を付けると警告（入力専用ポートに対して書き込み意図を示しているため）。
 
 ---
@@ -54,7 +54,7 @@ SearchAndDestroy(
 サンプル内には以下があります:
 
 ```bt-dsl
-FindEnemy(pos: out target, found: out alert)
+FindEnemy(pos: out target, found: out alert);
 ```
 
 - `FindEnemy` の宣言（例）は `pos` / `found` が `out` として定義される想定。
@@ -76,22 +76,32 @@ Fallback {
 
 ---
 
-## 6. デコレータの適用
+## 6. デコレータと事前条件
+
+### デコレータ
 
 ```bt-dsl
-@[Repeat(num_cycles: 3)]
-Sequence {
-  DoSomething()
+Retry(n: 3) {
+  DoSomething();
 }
 
-// 複数デコレータの適用
-@[Timeout(duration: 5.0), Retry(max_attempts: 3)]
-TryConnect()
-
-// 引数なしデコレータ
-@[ForceSuccess]
-MayFail()
+ForceSuccess {
+  MayFail();
+}
 ```
 
-- `@[...]` でデコレータを適用
-- 複数デコレータはカンマ区切りで指定
+デコレータは `control` と同様に `{ ... }` ブロックで子を持ちます。
+
+### 事前条件
+
+```bt-dsl
+// null チェックで型絞り込み
+@guard(target != null)
+MoveTo(target);
+
+// 条件が真ならスキップ
+@success_if(already_done)
+DoTask();
+```
+
+`@guard`, `@success_if`, `@failure_if`, `@skip_if`, `@run_while` が使用できます。

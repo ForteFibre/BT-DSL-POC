@@ -55,40 +55,47 @@ extern action GetPlayerPosition(
 );
 
 extern condition IsEnemyVisible(
-  enemy_id: int,
+  enemy_id: int32,
   out visible: bool
 );
 
-extern control MySequence {
-  any(failure) => failure;
-  all(success) => success;
-}
+// Sequence: 全員成功が必要 (デフォルト: All, Chained)
+extern control Sequence;
 
-extern decorator Timeout(timeout_ms: int) {
-  running => failure;
-}
+// Fallback: 誰か成功が必要
+#[behavior(Any)]
+extern control Fallback;
+
+// ForceSuccess: 子の書き込みは保証されない
+#[behavior(None)]
+extern decorator ForceSuccess;
+
+extern decorator Retry(n: int32);
 ```
+
+`control` / `decorator` は `#[behavior(DataPolicy, FlowPolicy)]`
+属性で振る舞いを定義します。詳細は[初期化安全性](/reference/initialization-safety)を参照してください。
 
 ### カテゴリ
 
-| カテゴリ    | 用途                                |
-| :---------- | :---------------------------------- |
-| `action`    | 動作を実行                          |
-| `condition` | 条件を判定                          |
-| `control`   | 子ノードを制御（`{...}` 必須）      |
-| `decorator` | 別のノードを修飾（`@[...]` で使用） |
-| `subtree`   | サブツリーの参照                    |
+| カテゴリ    | 用途                           |
+| :---------- | :----------------------------- |
+| `action`    | 動作を実行                     |
+| `condition` | 条件を判定                     |
+| `control`   | 子ノードを制御（`{...}` 必須） |
+| `decorator` | 単一の子を修飾（`{...}` 必須） |
+| `subtree`   | サブツリーの参照               |
 
 ### ポート方向
 
-| 方向  | 意味         | 省略時     |
-| :---- | :----------- | :--------- |
-| `in`  | 読み取り専用 | デフォルト |
-| `out` | 書き込み専用 | -          |
-| `ref` | 読み書き両用 | -          |
+| 方向  | 意味                                           | 省略時     |
+| :---- | :--------------------------------------------- | :--------- |
+| `in`  | Input (Snapshot): 開始時の入力                 | デフォルト |
+| `ref` | View (Live Read): 継続的な監視（読み取り）     | -          |
+| `mut` | State (Live R/W): 状態の共有・更新（読み書き） | -          |
+| `out` | Output: 結果の出力専用                         | -          |
 
-詳細な書き込み保証（`out always`,
-`out on_failure`）については[初期化安全性](/reference/initialization-safety)を参照してください。
+詳細は[意味制約 - ポート方向の整合性](/reference/semantics#_3-ポート方向の整合性)を参照してください。
 
 ---
 
@@ -128,10 +135,11 @@ tree SearchAndDestroy(ref target: Vector3, ref ammo: int) {
 
 ```bt-dsl
 tree Example(
-  inputOnly: int,           // in（デフォルト）
-  in explicitIn: int,       // in（明示）
-  out outputOnly: int,      // out
-  ref readWrite: int        // ref
+  inputOnly: int32,          // in（デフォルト）
+  in explicitIn: int32,      // in（明示）
+  out outputOnly: int32,     // out
+  ref readOnly: int32,       // ref（読み取り参照）
+  mut readWrite: int32       // mut（読み書き両用）
 ) {
   // ...
 }
@@ -196,18 +204,46 @@ Parallel(failure_threshold: 1, success_threshold: -1) {
 ### デコレータ
 
 ```bt-dsl
-@[Repeat(num_cycles: 3), Delay(delay_msec: 100)]
-Sequence {
-  DoSomething()
+Retry(n: 3) {
+  Sequence {
+    DoSomething();
+  }
 }
 
-// 引数なしのデコレータ
-@[ForceSuccess]
-MayFail()
+ForceSuccess {
+  MayFail();
+}
 ```
 
-- `@[...]` でデコレータを適用
-- 複数のデコレータはカンマ区切り（上から順に適用）
+デコレータは `control`
+と同様の構文で使用しますが、厳密には子は1つのみです。複数記述した場合は暗黙的に `Sequence`
+でラップされます。
+
+### 事前条件（Precondition）
+
+ノードの実行前に評価される条件を `@` 構文で記述します。
+
+```bt-dsl
+// 条件が真なら実行せずに成功
+@success_if(cache_valid)
+FetchData(out data);
+
+// 条件が偽なら実行しない（Failure）
+@guard(target != null)
+MoveTo(target);
+
+// 条件が偽になったら Running 中でも中断
+@run_while(is_active)
+LongRunningTask();
+```
+
+| 構文                | 動作                       |
+| :------------------ | :------------------------- |
+| `@success_if(cond)` | 真なら実行せず Success     |
+| `@failure_if(cond)` | 真なら実行せず Failure     |
+| `@skip_if(cond)`    | 真なら実行せず Skip        |
+| `@run_while(cond)`  | 偽になったら中断 (Skip)    |
+| `@guard(cond)`      | 偽になったら中断 (Failure) |
 
 ---
 
@@ -237,15 +273,15 @@ var v = vec![1, 2, 3]     // vec<int32>
 ### Nullable型
 
 ```bt-dsl
-var target: Pose?         // Nullable（null を許容）
-target = null             // OK
+var target: Pose?;         // Nullable（null を許容）
+target = null;             // OK
 
-@[Guard(target)]
-Sequence {
-  // このブロック内では target は Pose 型として扱える
-  MoveTo(target)
-}
+@guard(target != null)
+MoveTo(target);            // このスコープ内では target は Pose 型として扱える
 ```
+
+`@guard`
+内で null チェックを行うと、そのノードのスコープ内で型の絞り込み（Narrowing）が適用されます。
 
 詳細は[型システム](/reference/type-system)を参照してください。
 

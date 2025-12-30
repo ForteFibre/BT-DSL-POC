@@ -67,6 +67,7 @@ export default defineConfig({
           { text: 'クイックスタート', link: '/guide/quick-start' },
           { text: '構文ガイド', link: '/guide/syntax' },
           { text: '実践例', link: '/examples' },
+          { text: 'XML比較', link: '/comparison' },
         ],
       },
       {

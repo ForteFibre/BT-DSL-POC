@@ -64,11 +64,12 @@ Fallback {
 ### 3.3 デコレータで修飾
 
 ```bt-dsl
-@[Repeat(num_cycles: 3)]
-DoSomething()
+Retry(n: 3) {
+  DoSomething();
+}
 ```
 
-`@[...]` でデコレータを適用します。複数のデコレータはカンマで区切ります：`@[Dec1, Dec2]`
+`Retry` のようなデコレータは `{ ... }` ブロックで子を持ちます。
 
 ---
 
