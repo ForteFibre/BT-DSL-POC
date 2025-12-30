@@ -41,7 +41,8 @@ program = { inner_doc }
           { tree_def } ;
 ```
 
-> [!IMPORTANT] 各セクションの順序は固定です。`import` 文が `tree` の後に現れることは構文エラーです。
+> [!IMPORTANT]
+> 各セクションの順序は固定です。`import` 文が `tree` の後に現れることは構文エラーです。
 
 ### 2.2.2 import
 
@@ -49,7 +50,8 @@ program = { inner_doc }
 import_stmt = "import" , string ;
 ```
 
-> [!NOTE] `import` の探索規則（検索パス、拡張子要件、循環 import の扱い等）は別途規定（TBD /
+> [!NOTE]
+> `import` の探索規則（検索パス、拡張子要件、循環 import の扱い等）は別途規定（TBD /
 > implementation-defined）です。
 
 ### 2.2.3 extern / type / var / const / tree
@@ -324,5 +326,6 @@ const_element_list   = [ const_expr , { "," , const_expr } , [ "," ] ] ;
 const_repeat_init    = const_expr , ";" , const_expr ;
 ```
 
-> [!NOTE] 定数式内の `identifier`
+> [!NOTE]
+> 定数式内の `identifier`
 > は、既に定義済みの他の定数を参照できます。ただし循環参照はコンパイルエラーです。

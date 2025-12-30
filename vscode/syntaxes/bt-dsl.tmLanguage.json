@@ -1,9 +1,7 @@
 {
   "name": "bt-dsl",
   "scopeName": "source.bt-dsl",
-  "fileTypes": [
-    "bt"
-  ],
+  "fileTypes": ["bt"],
   "patterns": [
     {
       "include": "#comments"

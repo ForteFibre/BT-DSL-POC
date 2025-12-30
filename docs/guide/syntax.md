@@ -24,7 +24,8 @@ tree Main() {
 }
 ```
 
-> [!NOTE] 順序は固定です。`import` は `tree` より前に、`extern` は `var`
+> [!NOTE]
+> 順序は固定です。`import` は `tree` より前に、`extern` は `var`
 > より前に書く必要があります。
 
 ---
@@ -198,7 +199,8 @@ Parallel(failure_threshold: 1, success_threshold: -1) {
 }
 ```
 
-> [!IMPORTANT] Control ノードは `{...}` が必須です。`Sequence()` のように `()`
+> [!IMPORTANT]
+> Control ノードは `{...}` が必須です。`Sequence()` のように `()`
 > だけで終わるとエラーになります。
 
 ### デコレータ

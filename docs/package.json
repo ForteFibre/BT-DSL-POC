@@ -9,8 +9,8 @@
     "preview": "vitepress preview ."
   },
   "devDependencies": {
-    "katex": "^0.16.22",
-    "markdown-it-katex": "^2.0.3",
+    "markdown-it": "^14.1.0",
+    "markdown-it-mathjax3": "^4.3.2",
     "railroad-diagrams": "^1.0.0",
     "shiki": "^3.20.0",
     "vitepress": "^1.6.4"

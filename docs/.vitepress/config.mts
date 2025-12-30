@@ -3,7 +3,6 @@ import type { LanguageRegistration } from 'shiki';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import katex from 'markdown-it-katex';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,18 +49,8 @@ export default defineConfig({
   srcExclude: ['railroad.md', 'README.md'],
 
   markdown: {
+    math: true,
     languages: [btDslLanguage, ebnfLanguage],
-    config: (md) => {
-      md.use(katex);
-    },
-  },
-
-  vue: {
-    template: {
-      compilerOptions: {
-        isCustomElement: (tag) => tag.startsWith('mjx-'),
-      },
-    },
   },
 
   themeConfig: {

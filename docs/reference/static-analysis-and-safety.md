@@ -14,7 +14,8 @@
 3. **静的解析**: コンパイラは `#[behavior]`
    に基づきデータフロー解析を行い、未初期化（`Uninit`）の参照をエラーとして報告します。
 
-> [!NOTE] `mut` は読み書き両方を行うため、`in`/`ref` と同様に呼び出し時点で `Init` が必要です。
+> [!NOTE]
+> `mut` は読み書き両方を行うため、`in`/`ref` と同様に呼び出し時点で `Init` が必要です。
 
 ### 6.1.2 状態
 
@@ -40,23 +41,23 @@ DataPolicy は「親が成功した」事実から、子の成功ルートに関
 
 ```bt-dsl
 Sequence {
-	TaskA(out x);
-	TaskB(out y);
+  TaskA(out x);
+  TaskB(out y);
 }
 // -> Sequence が Success で抜けたなら x, y は Init
 ```
 
 ##### `Any`（共通部分 / Intersection）
 
-「親が成功したならば、**いずれかの子が成功している（どの子かは不明）**」
+「親が成功したならば、**いずれかの子が成功している（どの子かは不明）** 」
 
 - **意味**: すべての成功ルートで **共通して書き込まれる `out`** のみが、親成功後に `Init`
   とみなされます。
 
 ```bt-dsl
 Fallback {
-	TaskA(out x);
-	TaskB(out x, out y);
+  TaskA(out x);
+  TaskB(out x, out y);
 }
 // -> Fallback が Success で抜けたなら x は Init
 // -> y は Uninit の可能性がある
@@ -70,7 +71,7 @@ Fallback {
 
 ```bt-dsl
 ForceSuccess {
-	TaskA(out x);
+  TaskA(out x);
 }
 // -> ForceSuccess が Success でも x は Init と保証できない
 ```
@@ -85,8 +86,8 @@ FlowPolicy は「兄弟ノード間で、前のノードの書き込み結果を
 
 ```bt-dsl
 Sequence {
-	Calculate(out result);
-	Use(in result);          // OK: result は Init
+  Calculate(out result);
+  Use(in result);          // OK: result は Init
 }
 ```
 
@@ -96,8 +97,8 @@ Sequence {
 
 ```bt-dsl
 ParallelAll {
-	Calculate(out result);
-	Use(in result);          // Error: result は ParallelAll 開始時点では Uninit
+  Calculate(out result);
+  Use(in result);          // Error: result は ParallelAll 開始時点では Uninit
 }
 ```
 
@@ -130,9 +131,9 @@ ParallelAll {
 extern action TryConnect(out error_code: int32);
 
 tree Main() {
-	var code: int32 = 0;      // 事前に Init
-	TryConnect(error_code: out code);
-	Log(code);                // OK: code は常に Init
+  var code: int32 = 0;      // 事前に Init
+  TryConnect(error_code: out code);
+  Log(code);                // OK: code は常に Init
 }
 ```
 
@@ -150,11 +151,11 @@ tree Main() {
 var target: Pose? = null;
 
 Fallback {
-	@guard(target != null)
-	Sequence {
-		// このブロック内では target: Pose として扱える
-		MoveTo(target);
-	}
+  @guard(target != null)
+  Sequence {
+    // このブロック内では target: Pose として扱える
+    MoveTo(target);
+  }
 }
 ```
 
@@ -194,14 +195,14 @@ UseBoth(a, b); // a: T, b: U（ブロック内）
 extern action FindTarget(out result: Pose);
 
 tree Main() {
-	var target = null;  // Pose?
+  var target = null;  // Pose?
 
-	Sequence {
-		FindTarget(result: out target);
+  Sequence {
+    FindTarget(result: out target);
 
-		@guard(target != null)
-		Use(target);
-	}
+    @guard(target != null)
+    Use(target);
+  }
 }
 ```
 
@@ -245,7 +246,8 @@ tree Main() {
 | `mut`                  | ⚠ Warning | ⚠ Warning |    ✓    | ✗ Error |
 | `out`                  |  ✗ Error  |  ✗ Error  | ✗ Error |    ✓    |
 
-> [!NOTE] Warning は「過剰権限（必要以上に強い参照）」を意味します。処理系は警告として報告できます。
+> [!NOTE]
+> Warning は「過剰権限（必要以上に強い参照）」を意味します。処理系は警告として報告できます。
 
 ### 6.4.3 引数の種類（LValue / RValue）
 
@@ -289,5 +291,6 @@ tree Main() {
 - `ref` / `mut` / `out` ポートにはデフォルト値を指定できません。
 - デフォルト値は `const_expr`（コンパイル時評価可能）でなければなりません。
 
-> [!NOTE] `const_expr` の構文は [構文 - 定数式](./syntax.md#_2-7-定数式constant-expressions)
+> [!NOTE]
+> `const_expr` の構文は [構文 - 定数式](./syntax.md#_2-7-定数式constant-expressions)
 > を参照してください。
