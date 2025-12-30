@@ -68,7 +68,7 @@ identifier = /[a-zA-Z_][a-zA-Z0-9_]*/ - keyword ;
 
 ```
 import  extern  type  var  const  tree  as
-in  out  ref
+in  out  ref  mut
 true  false  null
 vec
 ```
@@ -182,128 +182,103 @@ import_stmt = "import" , string ;
 
 ### 3.3 Extern 文
 
+ノードの外部定義には、その振る舞い（データフローと実行順序）を記述するための属性 `#[behavior(...)]`
+を付与します。
+
 #### 3.3.1 基本構文
 
 ```ebnf
-extern_stmt       = { outer_doc } , "extern" , ( simple_extern | decorator_def | control_def ) ;
+extern_stmt       = { outer_doc } , [ behavior_attr ] , "extern" , extern_def ;
 
-simple_extern     = category , identifier , "(" , [ extern_port_list ] , ")" , ";" ;
+extern_def        = "action"    , identifier , "(" , [ extern_port_list ] , ")" , ";"
+                  | "subtree"   , identifier , "(" , [ extern_port_list ] , ")" , ";"
+                  | "condition" , identifier , "(" , [ extern_port_list ] , ")" , ";"
+                  | "control"   , identifier , [ "(" , [ extern_port_list ] , ")" ] , ";"
+                  | "decorator" , identifier , [ "(" , [ extern_port_list ] , ")" ] , ";" ;
+
+behavior_attr     = "#[" , "behavior" , "(" , data_policy , [ "," , flow_policy ] , ")" , "]" ;
+
+data_policy       = "All" | "Any" | "None" ;
+
+flow_policy       = "Chained" | "Isolated" ;
 
 extern_type_stmt  = { outer_doc } , "extern" , "type" , identifier , ";" ;
 
 type_alias_stmt   = { outer_doc } , "type" , identifier , "=" , type , ";" ;
 
-category          = identifier ;
-                    (* 有効な値: action, condition, subtree *)
-
 extern_port_list  = extern_port , { "," , extern_port } ;
 
 extern_port       = { outer_doc } , [ port_direction ] , identifier , ":" , type , [ "=" , const_expr ] ;
 
-port_direction    = "in" | out_direction | "ref" ;
-
-out_direction     = "out" , [ guarantee_modifier ] ;
-
-guarantee_modifier = "always" | "on_failure" ;
+port_direction    = "in" | "out" | "ref" | "mut" ;
 ```
 
 <WithBaseImage src="/railroad/extern_stmt.svg" alt="Railroad diagram for extern_stmt" />
 
 <WithBaseImage src="/railroad/extern_port.svg" alt="Railroad diagram for extern_port" />
 
-> [!NOTE] 書き込み保証修飾子（`always`,
-> `on_failure`）の詳細は[初期化安全性](./initialization-safety.md)を参照してください。
+#### 3.3.2 Policies（振る舞い定義）
 
-#### 3.3.2 Decorator 定義（状態変換）
+`#[behavior]`
+は、ノードが成功した際の**「子の実行結果（書き込み保証）の集約方法」**と、**「子の実行順序」**を定義します。
 
-Decorator ノードは子ノードの結果を変換するルールを記述できます。
+**デフォルト値と省略:**
 
-```ebnf
-decorator_def     = "decorator" , identifier , [ "(" , [ extern_port_list ] , ")" ] ,
-                    "{" , { mapping_stmt } , "}" ;
+- `DataPolicy` のデフォルトは `All`、`FlowPolicy` のデフォルトは `Chained`
+- デフォルト値の場合は属性全体を省略可能（`#[behavior(All, Chained)]` と同等）
+- `FlowPolicy` のみ省略可能: `#[behavior(Any)]` = `#[behavior(Any, Chained)]`
 
-mapping_stmt      = condition , "=>" , result_status , ";" ;
+| DataPolicy | 意味（成功時の保証）                             | 論理的解釈               | 典型的なノード                     |
+| :--------- | :----------------------------------------------- | :----------------------- | :--------------------------------- |
+| **`All`**  | **すべて**の子が成功したことを保証（デフォルト） | 和集合（Union）          | `Sequence`, `ParallelAll`, `Retry` |
+| **`Any`**  | **いずれか**の子が成功したことを保証             | 共通部分（Intersection） | `Fallback`（Selector）             |
+| **`None`** | 子の実行結果を保証しない                         | 空集合（Empty）          | `ForceSuccess`, `Invert`, `Random` |
 
-condition         = status_kind | "_" ;
+| FlowPolicy     | 意味（データの可視性）                                                           |
+| :------------- | :------------------------------------------------------------------------------- |
+| **`Chained`**  | 前のノードの書き込み結果が、次のノードの入力として有効になる（デフォルト）       |
+| **`Isolated`** | 孤立している。ノード実行時に前のノードの書き込みが終了していることは保証されない |
 
-status_kind       = "success" | "failure" | "running" ;
-
-result_status     = status_kind | "ambiguous" ;
-```
-
-**例:**
-
-```bt-dsl
-extern decorator ForceSuccess {
-    failure => success;
-}
-
-extern decorator Invert {
-    success => failure;
-    failure => success;
-}
-```
-
-#### 3.3.3 Control 定義（論理集約）
-
-Control ノードは複数の子ノードの結果を集約するルールを記述できます。
-
-```ebnf
-control_def       = "control" , identifier , [ "(" , [ extern_port_list ] , ")" ] ,
-                    "{" , [ exec_attr ] , { mapping_stmt } , "}" ;
-
-exec_attr         = "execution" , "=" , exec_mode , ";" ;
-
-exec_mode         = "sequential" | "parallel" ;
-
-condition         = status_kind
-                  | "any(" , status_kind , ")"
-                  | "all(" , status_kind , ")" ;
-```
-
-**例:**
+#### 3.3.3 定義例
 
 ```bt-dsl
-extern control Sequence {
-    any(failure) => failure;
-    all(success) => success;
-}
+// Sequence: 全員成功が必要 (All = デフォルト)、Chained (デフォルト)
+extern control Sequence;
 
-// ParallelAll: 全員成功なら成功、1つでも失敗なら失敗（静的解析可能）
-extern control ParallelAll {
-    execution = parallel;
-    all(success) => success;
-    any(failure) => failure;
-}
+// Fallback: 誰か成功が必要 (Any)、Chained (デフォルト)
+#[behavior(Any)]
+extern control Fallback;
 
-// Parallel: 動的閾値による並列実行（静的解析不可）
-extern control Parallel(
-    in success_threshold: int32,
-    in failure_threshold: int32
-) {
-    execution = parallel;
-    _ => ambiguous;
-}
+// ParallelAll: 全員成功が必要 (All = デフォルト)、Isolated
+#[behavior(All, Isolated)]
+extern control ParallelAll;
+
+// Retry: 最終的に成功したなら、子も成功しているとみなす (All = デフォルト)
+extern decorator Retry(n: int32);
+
+// ForceSuccess: 失敗を成功に書き換えるため、子の書き込みは保証されない
+#[behavior(None)]
+extern decorator ForceSuccess;
 ```
 
 > [!TIP]
-> ノードロジック定義の詳細と解析への影響は[初期化安全性](./initialization-safety.md)を参照してください。
+> 書き込み保証の伝播ルールの詳細は[初期化安全性](./initialization-safety.md)を参照してください。
 
-### 3.4 グローバル変数・定数宣言
+### 3.4 グローバル Blackboard・定数宣言
 
 ```ebnf
-global_var_decl   = "var" , identifier ,
-                    [ ":" , type ] ,
-                    [ "=" , expression ] ;
+global_blackboard_decl = "var" , identifier ,
+                         [ ":" , type ] ,
+                         [ "=" , expression ] ;
 
 global_const_decl = "const" , identifier , [ ":" , type ] , "=" , const_expr ;
 ```
 
-<WithBaseImage src="/railroad/global_var_decl.svg" alt="Railroad diagram for global_var_decl" />
+<WithBaseImage src="/railroad/global_var_decl.svg" alt="Railroad diagram for global_blackboard_decl" />
 
 > [!NOTE]
 >
-> - グローバル変数の型推論は**同一ファイル内**で完結する必要があります。
+> - グローバル Blackboard の型は、明示的な型注釈または初期値から決定される必要があります。
 > - グローバル定数は初期化が必須であり、値はコンパイル時に評価可能な `const_expr`
 >   でなければなりません。
 
@@ -312,16 +287,18 @@ global_const_decl = "const" , identifier , [ ":" , type ] , "=" , const_expr ;
 ```ebnf
 tree_def        = { outer_doc } , "tree" , identifier ,
                   "(" , [ param_list ] , ")" ,
-                  "{" , { local_var_decl | local_const_decl } , [ node_stmt ] , "}" ;
+                  tree_body ;
+
+tree_body       = "{" , { statement } , "}" ;
 
 param_list      = param_decl , { "," , param_decl } ;
 
-param_decl      = [ port_direction ] , identifier , [ ":" , type ] , [ "=" , const_expr ] ;
+param_decl      = [ port_direction ] , identifier , ":" , type , [ "=" , const_expr ] ;
 
-(* 型も初期値も省略可能（推論に依存） *)
-local_var_decl  = "var" , identifier ,
-                  [ ":" , type ] ,
-                  [ "=" , expression ] ;
+(* Blackboard 宣言: 初期値は省略可能 *)
+blackboard_decl   = "var" , identifier ,
+                    [ ":" , type ] ,
+                    [ "=" , expression ] ;
 
 (* ローカル定数もコンパイル時定数のみ *)
 local_const_decl = "const" , identifier , [ ":" , type ] , "=" , const_expr ;
@@ -331,37 +308,151 @@ local_const_decl = "const" , identifier , [ ":" , type ] , "=" , const_expr ;
 
 <WithBaseImage src="/railroad/param_decl.svg" alt="Railroad diagram for param_decl" />
 
-<WithBaseImage src="/railroad/local_var_decl.svg" alt="Railroad diagram for local_var_decl" />
+<WithBaseImage src="/railroad/local_var_decl.svg" alt="Railroad diagram for blackboard_decl" />
 
-### 3.6 ノード文
+### 3.6 文（Statement）
 
 ```ebnf
-node_stmt       = { outer_doc } , [ decorator_list ] , identifier , node_body ;
+(* 文の定義 *)
+statement         = simple_stmt , ";"       (* 単一行はセミコロン必須 *)
+                  | block_stmt ;            (* ブロック系はセミコロン不要 *)
 
-node_body       = property_block , [ children_block ]
-                | children_block ;
+(* セミコロンが必要なもの *)
+simple_stmt       = leaf_node_call          (* Action(); *)
+                  | assignment_stmt         (* x = 1; *)
+                  | blackboard_decl ;       (* var x; *)
 
-decorator_list  = "@[" , decorator_entry , { "," , decorator_entry } , "]" ;
+(* セミコロンが不要なもの（波括弧で終わるもの） *)
+block_stmt        = compound_node_call ;    (* Sequence { ... } *)
 
-decorator_entry = identifier , [ property_block ] ;
+(* ノード呼び出しの詳細 *)
+leaf_node_call    = { outer_doc } , [ precondition_list ] , identifier , property_block ;
 
-property_block  = "(" , [ argument_list ] , ")" ;
+compound_node_call = { outer_doc } , [ precondition_list ] , identifier , node_body_with_children ;
 
-argument_list   = argument , { "," , argument } ;
+node_body_with_children = property_block , children_block
+                        | children_block ;
 
-argument        = identifier , [ "as" , type ] , ":" , argument_expr    (* named argument, optional CICO *)
-                | argument_expr ;                                        (* positional argument *)
+precondition_list = precondition , { precondition } ;
 
-argument_expr   = [ port_direction ] , expression ;
+precondition      = "@" , precond_kind , "(" , expression , ")" ;
 
-children_block  = "{" , { node_stmt | expression_stmt } , "}" ;
+precond_kind      = "success_if" | "failure_if" | "skip_if" | "run_while" | "guard" ;
+
+property_block    = "(" , [ argument_list ] , ")" ;
+
+argument_list     = argument , { "," , argument } ;
+
+argument          = identifier , ":" , argument_expr    (* named argument *)
+                  | argument_expr ;                      (* positional argument *)
+
+argument_expr     = [ port_direction ] , expression
+                  | "out" , inline_blackboard_decl ;    (* out var x 構文 *)
+
+inline_blackboard_decl = "var" , identifier ;
+
+children_block    = "{" , { statement } , "}" ;
 ```
 
 <WithBaseImage src="/railroad/node_stmt.svg" alt="Railroad diagram for node_stmt" />
 
-<WithBaseImage src="/railroad/decorator.svg" alt="Railroad diagram for decorator" />
-
 <WithBaseImage src="/railroad/argument.svg" alt="Railroad diagram for argument" />
+
+#### 3.6.1 インライン Blackboard 宣言
+
+`out` ポートへの引数として、Blackboard を同時に宣言することができます。
+
+```bt-dsl
+// 事前に宣言するパターン
+var result: int32;
+Compute(res: out result);
+
+// インライン宣言パターン（型はポートから推論）
+Compute(res: out var result);
+
+
+```
+
+**制約:**
+
+- インライン宣言は `out` 方向でのみ使用可能
+- 宣言された Blackboard は、その宣言を含む `children_block` のスコープに属する
+- 型注釈は使用不可（ポートの型から推論される）
+
+### 3.7 事前条件（Precondition）
+
+事前条件はノードの実行前に評価される組み込み構文です。`@`
+記号を先頭に置き、条件式を括弧内に記述します。
+
+| 構文                | 動作                                                       | 偽の時のステータス |
+| :------------------ | :--------------------------------------------------------- | :----------------- |
+| `@success_if(cond)` | 条件が真なら実行せず即座に終了                             | `Success`          |
+| `@failure_if(cond)` | 条件が真なら実行せず即座に終了                             | `Failure`          |
+| `@skip_if(cond)`    | 条件が真なら実行せずスキップ                               | `Skip`             |
+| `@run_while(cond)`  | 実行前・実行中に条件を評価。偽になった場合、実行を中断する | `Skip`             |
+| `@guard(cond)`      | 実行前・実行中に条件を評価。偽になった場合、実行を中断する | `Failure`          |
+
+> [!NOTE] `@run_while` と `@guard`
+> は、条件が満たされなくなった際の終了ステータスのみが異なります。どちらも「条件が真である間のみ実行を許可する」という動作は同一です。
+
+**例:**
+
+```bt-dsl
+// 条件が真なら実行せずに成功
+@success_if(cache_valid)
+FetchData(out data);
+
+// target が null でない場合のみ実行
+@guard(target != null)
+MoveTo(target);
+
+// 条件が偽になったら Running 中でも中断
+@run_while(is_active)
+LongRunningTask();
+
+// 複数の事前条件を組み合わせる
+@guard(target != null)
+@failure_if(!is_valid)
+ApproachTarget(target);
+```
+
+> [!NOTE] 複数の事前条件が指定された場合の評価順序はランタイム依存です。
+
+> [!IMPORTANT] `@guard` および `@run_while`
+> の条件式内で参照される Nullable 変数は、そのノードのスコープ内で非Nullable型として扱われます（型の絞り込み）。詳細は[意味制約 - 制御フローによる型推論](./semantics.md#_8-1-制御フローによる型推論-flow-sensitive-typing)を参照してください。
+
+### 3.8 Decorator の暗黙的 Sequence 挿入
+
+`decorator` カテゴリのノードは、厳密には **1つの子ノードのみ**
+を持つことができます。しかし、構文上は `control`
+と同じ形式で複数の子ノードを記述することが許可されます。
+
+**ルール:**
+
+- `decorator` ノードの `children_block` に**2つ以上**のノードが記述された場合、コンパイラは自動的に
+  `Sequence` ノードでそれらをラップします。
+- `children_block` に**1つのみ**のノードが記述された場合、そのまま子として扱われます。
+
+**例:**
+
+```bt-dsl
+// ユーザーが記述したコード
+Retry(n: 3) {
+    TaskA();
+    TaskB();
+}
+
+// コンパイラが解釈するコード（暗黙のSequence挿入）
+Retry(n: 3) {
+    Sequence {
+        TaskA();
+        TaskB();
+    }
+}
+```
+
+> [!NOTE] この暗黙的変換は `decorator` カテゴリのノードにのみ適用されます。`control`
+> ノードは複数の子を持つことが許可されているため、この変換は行われません。
 
 ### 3.8 代入文
 
@@ -414,11 +505,7 @@ primary_expr         = ( "(" , expression , ")"
 
 vec_macro            = "vec!" , array_literal ;
 
-array_literal        = "[" , ( element_list | repeat_init ) , "]" ;     (* → 2.8 参照 *)
-
-element_list         = [ expression , { "," , expression } ] ;
-
-repeat_init          = expression , ";" , expression ;
+(* array_literal, element_list, repeat_init は 2.8 配列リテラル を参照 *)
 
 index_suffix         = "[" , expression , "]" ;
 ```

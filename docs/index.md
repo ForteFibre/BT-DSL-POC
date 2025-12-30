@@ -21,7 +21,7 @@ BT-DSL は [BehaviorTree.CPP](https://www.behaviortree.dev/) v4 向けのドメ�
 - [文法](/reference/grammar) — EBNF 形式の構文定義
 - [型システム](/reference/type-system) — 型規則と互換性
 - [意味制約](/reference/semantics) — 静的検査ルールと診断メッセージ
-- [初期化安全性](/reference/initialization-safety) — 変数の初期化と書き込み保証
+- [初期化安全性](/reference/initialization-safety) — Blackboard の初期化と書き込み保証
 
 ---
 

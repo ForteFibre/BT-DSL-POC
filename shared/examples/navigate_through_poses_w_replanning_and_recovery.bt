@@ -1,0 +1,95 @@
+// ----------------------------------------------------------------------
+// This Behavior Tree replans the global path periodically at 1 Hz through an array of poses
+// continuously and it also has recovery actions specific to planning / control as well as general system issues.
+// ----------------------------------------------------------------------
+
+tree NavigateThroughPosesWReplanningAndRecovery(
+    mut goals: vec<Pose>,
+    mut waypoint_statuses: vec<WaypointStatus>
+) {
+    const LOCAL_COSTMAP_CLEAR = "local_costmap/clear_entirely_local_costmap";
+    const GLOBAL_COSTMAP_CLEAR = "global_costmap/clear_entirely_global_costmap";
+
+    var path;
+    var compute_path_error_code = 0;
+    var follow_path_error_code = 0;
+
+    RecoveryNode(number_of_retries: 6) {
+        PipelineSequence {
+            ProgressCheckerSelector(
+                out var selected_progress_checker,
+                default_progress_checker: "progress_checker",
+                topic_name: "progress_checker_selector"
+            );
+            GoalCheckerSelector(
+                out var selected_goal_checker,
+                default_goal_checker: "general_goal_checker",
+                topic_name: "goal_checker_selector"
+            );
+            PathHandlerSelector(
+                out var selected_path_handler,
+                default_path_handler: "PathHandler",
+                topic_name: "path_handler_selector"
+            );
+            ControllerSelector(
+                out var selected_controller,
+                default_controller: "FollowPath",
+                topic_name: "controller_selector"
+            );
+            PlannerSelector(
+                out var selected_planner,
+                default_planner: "GridBased",
+                topic_name: "planner_selector"
+            );
+
+            RateController(hz: 0.333) {
+                RecoveryNode(number_of_retries: 1) {
+                    ReactiveSequence {
+                        RemovePassedGoals(
+                            input_goals: goals,
+                            output_goals: out goals,
+                            radius: 0.7,
+                            input_waypoint_statuses: waypoint_statuses,
+                            output_waypoint_statuses: out waypoint_statuses
+                        );
+                        ComputePathThroughPoses(
+                            goals: goals,
+                            path: out path,
+                            planner_id: selected_planner,
+                            error_code_id: out compute_path_error_code
+                        );
+                    }
+                    @guard(compute_path_error_code != 0)
+                    ClearEntireCostmap(service_name: GLOBAL_COSTMAP_CLEAR);
+                }
+            }
+
+            RecoveryNode(number_of_retries: 1) {
+                FollowPath(
+                    path: path,
+                    controller_id: selected_controller,
+                    error_code_id: out follow_path_error_code,
+                    goal_checker_id: selected_goal_checker,
+                    progress_checker_id: selected_progress_checker,
+                    path_handler_id: selected_path_handler
+                );
+                @guard(follow_path_error_code != 0)
+                ClearEntireCostmap(service_name: LOCAL_COSTMAP_CLEAR);
+            }
+        }
+
+        @guard(follow_path_error_code != 0 || compute_path_error_code != 0)
+        ReactiveFallback {
+            GoalUpdated();
+            RoundRobin {
+                Sequence {
+                    ClearEntireCostmap(service_name: LOCAL_COSTMAP_CLEAR);
+                    ClearEntireCostmap(service_name: GLOBAL_COSTMAP_CLEAR);
+                }
+                Spin(spin_dist: 1.57);
+                Wait(wait_duration: 5.0);
+                BackUp(backup_dist: 0.30, backup_speed: 0.15);
+            }
+        }
+    }
+}
