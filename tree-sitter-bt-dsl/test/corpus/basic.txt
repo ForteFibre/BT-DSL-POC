@@ -1,189 +1,115 @@
 ================================================================================
-Simple tree definition
+Program structure (imports / extern / globals / tree)
 ================================================================================
 
-Tree Main() {
-    Sequence {
-        Action1()
-        Action2()
-    }
+//! Module doc
+
+import "./stdlib.bt"
+
+extern type Pose;
+type PoseRef = Pose?;
+
+#[behavior(Any)]
+extern control Fallback;
+extern action MoveTo(in goal: Pose, out ok: bool);
+
+var Target: Pose?
+const MAX_RETRIES: int32 = 3
+
+tree Main(ref target: Pose?) {
+  var retries: int32 = 0;
+
+  @guard(target != null)
+  Fallback {
+    MoveTo(goal: target, ok: out var ok);
+    retries += 1;
+  }
 }
 
 --------------------------------------------------------------------------------
 
 (program
+  (inner_doc)
+  (import_stmt
+    (string))
+  (extern_type_stmt
+    (identifier))
+  (type_alias_stmt
+    (identifier)
+    (type
+      (base_type
+        (primary_type
+          (identifier)))))
+  (extern_stmt
+    (behavior_attr
+      (data_policy))
+    (extern_def
+      (identifier)))
+  (extern_stmt
+    (extern_def
+      (identifier)
+      (extern_port_list
+        (extern_port
+          (port_direction)
+          (identifier)
+          (type
+            (base_type
+              (primary_type
+                (identifier)))))
+        (extern_port
+          (port_direction)
+          (identifier)
+          (type
+            (base_type
+              (primary_type
+                (identifier))))))))
+  (global_blackboard_decl
+    (identifier)
+    (type
+      (base_type
+        (primary_type
+          (identifier)))))
+  (global_const_decl
+    (identifier)
+    (type
+      (base_type
+        (primary_type
+          (identifier))))
+    (const_expr
+      (expression
+        (or_expr
+          (and_expr
+            (bitwise_or_expr
+              (bitwise_and_expr
+                (equality_expr
+                  (comparison_expr
+                    (additive_expr
+                      (multiplicative_expr
+                        (cast_expr
+                          (unary_expr
+                            (primary_expr
+                              (literal
+                                (integer))))))))))))))))
   (tree_def
-    name: (identifier)
-    body: (node_stmt
-      name: (identifier)
-      (children_block
-        (node_stmt
-          name: (identifier)
-          (property_block))
-        (node_stmt
-          name: (identifier)
-          (property_block))))))
-
-================================================================================
-Declare statement
-================================================================================
-
-declare Action FindEnemy(out target: string)
-
---------------------------------------------------------------------------------
-
-(program
-  (declare_stmt
-    category: (identifier)
-    name: (identifier)
-    (declare_port_list
-      (declare_port
-        (port_direction)
-        name: (identifier)
-        type: (identifier)))))
-
-================================================================================
-Tree with parameters
-================================================================================
-
-Tree AttackSequence(target: string, ref health: int) {
-    var damage: int = 10
-    Attack(target: target, damage: damage)
-}
-
---------------------------------------------------------------------------------
-
-(program
-  (tree_def
-    name: (identifier)
+    (identifier)
     (param_list
       (param_decl
-        name: (identifier)
-        type: (identifier))
-      (param_decl
         (port_direction)
-        name: (identifier)
-        type: (identifier)))
-    (local_var_decl
-      name: (identifier)
-      type: (identifier)
-      init: (expression
-        (or_expr
-          (and_expr
-            (bitwise_or_expr
-              (bitwise_and_expr
-                (equality_expr
-                  (comparison_expr
-                    (additive_expr
-                      (multiplicative_expr
-                        (unary_expr
-                          (primary_expr
-                            (literal
-                              (integer))))))))))))))
-    body: (node_stmt
-      name: (identifier)
-      (property_block
-        (argument_list
-          (argument
-            name: (identifier)
-            value: (value_expr
-              (blackboard_ref
-                name: (identifier))))
-          (argument
-            name: (identifier)
-            value: (value_expr
-              (blackboard_ref
-                name: (identifier)))))))))
-
-================================================================================
-Decorator
-================================================================================
-
-Tree Main() {
-    @Retry(count: 3)
-    Action()
-}
-
---------------------------------------------------------------------------------
-
-(program
-  (tree_def
-    name: (identifier)
-    body: (node_stmt
-      (decorator
-        name: (identifier)
-        (property_block
-          (argument_list
-            (argument
-              name: (identifier)
-              value: (value_expr
-                (literal
-                  (integer)))))))
-      name: (identifier)
-      (property_block))))
-
-================================================================================
-Import statement
-================================================================================
-
-import "StandardNodes.bt"
-
-Tree Main() {
-    Action()
-}
-
---------------------------------------------------------------------------------
-
-(program
-  (import_stmt
-    path: (string))
-  (tree_def
-    name: (identifier)
-    body: (node_stmt
-      name: (identifier)
-      (property_block))))
-
-================================================================================
-Expression statement
-================================================================================
-
-Tree Counter() {
-    var count: int = 0
-    Sequence {
-        count += 1
-        Log(message: count)
-    }
-}
-
---------------------------------------------------------------------------------
-
-(program
-  (tree_def
-    name: (identifier)
-    (local_var_decl
-      name: (identifier)
-      type: (identifier)
-      init: (expression
-        (or_expr
-          (and_expr
-            (bitwise_or_expr
-              (bitwise_and_expr
-                (equality_expr
-                  (comparison_expr
-                    (additive_expr
-                      (multiplicative_expr
-                        (unary_expr
-                          (primary_expr
-                            (literal
-                              (integer))))))))))))))
-    body: (node_stmt
-      name: (identifier)
-      (children_block
-        (expression_stmt
-          (assignment_expr
-            target: (identifier)
-            op: (assignment_op)
-            value: (expression
+        (identifier)
+        (type
+          (base_type
+            (primary_type
+              (identifier))))))
+    (tree_body
+      (statement
+        (simple_stmt
+          (blackboard_decl
+            (identifier)
+            (type
+              (base_type
+                (primary_type
+                  (identifier))))
+            (expression
               (or_expr
                 (and_expr
                   (bitwise_or_expr
@@ -192,37 +118,566 @@ Tree Counter() {
                         (comparison_expr
                           (additive_expr
                             (multiplicative_expr
-                              (unary_expr
-                                (primary_expr
-                                  (literal
-                                    (integer)))))))))))))))
-        (node_stmt
-          name: (identifier)
-          (property_block
-            (argument_list
-              (argument
-                name: (identifier)
-                value: (value_expr
-                  (blackboard_ref
-                    name: (identifier)))))))))))
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (literal
+                                      (integer)))))))))))))))))
+      (statement
+        (block_stmt
+          (compound_node_call
+            (precondition_list
+              (precondition
+                (precond_kind)
+                (expression
+                  (or_expr
+                    (and_expr
+                      (bitwise_or_expr
+                        (bitwise_and_expr
+                          (equality_expr
+                            (comparison_expr
+                              (additive_expr
+                                (multiplicative_expr
+                                  (cast_expr
+                                    (unary_expr
+                                      (primary_expr
+                                        (identifier)))))))
+                            (comparison_expr
+                              (additive_expr
+                                (multiplicative_expr
+                                  (cast_expr
+                                    (unary_expr
+                                      (primary_expr
+                                        (literal
+                                          (null))))))))))))))))
+            (identifier)
+            (node_body_with_children
+              (children_block
+                (statement
+                  (simple_stmt
+                    (leaf_node_call
+                      (identifier)
+                      (property_block
+                        (argument_list
+                          (argument
+                            (identifier)
+                            (argument_expr
+                              (expression
+                                (or_expr
+                                  (and_expr
+                                    (bitwise_or_expr
+                                      (bitwise_and_expr
+                                        (equality_expr
+                                          (comparison_expr
+                                            (additive_expr
+                                              (multiplicative_expr
+                                                (cast_expr
+                                                  (unary_expr
+                                                    (primary_expr
+                                                      (identifier)))))))))))))))
+                          (argument
+                            (identifier)
+                            (argument_expr
+                              (inline_blackboard_decl
+                                (identifier)))))))))
+                (statement
+                  (simple_stmt
+                    (assignment_stmt
+                      (lvalue
+                        (identifier))
+                      (assignment_op)
+                      (expression
+                        (or_expr
+                          (and_expr
+                            (bitwise_or_expr
+                              (bitwise_and_expr
+                                (equality_expr
+                                  (comparison_expr
+                                    (additive_expr
+                                      (multiplicative_expr
+                                        (cast_expr
+                                          (unary_expr
+                                            (primary_expr
+                                              (literal
+                                                (integer)))))))))))))))))))))))))
 
 ================================================================================
-Documentation comments
+Leaf call + semicolon rules
 ================================================================================
 
-/// This is a documented tree
-Tree Documented() {
-    /// This node does something
-    Action()
+tree Simple() {
+  AlwaysSuccess();
 }
 
 --------------------------------------------------------------------------------
 
 (program
   (tree_def
-    (outer_doc)
-    name: (identifier)
-    body: (node_stmt
-      (outer_doc)
-      name: (identifier)
-      (property_block))))
+    (identifier)
+    (tree_body
+      (statement
+        (simple_stmt
+          (leaf_node_call
+            (identifier)
+            (property_block)))))))
+
+================================================================================
+Arrays / vec! / repeat init
+================================================================================
+
+tree Arrays() {
+  var a: [int32; 3] = [1, 2, 3];
+  var b = [0; 10];
+  var v: vec<int32> = vec![1, 2, 3];
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    (identifier)
+    (tree_body
+      (statement
+        (simple_stmt
+          (blackboard_decl
+            (identifier)
+            (type
+              (base_type
+                (static_array_type
+                  (type
+                    (base_type
+                      (primary_type
+                        (identifier))))
+                  (array_size_spec
+                    (array_size
+                      (integer))))))
+            (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (array_literal
+                                      (element_list
+                                        (expression
+                                          (or_expr
+                                            (and_expr
+                                              (bitwise_or_expr
+                                                (bitwise_and_expr
+                                                  (equality_expr
+                                                    (comparison_expr
+                                                      (additive_expr
+                                                        (multiplicative_expr
+                                                          (cast_expr
+                                                            (unary_expr
+                                                              (primary_expr
+                                                                (literal
+                                                                  (integer))))))))))))))
+                                        (expression
+                                          (or_expr
+                                            (and_expr
+                                              (bitwise_or_expr
+                                                (bitwise_and_expr
+                                                  (equality_expr
+                                                    (comparison_expr
+                                                      (additive_expr
+                                                        (multiplicative_expr
+                                                          (cast_expr
+                                                            (unary_expr
+                                                              (primary_expr
+                                                                (literal
+                                                                  (integer))))))))))))))
+                                        (expression
+                                          (or_expr
+                                            (and_expr
+                                              (bitwise_or_expr
+                                                (bitwise_and_expr
+                                                  (equality_expr
+                                                    (comparison_expr
+                                                      (additive_expr
+                                                        (multiplicative_expr
+                                                          (cast_expr
+                                                            (unary_expr
+                                                              (primary_expr
+                                                                (literal
+                                                                  (integer)))))))))))))))))))))))))))))))
+      (statement
+        (simple_stmt
+          (blackboard_decl
+            (identifier)
+            (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (array_literal
+                                      (repeat_init
+                                        (expression
+                                          (or_expr
+                                            (and_expr
+                                              (bitwise_or_expr
+                                                (bitwise_and_expr
+                                                  (equality_expr
+                                                    (comparison_expr
+                                                      (additive_expr
+                                                        (multiplicative_expr
+                                                          (cast_expr
+                                                            (unary_expr
+                                                              (primary_expr
+                                                                (literal
+                                                                  (integer))))))))))))))
+                                        (expression
+                                          (or_expr
+                                            (and_expr
+                                              (bitwise_or_expr
+                                                (bitwise_and_expr
+                                                  (equality_expr
+                                                    (comparison_expr
+                                                      (additive_expr
+                                                        (multiplicative_expr
+                                                          (cast_expr
+                                                            (unary_expr
+                                                              (primary_expr
+                                                                (literal
+                                                                  (integer)))))))))))))))))))))))))))))))
+      (statement
+        (simple_stmt
+          (blackboard_decl
+            (identifier)
+            (type
+              (base_type
+                (dynamic_array_type
+                  (type
+                    (base_type
+                      (primary_type
+                        (identifier)))))))
+            (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (vec_macro
+                                      (array_literal
+                                        (element_list
+                                          (expression
+                                            (or_expr
+                                              (and_expr
+                                                (bitwise_or_expr
+                                                  (bitwise_and_expr
+                                                    (equality_expr
+                                                      (comparison_expr
+                                                        (additive_expr
+                                                          (multiplicative_expr
+                                                            (cast_expr
+                                                              (unary_expr
+                                                                (primary_expr
+                                                                  (literal
+                                                                    (integer))))))))))))))
+                                          (expression
+                                            (or_expr
+                                              (and_expr
+                                                (bitwise_or_expr
+                                                  (bitwise_and_expr
+                                                    (equality_expr
+                                                      (comparison_expr
+                                                        (additive_expr
+                                                          (multiplicative_expr
+                                                            (cast_expr
+                                                              (unary_expr
+                                                                (primary_expr
+                                                                  (literal
+                                                                    (integer))))))))))))))
+                                          (expression
+                                            (or_expr
+                                              (and_expr
+                                                (bitwise_or_expr
+                                                  (bitwise_and_expr
+                                                    (equality_expr
+                                                      (comparison_expr
+                                                        (additive_expr
+                                                          (multiplicative_expr
+                                                            (cast_expr
+                                                              (unary_expr
+                                                                (primary_expr
+                                                                  (literal
+                                                                    (integer)))))))))))))))))))))))))))))))))))
+
+================================================================================
+Cast / indexing / hex integer
+================================================================================
+
+tree Expr() {
+  var xs: vec<int32> = vec![1, 2, 3];
+  var x: int32 = xs[0] as int32;
+  xs[1] = 0xFF;
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    (identifier)
+    (tree_body
+      (statement
+        (simple_stmt
+          (blackboard_decl
+            (identifier)
+            (type
+              (base_type
+                (dynamic_array_type
+                  (type
+                    (base_type
+                      (primary_type
+                        (identifier)))))))
+            (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (vec_macro
+                                      (array_literal
+                                        (element_list
+                                          (expression
+                                            (or_expr
+                                              (and_expr
+                                                (bitwise_or_expr
+                                                  (bitwise_and_expr
+                                                    (equality_expr
+                                                      (comparison_expr
+                                                        (additive_expr
+                                                          (multiplicative_expr
+                                                            (cast_expr
+                                                              (unary_expr
+                                                                (primary_expr
+                                                                  (literal
+                                                                    (integer))))))))))))))
+                                          (expression
+                                            (or_expr
+                                              (and_expr
+                                                (bitwise_or_expr
+                                                  (bitwise_and_expr
+                                                    (equality_expr
+                                                      (comparison_expr
+                                                        (additive_expr
+                                                          (multiplicative_expr
+                                                            (cast_expr
+                                                              (unary_expr
+                                                                (primary_expr
+                                                                  (literal
+                                                                    (integer))))))))))))))
+                                          (expression
+                                            (or_expr
+                                              (and_expr
+                                                (bitwise_or_expr
+                                                  (bitwise_and_expr
+                                                    (equality_expr
+                                                      (comparison_expr
+                                                        (additive_expr
+                                                          (multiplicative_expr
+                                                            (cast_expr
+                                                              (unary_expr
+                                                                (primary_expr
+                                                                  (literal
+                                                                    (integer))))))))))))))))))))))))))))))))
+      (statement
+        (simple_stmt
+          (blackboard_decl
+            (identifier)
+            (type
+              (base_type
+                (primary_type
+                  (identifier))))
+            (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (identifier)
+                                    (index_suffix
+                                      (expression
+                                        (or_expr
+                                          (and_expr
+                                            (bitwise_or_expr
+                                              (bitwise_and_expr
+                                                (equality_expr
+                                                  (comparison_expr
+                                                    (additive_expr
+                                                      (multiplicative_expr
+                                                        (cast_expr
+                                                          (unary_expr
+                                                            (primary_expr
+                                                              (literal
+                                                                (integer)))))))))))))))))
+                                (type
+                                  (base_type
+                                    (primary_type
+                                      (identifier)))))))))))))))))
+      (statement
+        (simple_stmt
+          (assignment_stmt
+            (lvalue
+              (identifier)
+              (index_suffix
+                (expression
+                  (or_expr
+                    (and_expr
+                      (bitwise_or_expr
+                        (bitwise_and_expr
+                          (equality_expr
+                            (comparison_expr
+                              (additive_expr
+                                (multiplicative_expr
+                                  (cast_expr
+                                    (unary_expr
+                                      (primary_expr
+                                        (literal
+                                          (integer))))))))))))))))
+            (assignment_op)
+            (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (literal
+                                      (integer))))))))))))))))))))
+
+================================================================================
+Inline out var argument
+================================================================================
+
+extern action Compute(out result: int32);
+
+tree InlineDecl() {
+  Compute(out var result);
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (extern_stmt
+    (extern_def
+      (identifier)
+      (extern_port_list
+        (extern_port
+          (port_direction)
+          (identifier)
+          (type
+            (base_type
+              (primary_type
+                (identifier))))))))
+  (tree_def
+    (identifier)
+    (tree_body
+      (statement
+        (simple_stmt
+          (leaf_node_call
+            (identifier)
+            (property_block
+              (argument_list
+                (argument
+                  (argument_expr
+                    (inline_blackboard_decl
+                      (identifier))))))))))))
+
+================================================================================
+Preconditions (multiple)
+================================================================================
+
+tree Preconditions() {
+  @guard(is_active)
+  @failure_if(!is_valid)
+  Sequence {
+    ActionA();
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    (identifier)
+    (tree_body
+      (statement
+        (block_stmt
+          (compound_node_call
+            (precondition_list
+              (precondition
+                (precond_kind)
+                (expression
+                  (or_expr
+                    (and_expr
+                      (bitwise_or_expr
+                        (bitwise_and_expr
+                          (equality_expr
+                            (comparison_expr
+                              (additive_expr
+                                (multiplicative_expr
+                                  (cast_expr
+                                    (unary_expr
+                                      (primary_expr
+                                        (identifier))))))))))))))
+              (precondition
+                (precond_kind)
+                (expression
+                  (or_expr
+                    (and_expr
+                      (bitwise_or_expr
+                        (bitwise_and_expr
+                          (equality_expr
+                            (comparison_expr
+                              (additive_expr
+                                (multiplicative_expr
+                                  (cast_expr
+                                    (unary_expr
+                                      (unary_expr
+                                        (primary_expr
+                                          (identifier))))))))))))))))
+            (identifier)
+            (node_body_with_children
+              (children_block
+                (statement
+                  (simple_stmt
+                    (leaf_node_call
+                      (identifier)
+                      (property_block))))))))))))

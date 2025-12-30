@@ -19,8 +19,10 @@ module.exports = grammar({
       seq(
         repeat($.inner_doc),
         repeat($.import_stmt),
-        repeat($.declare_stmt),
-        repeat($.global_var_decl),
+        repeat($.extern_type_stmt),
+        repeat($.type_alias_stmt),
+        repeat($.extern_stmt),
+        repeat(choice($.global_blackboard_decl, $.global_const_decl)),
         repeat($.tree_def),
       ),
 
@@ -30,54 +32,131 @@ module.exports = grammar({
     import_stmt: ($) => seq('import', field('path', $.string)),
 
     // ========================================================
-    // 3. Declare statement
+    // 3. Types
     // ========================================================
-    declare_stmt: ($) =>
+    type: ($) => seq($.base_type, optional('?')),
+
+    base_type: ($) =>
+      choice($.primary_type, $.static_array_type, $.dynamic_array_type, $.infer_type),
+
+    primary_type: ($) => choice($.identifier, $.bounded_string),
+
+    bounded_string: ($) => seq('string', '<=', field('max_len', $.integer)),
+
+    infer_type: ($) => '_',
+
+    static_array_type: ($) =>
+      seq('[', field('element', $.type), ';', field('size', $.array_size_spec), ']'),
+
+    array_size_spec: ($) =>
+      choice(field('exact', $.array_size), seq('<=', field('max', $.array_size))),
+
+    array_size: ($) => choice($.integer, $.identifier),
+
+    dynamic_array_type: ($) => seq('vec', '<', field('element', $.type), '>'),
+
+    // ========================================================
+    // 4. Extern / type alias
+    // ========================================================
+    extern_type_stmt: ($) =>
+      seq(repeat($.outer_doc), 'extern', 'type', field('name', $.identifier), ';'),
+
+    type_alias_stmt: ($) =>
       seq(
         repeat($.outer_doc),
-        'declare',
-        field('category', $.identifier),
+        'type',
         field('name', $.identifier),
-        '(',
-        optional($.declare_port_list),
-        ')',
+        '=',
+        field('value', $.type),
+        ';',
       ),
 
-    declare_port_list: ($) => seq($.declare_port, repeat(seq(',', $.declare_port))),
+    extern_stmt: ($) =>
+      seq(repeat($.outer_doc), optional($.behavior_attr), 'extern', field('def', $.extern_def)),
 
-    declare_port: ($) =>
+    behavior_attr: ($) =>
+      seq(
+        '#[',
+        'behavior',
+        '(',
+        field('data', $.data_policy),
+        optional(seq(',', field('flow', $.flow_policy))),
+        ')',
+        ']',
+      ),
+
+    data_policy: ($) => choice('All', 'Any', 'None'),
+
+    flow_policy: ($) => choice('Chained', 'Isolated'),
+
+    extern_def: ($) =>
+      choice(
+        seq('action', field('name', $.identifier), '(', optional($.extern_port_list), ')', ';'),
+        seq('subtree', field('name', $.identifier), '(', optional($.extern_port_list), ')', ';'),
+        seq('condition', field('name', $.identifier), '(', optional($.extern_port_list), ')', ';'),
+        seq(
+          'control',
+          field('name', $.identifier),
+          optional(seq('(', optional($.extern_port_list), ')')),
+          ';',
+        ),
+        seq(
+          'decorator',
+          field('name', $.identifier),
+          optional(seq('(', optional($.extern_port_list), ')')),
+          ';',
+        ),
+      ),
+
+    extern_port_list: ($) => seq($.extern_port, repeat(seq(',', $.extern_port))),
+
+    extern_port: ($) =>
       seq(
         repeat($.outer_doc),
         optional($.port_direction),
         field('name', $.identifier),
         ':',
-        field('type', $.identifier),
+        field('type', $.type),
+        optional(seq('=', field('default', $.const_expr))),
       ),
 
-    port_direction: ($) => choice('in', 'out', 'ref'),
+    port_direction: ($) => choice('in', 'out', 'ref', 'mut'),
 
     // ========================================================
-    // 4. Global variable declaration
+    // 5. Global declarations
     // ========================================================
-    global_var_decl: ($) =>
-      seq('var', field('name', $.identifier), ':', field('type', $.identifier)),
+    global_blackboard_decl: ($) =>
+      seq(
+        'var',
+        field('name', $.identifier),
+        optional(seq(':', field('type', $.type))),
+        optional(seq('=', field('init', $.expression))),
+      ),
+
+    global_const_decl: ($) =>
+      seq(
+        'const',
+        field('name', $.identifier),
+        optional(seq(':', field('type', $.type))),
+        '=',
+        field('value', $.const_expr),
+      ),
 
     // ========================================================
-    // 5. Tree definition
+    // 6. Tree definition
     // ========================================================
     tree_def: ($) =>
       seq(
         repeat($.outer_doc),
-        'Tree',
+        'tree',
         field('name', $.identifier),
         '(',
         optional($.param_list),
         ')',
-        '{',
-        repeat($.local_var_decl),
-        optional(field('body', $.node_stmt)),
-        '}',
+        field('body', $.tree_body),
       ),
+
+    tree_body: ($) => seq('{', repeat($.statement), '}'),
 
     param_list: ($) => seq($.param_decl, repeat(seq(',', $.param_decl))),
 
@@ -85,115 +164,168 @@ module.exports = grammar({
       seq(
         optional($.port_direction),
         field('name', $.identifier),
-        optional(seq(':', field('type', $.identifier))),
+        ':',
+        field('type', $.type),
+        optional(seq('=', field('default', $.const_expr))),
       ),
 
-    local_var_decl: ($) =>
+    // ========================================================
+    // 7. Statements
+    // ========================================================
+    statement: ($) => choice(seq($.simple_stmt, ';'), $.block_stmt),
+
+    simple_stmt: ($) =>
+      choice($.leaf_node_call, $.assignment_stmt, $.blackboard_decl, $.local_const_decl),
+
+    block_stmt: ($) => $.compound_node_call,
+
+    blackboard_decl: ($) =>
       seq(
         'var',
         field('name', $.identifier),
-        optional(seq(':', field('type', $.identifier))),
+        optional(seq(':', field('type', $.type))),
         optional(seq('=', field('init', $.expression))),
       ),
 
-    // ========================================================
-    // 6. Node statement
-    // ========================================================
-    node_stmt: ($) =>
+    local_const_decl: ($) =>
       seq(
-        repeat($.outer_doc),
-        repeat($.decorator),
+        'const',
         field('name', $.identifier),
-        choice(
-          // Node with children
-          seq(optional($.property_block), $.children_block),
-          // Node without children (must have parentheses)
-          $.property_block,
-        ),
+        optional(seq(':', field('type', $.type))),
+        '=',
+        field('value', $.const_expr),
       ),
 
-    decorator: ($) => seq('@', field('name', $.identifier), optional($.property_block)),
+    leaf_node_call: ($) =>
+      seq(
+        repeat($.outer_doc),
+        optional($.precondition_list),
+        field('name', $.identifier),
+        field('args', $.property_block),
+      ),
 
+    compound_node_call: ($) =>
+      seq(
+        repeat($.outer_doc),
+        optional($.precondition_list),
+        field('name', $.identifier),
+        field('body', $.node_body_with_children),
+      ),
+
+    node_body_with_children: ($) =>
+      choice(seq($.property_block, $.children_block), $.children_block),
+
+    precondition_list: ($) => seq($.precondition, repeat($.precondition)),
+
+    precondition: ($) =>
+      seq('@', field('kind', $.precond_kind), '(', field('cond', $.expression), ')'),
+
+    precond_kind: ($) => choice('success_if', 'failure_if', 'skip_if', 'run_while', 'guard'),
+
+    // ========================================================
+    // 8. Node arguments / children
+    // ========================================================
     property_block: ($) => seq('(', optional($.argument_list), ')'),
 
     argument_list: ($) => seq($.argument, repeat(seq(',', $.argument))),
 
     argument: ($) =>
       choice(
-        // Named argument
-        seq(field('name', $.identifier), ':', field('value', $.value_expr)),
-        // Positional argument
-        field('value', $.value_expr),
+        seq(field('name', $.identifier), ':', field('value', $.argument_expr)),
+        field('value', $.argument_expr),
       ),
 
-    children_block: ($) => seq('{', repeat(choice($.node_stmt, $.expression_stmt)), '}'),
-
-    // ========================================================
-    // 7. Values and expressions
-    // ========================================================
-    value_expr: ($) => choice($.blackboard_ref, $.literal),
-
-    blackboard_ref: ($) => seq(optional($.port_direction), field('name', $.identifier)),
-
-    expression_stmt: ($) => $.assignment_expr,
-
-    assignment_expr: ($) =>
-      seq(
-        field('target', $.identifier),
-        field('op', $.assignment_op),
-        field('value', $.expression),
+    argument_expr: ($) =>
+      choice(
+        seq('out', field('inline_decl', $.inline_blackboard_decl)),
+        seq(optional($.port_direction), field('value', $.expression)),
       ),
+
+    inline_blackboard_decl: ($) => seq('var', field('name', $.identifier)),
+
+    children_block: ($) => seq('{', repeat($.statement), '}'),
+
+    // ========================================================
+    // 9. Expressions
+    // ========================================================
+    assignment_stmt: ($) =>
+      seq(field('target', $.lvalue), field('op', $.assignment_op), field('value', $.expression)),
+
+    lvalue: ($) => seq(field('base', $.identifier), repeat(field('index', $.index_suffix))),
 
     assignment_op: ($) => choice('=', '+=', '-=', '*=', '/='),
 
     expression: ($) => $.or_expr,
 
-    or_expr: ($) => prec.left(1, seq($.and_expr, repeat(seq('||', $.and_expr)))),
+    or_expr: ($) => prec.left(3, seq($.and_expr, repeat(seq('||', $.and_expr)))),
 
-    and_expr: ($) => prec.left(2, seq($.bitwise_or_expr, repeat(seq('&&', $.bitwise_or_expr)))),
+    and_expr: ($) => prec.left(4, seq($.bitwise_or_expr, repeat(seq('&&', $.bitwise_or_expr)))),
 
     bitwise_or_expr: ($) =>
-      prec.left(3, seq($.bitwise_and_expr, repeat(seq('|', $.bitwise_and_expr)))),
+      prec.left(5, seq($.bitwise_and_expr, repeat(seq('|', $.bitwise_and_expr)))),
 
-    bitwise_and_expr: ($) => prec.left(4, seq($.equality_expr, repeat(seq('&', $.equality_expr)))),
+    bitwise_and_expr: ($) => prec.left(6, seq($.equality_expr, repeat(seq('&', $.equality_expr)))),
 
     equality_expr: ($) =>
-      prec.left(5, seq($.comparison_expr, optional(seq(choice('==', '!='), $.comparison_expr)))),
+      prec.left(7, seq($.comparison_expr, optional(seq(choice('==', '!='), $.comparison_expr)))),
 
     comparison_expr: ($) =>
       prec.left(
-        6,
+        8,
         seq($.additive_expr, optional(seq(choice('<', '<=', '>', '>='), $.additive_expr))),
       ),
 
     additive_expr: ($) =>
       prec.left(
-        7,
+        9,
         seq($.multiplicative_expr, repeat(seq(choice('+', '-'), $.multiplicative_expr))),
       ),
 
     multiplicative_expr: ($) =>
-      prec.left(8, seq($.unary_expr, repeat(seq(choice('*', '/', '%'), $.unary_expr)))),
+      prec.left(10, seq($.cast_expr, repeat(seq(choice('*', '/', '%'), $.cast_expr)))),
+
+    cast_expr: ($) => prec.left(11, seq($.unary_expr, optional(seq('as', $.type)))),
 
     unary_expr: ($) => choice(seq(choice('!', '-'), $.unary_expr), $.primary_expr),
 
-    primary_expr: ($) => choice(seq('(', $.expression, ')'), $.literal, $.identifier),
+    primary_expr: ($) =>
+      seq(
+        choice(seq('(', $.expression, ')'), $.literal, $.array_literal, $.vec_macro, $.identifier),
+        repeat($.index_suffix),
+      ),
+
+    vec_macro: ($) => seq('vec!', $.array_literal),
+
+    index_suffix: ($) => seq('[', $.expression, ']'),
+
+    array_literal: ($) => seq('[', optional(choice($.repeat_init, $.element_list)), ']'),
+
+    element_list: ($) => seq($.expression, repeat(seq(',', $.expression)), optional(',')),
+
+    repeat_init: ($) => seq($.expression, ';', $.expression),
 
     // ========================================================
-    // 8. Literals
+    // 10. Constant expressions
     // ========================================================
-    literal: ($) => choice($.string, $.float, $.integer, $.boolean),
+    const_expr: ($) => $.expression,
+
+    // ========================================================
+    // 11. Literals
+    // ========================================================
+    literal: ($) => choice($.string, $.float, $.integer, $.boolean, $.null),
 
     string: ($) => /"([^"\\]|\\.)*"/,
 
-    float: ($) => /-?[0-9]+\.[0-9]+/,
+    float: ($) => token(prec(2, /-?[0-9]+\.[0-9]+/)),
 
-    integer: ($) => /-?[0-9]+/,
+    integer: ($) => token(prec(1, /-?(0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|0|[1-9][0-9]*)/)),
 
     boolean: ($) => choice('true', 'false'),
 
+    null: ($) => 'null',
+
     // ========================================================
-    // 9. Comments and documentation
+    // 12. Comments and documentation
     // ========================================================
     comment: ($) => choice($.line_comment, $.block_comment),
 
@@ -206,7 +338,7 @@ module.exports = grammar({
     inner_doc: ($) => token(seq('//!', /[^\n]*/)),
 
     // ========================================================
-    // 10. Identifier
+    // 13. Identifier
     // ========================================================
     identifier: ($) => /[a-zA-Z_][a-zA-Z0-9_]*/,
   },
