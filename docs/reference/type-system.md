@@ -1,4 +1,4 @@
-# 型システム
+# 3. 型システム
 
 本ドキュメントは BT-DSL の**型システム**を厳密に定義します。
 
@@ -18,7 +18,7 @@
 | 浮動小数   | `float64`         | 64-bit   | 倍精度浮動小数点数（標準小数） |
 | その他     | `bool`            | -        | 真偽値 (`true`, `false`)       |
 | その他     | `string`          | -        | UTF-8 文字列                   |
-| その他     | `string&lt;=N`    | -        | 最大 N 文字の UTF-8 文字列     |
+| その他     | `string&lt;=N`    | -        | 最大 N バイトの UTF-8 文字列   |
 
 ### 1.2 エイリアス (Aliases)
 
@@ -198,7 +198,7 @@ pos = null;           // Error: Pose 型に null は代入不可
 - 非Nullable Blackboard は使用前に必ず初期化されている必要があります
 - Nullable Blackboard は `null` で初期化することで未初期化状態を明示的に表現できます
 
-詳細は[初期化安全性](./initialization-safety.md)を参照してください。
+詳細は[静的解析と安全性](./static-analysis-and-safety.md)を参照してください。
 
 ---
 
@@ -259,7 +259,7 @@ tree Example() {
 ```bt-dsl
 var s = "hello";                // string（制限なし）
 var t: string<=10 = "hello";    // string<=10（明示的注釈が必要）
-var u: string<=3 = "hello";     // Error: 5文字 > 3
+var u: string<=3 = "hello";     // Error: 5バイト > 3
 ```
 
 ---

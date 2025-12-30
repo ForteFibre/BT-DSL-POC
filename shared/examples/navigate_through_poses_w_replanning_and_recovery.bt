@@ -17,27 +17,27 @@ tree NavigateThroughPosesWReplanningAndRecovery(
     RecoveryNode(number_of_retries: 6) {
         PipelineSequence {
             ProgressCheckerSelector(
-                out var selected_progress_checker,
+                selected_progress_checker: out var selected_progress_checker,
                 default_progress_checker: "progress_checker",
                 topic_name: "progress_checker_selector"
             );
             GoalCheckerSelector(
-                out var selected_goal_checker,
+                selected_goal_checker: out var selected_goal_checker,
                 default_goal_checker: "general_goal_checker",
                 topic_name: "goal_checker_selector"
             );
             PathHandlerSelector(
-                out var selected_path_handler,
+                selected_path_handler: out var selected_path_handler,
                 default_path_handler: "PathHandler",
                 topic_name: "path_handler_selector"
             );
             ControllerSelector(
-                out var selected_controller,
+                selected_controller: out var selected_controller,
                 default_controller: "FollowPath",
                 topic_name: "controller_selector"
             );
             PlannerSelector(
-                out var selected_planner,
+                selected_planner: out var selected_planner,
                 default_planner: "GridBased",
                 topic_name: "planner_selector"
             );
