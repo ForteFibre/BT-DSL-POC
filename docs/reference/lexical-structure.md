@@ -38,7 +38,7 @@ whitespace = /\s+/ ;
 ### 1.2.2 コメント
 
 ```ebnf
-line_comment  = "//" , /[^/!][^\n]*/ ;
+line_comment  = "//" , /[^\n]*/ ;
 block_comment = "/*" , /[^*]*\*+([^/*][^*]*\*+)*/ , "/" ;
 comment       = line_comment | block_comment ;
 ```
@@ -52,6 +52,10 @@ comment       = line_comment | block_comment ;
 inner_doc = "//!" , /[^\n]*/ ;
 outer_doc = "///" , /[^\n]*/ ;
 ```
+
+> [!IMPORTANT]
+> 処理系は `inner_doc` / `outer_doc` を `line_comment` より優先して認識しなければなりません。
+> すなわち、ソース中に `//!` または `///` が現れる場合、それは通常の行コメントではなくドキュメンテーションコメントとして扱われます。
 
 - **Inner doc** (`//!`) は、モジュール（ファイル）先頭のドキュメントです。
 - **Outer doc** (`///`) は、宣言・定義・ノード呼び出し等に付与されるドキュメントです。
@@ -78,6 +82,8 @@ in  out  ref  mut
 true  false  null
 vec
 
+string
+
 action  subtree  condition  control  decorator
 ```
 
@@ -95,9 +101,17 @@ action  subtree  condition  control  decorator
 ### 1.4.1 字句規則
 
 ```ebnf
-string  = '"' , /([^"\\]|\\.)*/ , '"' ;
-float   = [ "-" ] , /[0-9]+/ , "." , /[0-9]+/ ;
-integer = "0" | [ "-" ] , /[1-9][0-9]*/ ;
+string  = '"' , /([^"\\\r\n]|\\.)*/ , '"' ;
+float   = [ "-" ] , ( /[0-9]+/ , "." , /[0-9]+/ , [ exponent ]
+     | /[0-9]+/ , exponent
+     ) ;
+exponent = ( "e" | "E" ) , [ "+" | "-" ] , /[0-9]+/ ;
+integer = [ "-" ] , ( "0"
+     | /[1-9][0-9]*/
+     | "0x" , /[0-9a-fA-F]+/
+     | "0b" , /[01]+/
+     | "0o" , /[0-7]+/
+     ) ;
 boolean = "true" | "false" ;
 null    = "null" ;
 literal = string | float | integer | boolean | null ;
@@ -107,13 +121,13 @@ literal = string | float | integer | boolean | null ;
 
 ### 1.4.2 整数リテラル
 
-- 許容されるのは上記 EBNF のとおり **10進**（符号 `-` を許容）です。
-- 16進数・2進数・桁区切り（`_`）などは **未サポート** です。
+- 許容されるのは上記 EBNF のとおり、**10進**（符号 `-` を許容）および **16進/2進/8進**（`0x`/`0b`/`0o`）です。
+- 桁区切り（`_`）は **未サポート** です。
 
 ### 1.4.3 浮動小数点リテラル
 
 - `-?`、整数部、`.`, 小数部から成ります。
-- 指数表記（`1e3` 等）は **未サポート** です。
+- 指数表記（例: `1e3`, `1.5E-2`）をサポートします。
 
 ### 1.4.4 文字列リテラル
 
