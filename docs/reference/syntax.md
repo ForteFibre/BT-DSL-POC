@@ -234,11 +234,11 @@ port_direction    = "in" | "out" | "ref" | "mut" ;
 ### 2.6.2 グローバル Blackboard・定数
 
 ```ebnf
-global_blackboard_decl = "var" , identifier ,
+global_blackboard_decl = { outer_doc } , "var" , identifier ,
                          [ ":" , type ] ,
                          [ "=" , expression ] , ";" ;
 
-global_const_decl = "const" , identifier , [ ":" , type ] , "=" , expression , ";" ;
+global_const_decl = { outer_doc } , "const" , identifier , [ ":" , type ] , "=" , expression , ";" ;
 ```
 
 ### 2.6.3 tree 定義
@@ -254,11 +254,11 @@ param_list      = param_decl , { "," , param_decl } ;
 
 param_decl      = [ port_direction ] , identifier , ":" , type , [ "=" , expression ] ;
 
-blackboard_decl   = "var" , identifier ,
+blackboard_decl   = { outer_doc } , "var" , identifier ,
                     [ ":" , type ] ,
                     [ "=" , expression ] ;
 
-local_const_decl = "const" , identifier , [ ":" , type ] , "=" , expression ;
+local_const_decl = { outer_doc } , "const" , identifier , [ ":" , type ] , "=" , expression ;
 ```
 
 ### 2.6.4 ノード呼び出し

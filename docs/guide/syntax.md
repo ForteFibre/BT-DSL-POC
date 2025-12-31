@@ -108,10 +108,12 @@ extern decorator Retry(n: int32);
 ## 4. グローバル変数・定数
 
 ```bt-dsl
+/// プレイヤーの体力
 var PlayerHealth: int;
 var TargetPosition: Vector3;
 var IsAlerted: bool;
 
+/// 最大リトライ回数
 const MAX_HEALTH = 100;
 const DEFAULT_SPEED: float = 1.5;
 ```
@@ -155,9 +157,12 @@ tree Example(
 
 ```bt-dsl
 tree Example() {
+  /// カウンタ
   var count: int = 0;       // 型と初期値
   var name = "test";        // 型推論（string）
   var flag: bool;           // 初期値なし（Uninit）
+
+  /// ローカル上限
   const LOCAL_MAX = 10;     // ローカル定数
 
   // var x                  ← エラー: 型か初期値が必要
