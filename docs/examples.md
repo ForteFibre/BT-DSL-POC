@@ -20,9 +20,9 @@
 ## 2. グローバル変数（黒板）
 
 ```bt-dsl
-var TargetPos: Vector3
-var Ammo: int
-var IsAlerted: bool
+var TargetPos: Vector3;
+var Ammo: int;
+var IsAlerted: bool;
 ```
 
 - グローバル変数は全 tree から参照可能。

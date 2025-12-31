@@ -32,17 +32,19 @@
 ### 2.2.1 program
 
 ```ebnf
-program = { inner_doc }
-          { import_stmt }
-          { extern_type_stmt }
-          { type_alias_stmt }
-          { extern_stmt }
-          { global_var_decl | global_const_decl }
-          { tree_def } ;
+program = { inner_doc
+          | import_stmt
+          | extern_type_stmt
+          | type_alias_stmt
+          | extern_stmt
+          | global_blackboard_decl
+          | global_const_decl
+          | tree_def
+          } ;
 ```
 
-> [!IMPORTANT]
-> 各セクションの順序は固定です。`import` 文が `tree` の後に現れることは構文エラーです。
+> [!NOTE]
+> トップレベル定義の**出現順序は自由**です。
 
 ### 2.2.2 import
 
@@ -51,8 +53,9 @@ import_stmt = "import" , string ;
 ```
 
 > [!NOTE]
-> `import` の探索規則（検索パス、拡張子要件、循環 import の扱い等）は別途規定（TBD /
-> implementation-defined）です。
+> `import` の解決規則（絶対パス禁止・拡張子必須・相対パスの基準・非推移的可視性・Public/Private の扱い）は
+> [宣言とスコープ - import の解決](./declarations-and-scopes.md#_4-1-3-import-の解決module-resolution) を参照してください。
+> パッケージ形式の解決（検索パス、循環 import の扱い等）は **implementation-defined** です。
 
 ### 2.2.3 extern / type / var / const / tree
 
@@ -71,6 +74,7 @@ base_type          = primary_type
                    | infer_type ;
 
 primary_type       = identifier
+                   | "string"
                    | bounded_string ;
 
 (* 静的配列: [int32; 4] または [int32; <=4] *)
@@ -84,11 +88,12 @@ array_size         = integer | identifier ;
 (* 動的配列: vec<int32> *)
 dynamic_array_type = "vec" , "<" , type , ">" ;
 
-(* 上限付き文字列: string<=10 *)
-bounded_string     = "string" , "<=" , integer ;
+(* 上限付き文字列: string<10> または string<SIZE> *)
+bounded_string     = "string" , "<" , array_size , ">" ;
 
-(* 型推論ワイルドカード: _ または _? *)
-infer_type         = "_" , [ "?" ] ;
+(* 型推論ワイルドカード: _ または _?
+    注: _? は `type = base_type , ["?"]` により、`_` に Nullable 接尾辞 `?` が付いた形として表現されます。 *)
+infer_type         = "_" ;
 ```
 
 ---
@@ -136,7 +141,8 @@ element_list  = [ expression , { "," , expression } , [ "," ] ] ;
 
 repeat_init   = expression , ";" , expression ;
 
-vec_macro            = "vec!" , array_literal ;
+(* vec![...] は字句的には "vec" と "!" の 2 トークンとして現れる *)
+vec_macro            = "vec" , "!" , array_literal ;
 
 index_suffix         = "[" , expression , "]" ;
 ```
@@ -152,8 +158,8 @@ index_suffix         = "[" , expression , "]" ;
 |       11 | `as` (キャスト)     | 左結合   | 明示的な型変換     |
 |       10 | `*` `/` `%`         | 左結合   | 乗算、除算、剰余   |
 |        9 | `+` `-`             | 左結合   | 加算、減算         |
-|        8 | `<` `<=` `>` `>=`   | 左結合   | 比較               |
-|        7 | `==` `!=`           | 左結合   | 等価               |
+|        8 | `<` `<=` `>` `>=`   | 非結合   | 比較（連鎖禁止）   |
+|        7 | `==` `!=`           | 非結合   | 等価（連鎖禁止）   |
 |        6 | `&`                 | 左結合   | ビット AND         |
 |        5 | `\|`                | 左結合   | ビット OR          |
 |        4 | `&&`                | 左結合   | 論理 AND           |
@@ -162,6 +168,10 @@ index_suffix         = "[" , expression , "]" ;
 > [!NOTE]
 > 2.4.1 の EBNF と本表（2.4.2）は、通常は同一の優先順位/結合規則を表すことを意図します。
 > `as` は左結合として扱われ、例えば `a as T1 as T2` は `(a as T1) as T2` として解釈されます。
+
+> [!IMPORTANT]
+> 比較演算子（`<` `<=` `>` `>=`）および等価演算子（`==` `!=`）は**連鎖を禁止**します。
+> したがって `a < b < c` や `a == b == c` は **構文エラー** です。
 
 ---
 
@@ -201,8 +211,8 @@ extern_stmt       = { outer_doc } , [ behavior_attr ] , "extern" , extern_def ;
 extern_def        = "action"    , identifier , "(" , [ extern_port_list ] , ")" , ";"
                   | "subtree"   , identifier , "(" , [ extern_port_list ] , ")" , ";"
                   | "condition" , identifier , "(" , [ extern_port_list ] , ")" , ";"
-                  | "control"   , identifier , [ "(" , [ extern_port_list ] , ")" ] , ";"
-                  | "decorator" , identifier , [ "(" , [ extern_port_list ] , ")" ] , ";" ;
+                  | "control"   , identifier , "(" , [ extern_port_list ] , ")" , ";"
+                  | "decorator" , identifier , "(" , [ extern_port_list ] , ")" , ";" ;
 
 behavior_attr     = "#[" , "behavior" , "(" , data_policy , [ "," , flow_policy ] , ")" , "]" ;
 
@@ -216,7 +226,7 @@ type_alias_stmt   = { outer_doc } , "type" , identifier , "=" , type , ";" ;
 
 extern_port_list  = extern_port , { "," , extern_port } ;
 
-extern_port       = { outer_doc } , [ port_direction ] , identifier , ":" , type , [ "=" , const_expr ] ;
+extern_port       = { outer_doc } , [ port_direction ] , identifier , ":" , type , [ "=" , expression ] ;
 
 port_direction    = "in" | "out" | "ref" | "mut" ;
 ```
@@ -226,9 +236,9 @@ port_direction    = "in" | "out" | "ref" | "mut" ;
 ```ebnf
 global_blackboard_decl = "var" , identifier ,
                          [ ":" , type ] ,
-                         [ "=" , expression ] ;
+                         [ "=" , expression ] , ";" ;
 
-global_const_decl = "const" , identifier , [ ":" , type ] , "=" , const_expr ;
+global_const_decl = "const" , identifier , [ ":" , type ] , "=" , expression , ";" ;
 ```
 
 ### 2.6.3 tree 定義
@@ -242,31 +252,18 @@ tree_body       = "{" , { statement } , "}" ;
 
 param_list      = param_decl , { "," , param_decl } ;
 
-param_decl      = [ port_direction ] , identifier , ":" , type , [ "=" , const_expr ] ;
+param_decl      = [ port_direction ] , identifier , ":" , type , [ "=" , expression ] ;
 
 blackboard_decl   = "var" , identifier ,
                     [ ":" , type ] ,
                     [ "=" , expression ] ;
 
-local_const_decl = "const" , identifier , [ ":" , type ] , "=" , const_expr ;
+local_const_decl = "const" , identifier , [ ":" , type ] , "=" , expression ;
 ```
 
 ### 2.6.4 ノード呼び出し
 
 ```ebnf
-(*
-    ノード呼び出しは「Leaf（子なし）」と「Compound（子あり）」の 2 形態を持ちます。
-    文としての終端規則（セミコロンの要否）は 2.5 の `statement` が規定します。
-*)
-
-node_call_prefix = { outer_doc } , [ precondition_list ] ;
-
-leaf_node_call
-    = node_call_prefix , identifier , property_block ;
-
-compound_node_call
-    = node_call_prefix , identifier , ( property_block , children_block | children_block ) ;
-
 precondition_list = precondition , { precondition } ;
 
 precondition      = "@" , precond_kind , "(" , expression , ")" ;
@@ -289,43 +286,3 @@ children_block    = "{" , { statement } , "}" ;
 ```
 
 ---
-
-## 2.7 定数式（Constant Expressions）
-
-定数式 (`const_expr`) はコンパイル時に評価可能な式です。
-
-```ebnf
-const_expr           = const_or_expr ;
-
-const_or_expr        = const_and_expr , { "||" , const_and_expr } ;
-
-const_and_expr       = const_equality_expr , { "&&" , const_equality_expr } ;
-
-const_equality_expr  = const_comparison_expr , [ ( "==" | "!=" ) , const_comparison_expr ] ;
-
-const_comparison_expr = const_additive_expr , [ ( "<" | "<=" | ">" | ">=" ) , const_additive_expr ] ;
-
-const_additive_expr  = const_multiplicative_expr , { ( "+" | "-" ) , const_multiplicative_expr } ;
-
-const_multiplicative_expr = const_cast_expr , { ( "*" | "/" | "%" ) , const_cast_expr } ;
-
-const_cast_expr      = const_unary_expr , { "as" , type } ;
-
-const_unary_expr     = ( "!" | "-" ) , const_unary_expr
-                     | const_primary_expr ;
-
-const_primary_expr   = "(" , const_expr , ")"
-                     | literal
-                     | const_array_literal
-                     | identifier ;       (* 他の定数への参照 *)
-
-const_array_literal  = "[" , ( const_element_list | const_repeat_init ) , "]" ;
-
-const_element_list   = [ const_expr , { "," , const_expr } , [ "," ] ] ;
-
-const_repeat_init    = const_expr , ";" , const_expr ;
-```
-
-> [!NOTE]
-> 定数式内の `identifier`
-> は、既に定義済みの他の定数を参照できます。ただし循環参照はコンパイルエラーです。

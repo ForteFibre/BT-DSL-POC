@@ -8,7 +8,7 @@
 
 ## 1. プログラム構造
 
-BT-DSL ファイルは以下の順序で構成されます：
+BT-DSL ファイルは典型的には次のように書きます（例）：
 
 ```bt-dsl
 //! このファイルの説明（Inner Doc）
@@ -17,16 +17,16 @@ import "./other.bt"
 
 extern action MyAction(port: int);
 
-var GlobalVar: string
+var GlobalVar: string;
 
 tree Main() {
-  MyAction(port: 42)
+  MyAction(port: 42);
 }
 ```
 
 > [!NOTE]
-> 順序は固定です。`import` は `tree` より前に、`extern` は `var`
-> より前に書く必要があります。
+> トップレベル定義（`import`/`extern`/`type`/グローバル `var`/`const`/`tree`）の**出現順序は自由**です。
+> ただし可読性のため、`import` を先頭付近にまとめることを推奨します。
 
 ---
 
@@ -39,8 +39,13 @@ import "./lib/standard.bt"
 import "../shared/common.bt"
 ```
 
-- 相対パス（`./` または `../`）のみサポート
-- 拡張子は省略不可
+- `./` / `../` で始まる相対パスは **import 元ファイルのディレクトリ基準**で解決されます。
+- 絶対パスは認めません。
+- 拡張子は必須です。
+- import は **非推移的**です（import したファイルのみ見え、import 先がさらに import したものは見えません）。
+
+> [!NOTE]
+> `"aaa/bbb.bt"` のようなパッケージ形式の解決（検索パス等）は **implementation-defined** です。
 
 ---
 
@@ -61,15 +66,15 @@ extern condition IsEnemyVisible(
 );
 
 // Sequence: 全員成功が必要 (デフォルト: All, Chained)
-extern control Sequence;
+extern control Sequence();
 
 // Fallback: 誰か成功が必要
 #[behavior(Any)]
-extern control Fallback;
+extern control Fallback();
 
 // ForceSuccess: 子の書き込みは保証されない
 #[behavior(None)]
-extern decorator ForceSuccess;
+extern decorator ForceSuccess();
 
 extern decorator Retry(n: int32);
 ```
@@ -103,17 +108,17 @@ extern decorator Retry(n: int32);
 ## 4. グローバル変数・定数
 
 ```bt-dsl
-var PlayerHealth: int
-var TargetPosition: Vector3
-var IsAlerted: bool
+var PlayerHealth: int;
+var TargetPosition: Vector3;
+var IsAlerted: bool;
 
-const MAX_HEALTH = 100
-const DEFAULT_SPEED: float = 1.5
+const MAX_HEALTH = 100;
+const DEFAULT_SPEED: float = 1.5;
 ```
 
 - グローバル変数は型注釈または初期値が必要
 - すべての tree から参照可能
-- `const` はコンパイル時定数
+- `const` はコンパイル時定数（初期化式は `const_expr` に制限されます。詳細は [宣言とスコープ](/reference/declarations-and-scopes#_4-3-定数評価constant-evaluation)）
 
 ---
 
@@ -122,12 +127,12 @@ const DEFAULT_SPEED: float = 1.5
 ```bt-dsl
 /// このツリーの説明
 tree SearchAndDestroy(ref target: Vector3, ref ammo: int) {
-  var localCounter: int = 0
+  var localCounter: int = 0;
 
   Sequence {
-    FindEnemy(pos: out target)
-    AttackEnemy(ammo: ref ammo)
-    localCounter += 1
+    FindEnemy(pos: out target);
+    AttackEnemy(ammo: ref ammo);
+    localCounter += 1;
   }
 }
 ```
@@ -150,10 +155,10 @@ tree Example(
 
 ```bt-dsl
 tree Example() {
-  var count: int = 0       // 型と初期値
-  var name = "test"        // 型推論（string）
-  var flag: bool           // 初期値なし（Uninit）
-  const LOCAL_MAX = 10     // ローカル定数
+  var count: int = 0;       // 型と初期値
+  var name = "test";        // 型推論（string）
+  var flag: bool;           // 初期値なし（Uninit）
+  const LOCAL_MAX = 10;     // ローカル定数
 
   // var x                  ← エラー: 型か初期値が必要
 }
@@ -167,35 +172,44 @@ tree Example() {
 
 ```bt-dsl
 // 引数なし
-AlwaysSuccess()
+AlwaysSuccess();
 
 // 名前付き引数
-MoveTo(goal: TargetPos, speed: 1.5)
+MoveTo(goal: TargetPos, speed: 1.5);
 
 // 位置引数（ポートが1つの場合のみ）
-Log("Hello, World!")
+Log("Hello, World!");
 
 // Blackboard 参照に方向を指定
-GetPosition(pos: out CurrentPos)
-UpdateValue(val: ref Counter)
+GetPosition(pos: out CurrentPos);
+UpdateValue(val: ref Counter);
 ```
+
+> [!IMPORTANT]
+> `children_block`（`{ ... }`）内では、次の要素は文として `;` が必要です。
+>
+> - Leaf ノード呼び出し（子を持たない呼び出し）: `Action(...);`
+> - 代入: `x = expr;` / `x += expr;`
+> - ローカル宣言: `var x = ...;` / `const X = ...;`
+>
+> `Sequence { ... }` のような Compound ノード呼び出し（子ブロックを持つもの）自体には `;` は不要です。
 
 ### Control ノード
 
 ```bt-dsl
 Sequence {
-  DoFirst()
-  DoSecond()
+  DoFirst();
+  DoSecond();
 }
 
 Fallback {
-  TryPrimary()
-  TryFallback()
+  TryPrimary();
+  TryFallback();
 }
 
 Parallel(failure_threshold: 1, success_threshold: -1) {
-  MonitorCondition()
-  ExecuteAction()
+  MonitorCondition();
+  ExecuteAction();
 }
 ```
 
@@ -247,6 +261,10 @@ LongRunningTask();
 | `@run_while(cond)`  | 偽になったら中断 (Skip)    |
 | `@guard(cond)`      | 偽になったら中断 (Failure) |
 
+> [!NOTE]
+> `Skip` は多くの場合 `Success` と同様に扱われ、親が「次の子へ進む」等の進行を行います。
+> 最終的な伝播はノード実装に依存します（詳細は [実行モデル](/reference/execution-model)）。
+
 ---
 
 ## 7. 型
@@ -254,22 +272,22 @@ LongRunningTask();
 ### 基本型
 
 ```bt-dsl
-var i: int32         // 32ビット整数
-var f: float64       // 64ビット浮動小数点
-var b: bool          // 真偽値
-var s: string        // 文字列
+var i: int32;         // 32ビット整数
+var f: float64;       // 64ビット浮動小数点
+var b: bool;          // 真偽値
+var s: string;        // 文字列
 ```
 
 ### 配列型
 
 ```bt-dsl
-var arr: [int32; 5]       // 静的配列（固定サイズ5）
-var bounded: [int32; <=5] // 上限付き静的配列（最大5要素）
-var dynamic: vec<int32>   // 動的配列
+var arr: [int32; 5];       // 静的配列（固定サイズ5）
+var bounded: [int32; <=5]; // 上限付き静的配列（最大5要素）
+var dynamic: vec<int32>;   // 動的配列
 
 // 配列リテラル
-var a = [1, 2, 3]         // [int32; 3]
-var v = vec![1, 2, 3]     // vec<int32>
+var a = [1, 2, 3];         // [int32; 3]
+var v = vec![1, 2, 3];     // vec<int32>
 ```
 
 ### Nullable型
@@ -295,10 +313,10 @@ MoveTo(target);            // このスコープ内では target は Pose 型と
 
 ```bt-dsl
 Sequence {
-  counter = 0
-  counter += 1
-  health -= damage
-  score *= 2
+  counter = 0;
+  counter += 1;
+  health -= damage;
+  score *= 2;
 }
 ```
 
@@ -309,19 +327,19 @@ Sequence {
 ```bt-dsl
 Sequence {
   // 算術
-  result = a + b * 2
+  result = a + b * 2;
 
   // 比較
-  isPositive = value > 0
+  isPositive = value > 0;
 
   // 論理
-  shouldAct = isReady && !isPaused
+  shouldAct = isReady && !isPaused;
 
   // ビット
-  flags = mask & 0xFF
+  flags = mask & 0xFF;
 
   // キャスト
-  small = large as int8
+  small = large as int8;
 }
 ```
 
