@@ -4,7 +4,7 @@ Extern variants + defaults
 
 extern decorator Retry(n: int32 = 3);
 #[behavior(All, Isolated)]
-extern control ParallelAll;
+extern control ParallelAll();
 extern condition IsReady(in level: int32, out ok: bool);
 
 tree Main() {
@@ -104,6 +104,128 @@ tree Main() {
                                 (identifier)))))))))))))))))
 
 ================================================================================
+Doc comments on var/const (global + local)
+================================================================================
+
+/// global var docs
+var X: int32 = 1;
+
+/// global const docs
+const Y: int32 = 2;
+
+tree VarConstDocs() {
+  /// local var docs
+  var a: int32 = 0;
+
+  /// local const docs
+  const B: int32 = 1;
+
+  AlwaysSuccess();
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (global_blackboard_decl
+    (outer_doc)
+    (identifier)
+    (type
+      (base_type
+        (primary_type
+          (identifier))))
+    (expression
+      (or_expr
+        (and_expr
+          (bitwise_or_expr
+            (bitwise_and_expr
+              (equality_expr
+                (comparison_expr
+                  (additive_expr
+                    (multiplicative_expr
+                      (cast_expr
+                        (unary_expr
+                          (primary_expr
+                            (literal
+                              (integer)))))))))))))))
+  (global_const_decl
+    (outer_doc)
+    (identifier)
+    (type
+      (base_type
+        (primary_type
+          (identifier))))
+    (const_expr
+      (expression
+        (or_expr
+          (and_expr
+            (bitwise_or_expr
+              (bitwise_and_expr
+                (equality_expr
+                  (comparison_expr
+                    (additive_expr
+                      (multiplicative_expr
+                        (cast_expr
+                          (unary_expr
+                            (primary_expr
+                              (literal
+                                (integer))))))))))))))))
+  (tree_def
+    (identifier)
+    (tree_body
+      (statement
+        (simple_stmt
+          (blackboard_decl
+            (outer_doc)
+            (identifier)
+            (type
+              (base_type
+                (primary_type
+                  (identifier))))
+            (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (literal
+                                      (integer)))))))))))))))))
+      (statement
+        (simple_stmt
+          (local_const_decl
+            (outer_doc)
+            (identifier)
+            (type
+              (base_type
+                (primary_type
+                  (identifier))))
+            (const_expr
+              (expression
+                (or_expr
+                  (and_expr
+                    (bitwise_or_expr
+                      (bitwise_and_expr
+                        (equality_expr
+                          (comparison_expr
+                            (additive_expr
+                              (multiplicative_expr
+                                (cast_expr
+                                  (unary_expr
+                                    (primary_expr
+                                      (literal
+                                        (integer))))))))))))))))))
+      (statement
+        (simple_stmt
+          (leaf_node_call
+            (identifier)
+            (property_block)))))))
+
+================================================================================
 Type forms (nullable / bounded string / arrays / vec / infer)
 ================================================================================
 
@@ -111,7 +233,7 @@ extern type Vector3;
 type MaybeVec = vec<_>?;
 
 tree Types(
-  in name: string<=32 = "abc",
+  in name: string<32> = "abc",
   out pos: Vector3?
 ) {
   var a: [int32; <=4] = [];
@@ -143,7 +265,8 @@ tree Types(
           (base_type
             (primary_type
               (bounded_string
-                (integer)))))
+                (array_size
+                  (integer))))))
         (const_expr
           (expression
             (or_expr
@@ -339,6 +462,50 @@ tree Types(
                                       (null))))))))))))))))))))
 
 ================================================================================
+Chained casts (a as T1 as T2)
+================================================================================
+
+tree ChainedCasts() {
+  var x: int64 = y as int32 as int64;
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    (identifier)
+    (tree_body
+      (statement
+        (simple_stmt
+          (blackboard_decl
+            (identifier)
+            (type
+              (base_type
+                (primary_type
+                  (identifier))))
+            (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (identifier)))
+                                (type
+                                  (base_type
+                                    (primary_type
+                                      (identifier))))
+                                (type
+                                  (base_type
+                                    (primary_type
+                                      (identifier))))))))))))))))))))
+
+================================================================================
 Compound node call with/without args
 ================================================================================
 
@@ -423,8 +590,8 @@ Expressions (precedence, indexing, casts)
 
 tree Expressions() {
   var flags: int32 = 0;
-  var mask: int32 = 0xFF;
-  flags = (mask & 0x0F) | 0x10;
+  var mask: int32 = 255;
+  flags = (mask & 15) | 16;
   var xs: vec<int32> = vec![1, 2, 3];
   xs[0] = (xs[1] + 2) as int32;
 }

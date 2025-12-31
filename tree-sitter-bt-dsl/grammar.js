@@ -11,19 +11,27 @@ module.exports = grammar({
 
   word: ($) => $.identifier,
 
+  // Enforce the reference rule `identifier = /.../ - keyword` via an external scanner.
+  // Tree-sitter's regex engine does not support lookahead, and contextual lexing would
+  // otherwise allow keywords when only `identifier` is expected.
+  externals: ($) => [$.identifier],
+
   rules: {
     // ========================================================
     // 1. Program (entry point)
     // ========================================================
     program: ($) =>
-      seq(
-        repeat($.inner_doc),
-        repeat($.import_stmt),
-        repeat($.extern_type_stmt),
-        repeat($.type_alias_stmt),
-        repeat($.extern_stmt),
-        repeat(choice($.global_blackboard_decl, $.global_const_decl)),
-        repeat($.tree_def),
+      repeat(
+        choice(
+          $.inner_doc,
+          $.import_stmt,
+          $.extern_type_stmt,
+          $.type_alias_stmt,
+          $.extern_stmt,
+          $.global_blackboard_decl,
+          $.global_const_decl,
+          $.tree_def,
+        ),
       ),
 
     // ========================================================
@@ -39,9 +47,9 @@ module.exports = grammar({
     base_type: ($) =>
       choice($.primary_type, $.static_array_type, $.dynamic_array_type, $.infer_type),
 
-    primary_type: ($) => choice($.identifier, $.bounded_string),
+    primary_type: ($) => choice($.identifier, $.bounded_string, prec(-1, 'string')),
 
-    bounded_string: ($) => seq('string', '<=', field('max_len', $.integer)),
+    bounded_string: ($) => seq('string', '<', field('max_len', $.array_size), '>'),
 
     infer_type: ($) => '_',
 
@@ -94,18 +102,8 @@ module.exports = grammar({
         seq('action', field('name', $.identifier), '(', optional($.extern_port_list), ')', ';'),
         seq('subtree', field('name', $.identifier), '(', optional($.extern_port_list), ')', ';'),
         seq('condition', field('name', $.identifier), '(', optional($.extern_port_list), ')', ';'),
-        seq(
-          'control',
-          field('name', $.identifier),
-          optional(seq('(', optional($.extern_port_list), ')')),
-          ';',
-        ),
-        seq(
-          'decorator',
-          field('name', $.identifier),
-          optional(seq('(', optional($.extern_port_list), ')')),
-          ';',
-        ),
+        seq('control', field('name', $.identifier), '(', optional($.extern_port_list), ')', ';'),
+        seq('decorator', field('name', $.identifier), '(', optional($.extern_port_list), ')', ';'),
       ),
 
     extern_port_list: ($) => seq($.extern_port, repeat(seq(',', $.extern_port))),
@@ -127,19 +125,23 @@ module.exports = grammar({
     // ========================================================
     global_blackboard_decl: ($) =>
       seq(
+        repeat($.outer_doc),
         'var',
         field('name', $.identifier),
         optional(seq(':', field('type', $.type))),
         optional(seq('=', field('init', $.expression))),
+        ';',
       ),
 
     global_const_decl: ($) =>
       seq(
+        repeat($.outer_doc),
         'const',
         field('name', $.identifier),
         optional(seq(':', field('type', $.type))),
         '=',
         field('value', $.const_expr),
+        ';',
       ),
 
     // ========================================================
@@ -181,6 +183,7 @@ module.exports = grammar({
 
     blackboard_decl: ($) =>
       seq(
+        repeat($.outer_doc),
         'var',
         field('name', $.identifier),
         optional(seq(':', field('type', $.type))),
@@ -189,6 +192,7 @@ module.exports = grammar({
 
     local_const_decl: ($) =>
       seq(
+        repeat($.outer_doc),
         'const',
         field('name', $.identifier),
         optional(seq(':', field('type', $.type))),
@@ -249,7 +253,13 @@ module.exports = grammar({
     // 9. Expressions
     // ========================================================
     assignment_stmt: ($) =>
-      seq(field('target', $.lvalue), field('op', $.assignment_op), field('value', $.expression)),
+      seq(
+        repeat($.outer_doc),
+        optional($.precondition_list),
+        field('target', $.lvalue),
+        field('op', $.assignment_op),
+        field('value', $.expression),
+      ),
 
     lvalue: ($) => seq(field('base', $.identifier), repeat(field('index', $.index_suffix))),
 
@@ -284,7 +294,8 @@ module.exports = grammar({
     multiplicative_expr: ($) =>
       prec.left(10, seq($.cast_expr, repeat(seq(choice('*', '/', '%'), $.cast_expr)))),
 
-    cast_expr: ($) => prec.left(11, seq($.unary_expr, optional(seq('as', $.type)))),
+    // Reference: cast_expr = unary_expr , { "as" , type } ;  (left-associative)
+    cast_expr: ($) => prec.left(11, seq($.unary_expr, repeat(seq('as', $.type)))),
 
     unary_expr: ($) => choice(seq(choice('!', '-'), $.unary_expr), $.primary_expr),
 
@@ -294,7 +305,7 @@ module.exports = grammar({
         repeat($.index_suffix),
       ),
 
-    vec_macro: ($) => seq('vec!', $.array_literal),
+    vec_macro: ($) => seq('vec', '!', $.array_literal),
 
     index_suffix: ($) => seq('[', $.expression, ']'),
 
@@ -314,11 +325,11 @@ module.exports = grammar({
     // ========================================================
     literal: ($) => choice($.string, $.float, $.integer, $.boolean, $.null),
 
-    string: ($) => /"([^"\\]|\\.)*"/,
+    string: ($) => /"([^"\\\r\n]|\\.)*"/,
 
-    float: ($) => token(prec(2, /-?[0-9]+\.[0-9]+/)),
+    float: ($) => token(prec(2, choice(/-?\d+\.\d+(?:[eE][+-]?\d+)?/, /-?\d+[eE][+-]?\d+/))),
 
-    integer: ($) => token(prec(1, /-?(0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|0|[1-9][0-9]*)/)),
+    integer: ($) => token(prec(1, /-?(?:0|[1-9]\d*|0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+)/)),
 
     boolean: ($) => choice('true', 'false'),
 
@@ -329,17 +340,12 @@ module.exports = grammar({
     // ========================================================
     comment: ($) => choice($.line_comment, $.block_comment),
 
-    line_comment: ($) => token(seq('//', /[^/!][^\n]*/)),
+    line_comment: ($) => token(seq('//', /([^/!\n][^\n]*)?/)),
 
     block_comment: ($) => token(seq('/*', /[^*]*\*+([^/*][^*]*\*+)*/, '/')),
 
     outer_doc: ($) => token(seq('///', /[^\n]*/)),
 
     inner_doc: ($) => token(seq('//!', /[^\n]*/)),
-
-    // ========================================================
-    // 13. Identifier
-    // ========================================================
-    identifier: ($) => /[a-zA-Z_][a-zA-Z0-9_]*/,
   },
 });

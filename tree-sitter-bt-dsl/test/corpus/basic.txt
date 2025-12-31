@@ -4,17 +4,19 @@ Program structure (imports / extern / globals / tree)
 
 //! Module doc
 
+//
+
 import "./stdlib.bt"
 
 extern type Pose;
 type PoseRef = Pose?;
 
 #[behavior(Any)]
-extern control Fallback;
+extern control Fallback();
 extern action MoveTo(in goal: Pose, out ok: bool);
 
-var Target: Pose?
-const MAX_RETRIES: int32 = 3
+var Target: Pose?;
+const MAX_RETRIES: int32 = 3;
 
 tree Main(ref target: Pose?) {
   var retries: int32 = 0;
@@ -30,6 +32,8 @@ tree Main(ref target: Pose?) {
 
 (program
   (inner_doc)
+  (comment
+    (line_comment))
   (import_stmt
     (string))
   (extern_type_stmt
@@ -220,6 +224,42 @@ tree Simple() {
           (leaf_node_call
             (identifier)
             (property_block)))))))
+
+================================================================================
+Bare string type
+================================================================================
+
+tree StringType() {
+  var s: string = "x";
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (tree_def
+    (identifier)
+    (tree_body
+      (statement
+        (simple_stmt
+          (blackboard_decl
+            (identifier)
+            (type
+              (base_type
+                (primary_type)))
+            (expression
+              (or_expr
+                (and_expr
+                  (bitwise_or_expr
+                    (bitwise_and_expr
+                      (equality_expr
+                        (comparison_expr
+                          (additive_expr
+                            (multiplicative_expr
+                              (cast_expr
+                                (unary_expr
+                                  (primary_expr
+                                    (literal
+                                      (string))))))))))))))))))))
 
 ================================================================================
 Arrays / vec! / repeat init
@@ -423,13 +463,13 @@ tree Arrays() {
                                                                     (integer)))))))))))))))))))))))))))))))))))
 
 ================================================================================
-Cast / indexing / hex integer
+Cast / indexing / integer literal
 ================================================================================
 
 tree Expr() {
   var xs: vec<int32> = vec![1, 2, 3];
   var x: int32 = xs[0] as int32;
-  xs[1] = 0xFF;
+  xs[1] = 255;
 }
 
 --------------------------------------------------------------------------------
