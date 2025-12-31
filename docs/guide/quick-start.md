@@ -129,5 +129,5 @@ extern action MoveTo(
 ## 6. 次のステップ
 
 - 詳しい構文 → [構文ガイド](/guide/syntax)
-- 厳密な仕様 → [文法リファレンス](/reference/grammar)
+- 厳密な仕様 → [言語仕様書（Reference）](/reference/)
 - 標準ノード一覧 → [標準ライブラリ](/standard-library)

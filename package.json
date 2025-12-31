@@ -16,8 +16,12 @@
     "docs:dev": "pnpm run build:grammar && pnpm --filter bt-dsl-docs dev",
     "docs:build": "pnpm run build:grammar && pnpm --filter bt-dsl-docs build",
     "docs:preview": "pnpm --filter bt-dsl-docs preview",
-    "lint": "pnpm -r --if-present lint",
-    "lint:fix": "pnpm -r --if-present lint:fix",
+    "docs:lint": "markdownlint-cli2",
+    "docs:lint:fix": "markdownlint-cli2 --fix",
+    "docs:links": "node scripts/check-doc-links.mjs",
+    "docs:links:external": "node scripts/check-doc-links.mjs --external",
+    "lint": "pnpm -r --if-present lint && pnpm run docs:lint && pnpm run docs:links",
+    "lint:fix": "pnpm -r --if-present lint:fix && pnpm run docs:lint:fix",
     "lint:clang-tidy": "pnpm -r --if-present lint:clang-tidy",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
@@ -29,10 +33,16 @@
     "@eslint/js": "^9.18.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
+    "fast-glob": "^3.3.3",
+    "github-slugger": "^2.0.0",
     "globals": "^15.14.0",
+    "markdownlint-cli2": "^0.18.1",
     "prettier": "^3.4.2",
+    "remark-parse": "^11.0.0",
     "typescript": "~5.4.0",
-    "typescript-eslint": "^8.20.0"
+    "typescript-eslint": "^8.20.0",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

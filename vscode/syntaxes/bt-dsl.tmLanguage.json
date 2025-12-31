@@ -1,38 +1,62 @@
 {
   "name": "bt-dsl",
   "scopeName": "source.bt-dsl",
-  "fileTypes": [".bt"],
+  "fileTypes": ["bt"],
   "patterns": [
     {
       "include": "#comments"
     },
     {
-      "name": "keyword.control.bt-dsl",
-      "match": "\\b(Tree|declare|false|import|in|out|ref|true|var)\\b"
+      "include": "#attributes"
     },
     {
-      "name": "string.quoted.double.bt-dsl",
-      "begin": "\"",
-      "end": "\"",
-      "patterns": [
-        {
-          "include": "#string-character-escape"
-        }
-      ]
+      "include": "#preconditions"
+    },
+    {
+      "include": "#inline-out-var"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#literals"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#calls"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#operators"
     }
   ],
   "repository": {
     "comments": {
       "patterns": [
         {
-          "begin": "//",
-          "beginCaptures": {
-            "1": {
-              "name": "punctuation.whitespace.comment.leading.bt-dsl"
+          "name": "comment.line.documentation.bt-dsl",
+          "match": "(?x)^(\\s*)(//!)(.*)$",
+          "captures": {
+            "2": {
+              "name": "punctuation.definition.comment.bt-dsl"
             }
-          },
-          "end": "(?=$)",
-          "name": "comment.line.bt-dsl"
+          }
+        },
+        {
+          "name": "comment.line.documentation.bt-dsl",
+          "match": "(?x)^(\\s*)(///)(.*)$",
+          "captures": {
+            "2": {
+              "name": "punctuation.definition.comment.bt-dsl"
+            }
+          }
         },
         {
           "name": "comment.block.bt-dsl",
@@ -48,6 +72,541 @@
               "name": "punctuation.definition.comment.bt-dsl"
             }
           }
+        },
+        {
+          "name": "comment.line.bt-dsl",
+          "match": "//.*$",
+          "captures": {
+            "0": {
+              "name": "punctuation.definition.comment.bt-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.bt-dsl",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "include": "#string-character-escape"
+            }
+          ]
+        }
+      ]
+    },
+    "literals": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.bt-dsl",
+          "match": "(?<![A-Za-z0-9_])[-]?[0-9]+\\.[0-9]+(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "constant.numeric.integer.bt-dsl",
+          "match": "(?<![A-Za-z0-9_])[-]?[0-9]+(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "constant.language.boolean.bt-dsl",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.bt-dsl",
+          "match": "\\bnull\\b"
+        }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        {
+          "name": "meta.annotation.bt-dsl",
+          "begin": "#\\[",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.annotation.begin.bt-dsl"
+            }
+          },
+          "end": "\\]",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.annotation.end.bt-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "name": "support.function.annotation.bt-dsl",
+              "match": "\\bbehavior\\b"
+            },
+            {
+              "name": "support.constant.bt-dsl",
+              "match": "\\b(All|Any|None|Chained|Isolated)\\b"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#literals"
+            },
+            {
+              "include": "#types"
+            },
+            {
+              "include": "#operators"
+            },
+            {
+              "name": "punctuation.separator.bt-dsl",
+              "match": "[,()]"
+            }
+          ]
+        }
+      ]
+    },
+    "preconditions": {
+      "patterns": [
+        {
+          "name": "meta.precondition.bt-dsl",
+          "match": "@(?:(success_if|failure_if|skip_if|run_while|guard))(?=\\s*\\()",
+          "captures": {
+            "0": {
+              "name": "keyword.control.precondition.bt-dsl"
+            },
+            "1": {
+              "name": "keyword.control.precondition.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "punctuation.definition.precondition.bt-dsl",
+          "match": "@"
+        }
+      ]
+    },
+    "calls": {
+      "patterns": [
+        {
+          "name": "keyword.control.blocklike.bt-dsl",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\b(?=\\s*(?:\\([^()]*\\))?\\s*\\{)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.blocklike.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "entity.name.function.call.bt-dsl",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\b(?=\\s*\\()(?!\\s*\\([^()]*\\)\\s*\\{)",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.call.bt-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "inline-out-var": {
+      "patterns": [
+        {
+          "name": "meta.argument.inline-out-var.bt-dsl",
+          "match": "(\\(|,)\\s*(out)\\s+(var)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.separator.bt-dsl"
+            },
+            "2": {
+              "name": "storage.modifier.bt-dsl"
+            },
+            "3": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "4": {
+              "name": "variable.other.readwrite.bt-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.bt-dsl",
+          "match": "\\b(import|extern|type|var|const|tree)\\b"
+        },
+        {
+          "name": "keyword.operator.bt-dsl",
+          "match": "\\bas\\b"
+        },
+        {
+          "name": "storage.modifier.bt-dsl",
+          "match": "\\b(in|out|ref|mut)\\b"
+        },
+        {
+          "name": "keyword.other.bt-dsl",
+          "match": "\\bvec\\b"
+        },
+        {
+          "name": "support.function.macro.bt-dsl",
+          "match": "\\bvec!\\b"
+        },
+        {
+          "name": "storage.type.extern-category.bt-dsl",
+          "match": "\\b(action|subtree|condition|control|decorator)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.bt-dsl",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.bt-dsl",
+          "match": "\\+=|-=|\\*=|/=|=(?!=)"
+        },
+        {
+          "name": "keyword.operator.logical.bt-dsl",
+          "match": "\\|\\||&&|!"
+        },
+        {
+          "name": "keyword.operator.bitwise.bt-dsl",
+          "match": "(?<!\\|)\\|(?!\\|)|&"
+        },
+        {
+          "name": "keyword.operator.arithmetic.bt-dsl",
+          "match": "\\+|-|\\*|/|%"
+        },
+        {
+          "name": "punctuation.separator.bt-dsl",
+          "match": "[,:;]"
+        },
+        {
+          "name": "punctuation.section.block.begin.bt-dsl",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.block.end.bt-dsl",
+          "match": "\\}"
+        },
+        {
+          "name": "punctuation.section.parens.begin.bt-dsl",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.section.parens.end.bt-dsl",
+          "match": "\\)"
+        },
+        {
+          "name": "punctuation.section.brackets.begin.bt-dsl",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.section.brackets.end.bt-dsl",
+          "match": "\\]"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "meta.type.generic.bt-dsl",
+          "begin": "\\b(vec)\\s*(<)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.other.bt-dsl"
+            },
+            "2": {
+              "name": "punctuation.definition.typeparameters.begin.bt-dsl"
+            }
+          },
+          "end": ">",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.typeparameters.end.bt-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "name": "entity.name.type.bt-dsl",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+            },
+            {
+              "name": "punctuation.separator.bt-dsl",
+              "match": ","
+            },
+            {
+              "name": "punctuation.definition.typeparameters.begin.bt-dsl",
+              "match": "<"
+            }
+          ]
+        },
+        {
+          "name": "storage.type.primitive.bt-dsl",
+          "match": "\\b(bool|string|int8|int16|int32|int64|uint8|uint16|uint32|uint64|float32|float64|int|float|double|byte|char)\\b"
+        },
+        {
+          "name": "storage.type.wildcard.bt-dsl",
+          "match": "\\b_\\b"
+        },
+        {
+          "name": "keyword.operator.nullable.bt-dsl",
+          "match": "\\?"
+        },
+        {
+          "name": "support.type.bounded-string.bt-dsl",
+          "match": "\\bstring\\s*<=\\s*[-]?[0-9]+\\b"
+        },
+        {
+          "name": "keyword.operator.type-bound.bt-dsl",
+          "match": "<="
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.definition.extern.signature.bt-dsl",
+          "begin": "\\b(extern)\\s+(action|subtree|condition|control|decorator)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "storage.type.extern-category.bt-dsl"
+            },
+            "3": {
+              "name": "entity.name.function.bt-dsl"
+            },
+            "4": {
+              "name": "punctuation.section.parens.begin.bt-dsl"
+            }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.parens.end.bt-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "name": "storage.modifier.bt-dsl",
+              "match": "\\b(in|out|ref|mut)\\b"
+            },
+            {
+              "name": "variable.parameter.bt-dsl",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*:)"
+            },
+            {
+              "name": "meta.type.annotation.bt-dsl",
+              "match": "(:)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+              "captures": {
+                "1": {
+                  "name": "punctuation.separator.bt-dsl"
+                },
+                "2": {
+                  "name": "entity.name.type.bt-dsl"
+                }
+              }
+            },
+            {
+              "include": "#types"
+            },
+            {
+              "include": "#literals"
+            },
+            {
+              "include": "#operators"
+            }
+          ]
+        },
+        {
+          "name": "meta.definition.extern.bt-dsl",
+          "match": "\\b(extern)\\s+(action|subtree|condition|control|decorator)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "storage.type.extern-category.bt-dsl"
+            },
+            "3": {
+              "name": "entity.name.function.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "meta.definition.extern-type.bt-dsl",
+          "match": "\\b(extern)\\s+(type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "3": {
+              "name": "entity.name.type.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "meta.definition.type-alias.bt-dsl",
+          "match": "\\b(type)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "entity.name.type.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "meta.definition.tree.bt-dsl",
+          "match": "\\b(tree)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "entity.name.function.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "meta.definition.tree.params.bt-dsl",
+          "begin": "\\b(tree)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "entity.name.function.bt-dsl"
+            },
+            "3": {
+              "name": "punctuation.section.parens.begin.bt-dsl"
+            }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.parens.end.bt-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "name": "storage.modifier.bt-dsl",
+              "match": "\\b(in|out|ref|mut)\\b"
+            },
+            {
+              "name": "variable.parameter.bt-dsl",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*(?::|=|,|\\)))"
+            },
+            {
+              "name": "meta.type.annotation.bt-dsl",
+              "match": "(:)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+              "captures": {
+                "1": {
+                  "name": "punctuation.separator.bt-dsl"
+                },
+                "2": {
+                  "name": "entity.name.type.bt-dsl"
+                }
+              }
+            },
+            {
+              "include": "#types"
+            },
+            {
+              "include": "#literals"
+            },
+            {
+              "include": "#operators"
+            }
+          ]
+        },
+        {
+          "name": "meta.definition.variable.typed.bt-dsl",
+          "match": "\\b(var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(:)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "variable.other.readwrite.bt-dsl"
+            },
+            "3": {
+              "name": "punctuation.separator.bt-dsl"
+            },
+            "4": {
+              "name": "entity.name.type.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "meta.definition.variable.bt-dsl",
+          "match": "\\b(var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "variable.other.readwrite.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "meta.definition.constant.typed.bt-dsl",
+          "match": "\\b(const)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(:)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "variable.other.constant.bt-dsl"
+            },
+            "3": {
+              "name": "punctuation.separator.bt-dsl"
+            },
+            "4": {
+              "name": "entity.name.type.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "meta.definition.constant.bt-dsl",
+          "match": "\\b(const)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bt-dsl"
+            },
+            "2": {
+              "name": "variable.other.constant.bt-dsl"
+            }
+          }
+        },
+        {
+          "name": "variable.other.constant.bt-dsl",
+          "match": "\\b[A-Z][A-Z0-9_]*\\b"
         }
       ]
     },

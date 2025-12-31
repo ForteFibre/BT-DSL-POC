@@ -49,6 +49,7 @@ export default defineConfig({
   srcExclude: ['railroad.md', 'README.md'],
 
   markdown: {
+    math: true,
     languages: [btDslLanguage, ebnfLanguage],
   },
 
@@ -56,7 +57,7 @@ export default defineConfig({
     nav: [
       { text: 'ホーム', link: '/' },
       { text: 'ガイド', link: '/guide/quick-start' },
-      { text: 'リファレンス', link: '/reference/grammar' },
+      { text: 'リファレンス', link: '/reference/' },
       { text: '標準ノード', link: '/standard-library' },
     ],
 
@@ -73,10 +74,28 @@ export default defineConfig({
       {
         text: 'リファレンス',
         items: [
-          { text: '文法', link: '/reference/grammar' },
-          { text: '型システム', link: '/reference/type-system' },
-          { text: '意味制約', link: '/reference/semantics' },
-          { text: '初期化安全性', link: '/reference/initialization-safety' },
+          { text: '言語仕様書', link: '/reference/' },
+          { text: '字句構造', link: '/reference/lexical-structure' },
+          { text: '構文', link: '/reference/syntax' },
+          {
+            text: '型システム',
+            link: '/reference/type-system/',
+            items: [
+              { text: '3.1 型の定義', link: '/reference/type-system/type-definitions' },
+              {
+                text: '3.2 型推論と決定',
+                link: '/reference/type-system/inference-and-resolution',
+              },
+              {
+                text: '3.3 互換性と変換',
+                link: '/reference/type-system/compatibility-and-conversion',
+              },
+              { text: '3.4 式の型規則', link: '/reference/type-system/expression-typing' },
+            ],
+          },
+          { text: '意味論: 宣言とスコープ', link: '/reference/declarations-and-scopes' },
+          { text: '意味論: 実行モデル', link: '/reference/execution-model' },
+          { text: '静的解析と安全性', link: '/reference/static-analysis-and-safety' },
         ],
       },
       {
