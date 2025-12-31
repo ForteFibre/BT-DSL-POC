@@ -1,0 +1,46 @@
+{
+  // markdownlint-cli2 config
+  // https://github.com/DavidAnson/markdownlint-cli2
+
+  "config": {
+    "default": true,
+
+    // We already enforce wrapping/formatting with Prettier.
+    "MD013": false,
+
+    // GitHub-style admonitions/alerts are written as blockquotes; MD028 tends to
+    // flag perfectly valid patterns (e.g. adjacent alerts).
+    "MD028": false,
+
+    // VitePress/Markdown often uses inline HTML (e.g. <br>, <details>, custom blocks).
+    "MD033": false,
+
+    // Some pages may start with non-heading content in the future.
+    "MD041": false,
+
+    // Duplicate headings are sometimes OK when they are in different sections.
+    "MD024": { "siblings_only": true },
+  },
+
+  "globs": ["README.md", "docs/**/*.md", "formatter/README.md", "formatter/test/README.md"],
+
+  "ignores": [
+    "**/.git/**",
+    "**/.pnpm/**",
+    "**/node_modules/**",
+
+    // build artifacts / vendored deps
+    "**/dist/**",
+    "**/out/**",
+    "**/out-tsc/**",
+    "**/out-test/**",
+    "**/build/**",
+    "**/core/build/**",
+    "**/core/build-*/**",
+    "**/core/**/_deps/**",
+    "**/tree-sitter-bt-dsl/build/**",
+
+    // generated docs
+    "docs/generated/**",
+  ],
+}

@@ -2,7 +2,7 @@
 
 このページでは BT-DSL の構文をコード例を中心に解説します。
 
-厳密な文法定義は [文法リファレンス](/reference/grammar) を参照してください。
+厳密な文法定義は [構文](/reference/syntax) を参照してください。
 
 ---
 
@@ -24,7 +24,8 @@ tree Main() {
 }
 ```
 
-> [!NOTE] 順序は固定です。`import` は `tree` より前に、`extern` は `var`
+> [!NOTE]
+> 順序は固定です。`import` は `tree` より前に、`extern` は `var`
 > より前に書く必要があります。
 
 ---
@@ -74,7 +75,7 @@ extern decorator Retry(n: int32);
 ```
 
 `control` / `decorator` は `#[behavior(DataPolicy, FlowPolicy)]`
-属性で振る舞いを定義します。詳細は[初期化安全性](/reference/initialization-safety)を参照してください。
+属性で振る舞いを定義します。詳細は[静的解析と安全性](/reference/static-analysis-and-safety)を参照してください。
 
 ### カテゴリ
 
@@ -95,7 +96,7 @@ extern decorator Retry(n: int32);
 | `mut` | State (Live R/W): 状態の共有・更新（読み書き） | -          |
 | `out` | Output: 結果の出力専用                         | -          |
 
-詳細は[意味制約 - ポート方向の整合性](/reference/semantics#_3-ポート方向の整合性)を参照してください。
+詳細は[静的解析と安全性 - ポート方向の整合性](/reference/static-analysis-and-safety#_6-4-ポート方向と引数制約port-direction-and-argument-constraints)を参照してください。
 
 ---
 
@@ -198,7 +199,8 @@ Parallel(failure_threshold: 1, success_threshold: -1) {
 }
 ```
 
-> [!IMPORTANT] Control ノードは `{...}` が必須です。`Sequence()` のように `()`
+> [!IMPORTANT]
+> Control ノードは `{...}` が必須です。`Sequence()` のように `()`
 > だけで終わるとエラーになります。
 
 ### デコレータ
@@ -283,7 +285,7 @@ MoveTo(target);            // このスコープ内では target は Pose 型と
 `@guard`
 内で null チェックを行うと、そのノードのスコープ内で型の絞り込み（Narrowing）が適用されます。
 
-詳細は[型システム](/reference/type-system)を参照してください。
+詳細は[型システム](/reference/type-system/)を参照してください。
 
 ---
 
@@ -323,7 +325,8 @@ Sequence {
 }
 ```
 
-詳細な演算子の優先順位は [文法リファレンス](/reference/grammar#4-演算子の優先順位)
+詳細な演算子の優先順位は
+[構文](/reference/syntax#_2-4-2-演算子の優先順位と結合規則precedence-and-associativity)
 を参照してください。
 
 ---
