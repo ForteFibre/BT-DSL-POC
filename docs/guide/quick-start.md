@@ -78,8 +78,8 @@ Retry(n: 3) {
 ### 4.1 グローバル変数
 
 ```bt-dsl
-var TargetPos: Vector3
-var Health: int
+var TargetPos: Vector3;
+var Health: int;
 
 tree Main() {
   FindEnemy(pos: out TargetPos);

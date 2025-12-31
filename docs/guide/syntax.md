@@ -17,7 +17,7 @@ import "./other.bt"
 
 extern action MyAction(port: int);
 
-var GlobalVar: string
+var GlobalVar: string;
 
 tree Main() {
   MyAction(port: 42);
@@ -108,12 +108,12 @@ extern decorator Retry(n: int32);
 ## 4. グローバル変数・定数
 
 ```bt-dsl
-var PlayerHealth: int
-var TargetPosition: Vector3
-var IsAlerted: bool
+var PlayerHealth: int;
+var TargetPosition: Vector3;
+var IsAlerted: bool;
 
-const MAX_HEALTH = 100
-const DEFAULT_SPEED: float = 1.5
+const MAX_HEALTH = 100;
+const DEFAULT_SPEED: float = 1.5;
 ```
 
 - グローバル変数は型注釈または初期値が必要
@@ -272,22 +272,22 @@ LongRunningTask();
 ### 基本型
 
 ```bt-dsl
-var i: int32         // 32ビット整数
-var f: float64       // 64ビット浮動小数点
-var b: bool          // 真偽値
-var s: string        // 文字列
+var i: int32;         // 32ビット整数
+var f: float64;       // 64ビット浮動小数点
+var b: bool;          // 真偽値
+var s: string;        // 文字列
 ```
 
 ### 配列型
 
 ```bt-dsl
-var arr: [int32; 5]       // 静的配列（固定サイズ5）
-var bounded: [int32; <=5] // 上限付き静的配列（最大5要素）
-var dynamic: vec<int32>   // 動的配列
+var arr: [int32; 5];       // 静的配列（固定サイズ5）
+var bounded: [int32; <=5]; // 上限付き静的配列（最大5要素）
+var dynamic: vec<int32>;   // 動的配列
 
 // 配列リテラル
-var a = [1, 2, 3]         // [int32; 3]
-var v = vec![1, 2, 3]     // vec<int32>
+var a = [1, 2, 3];         // [int32; 3]
+var v = vec![1, 2, 3];     // vec<int32>
 ```
 
 ### Nullable型
