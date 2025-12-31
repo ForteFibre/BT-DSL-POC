@@ -10,7 +10,7 @@
 // main.bt - 最も単純なビヘイビアツリー
 
 tree Main() {
-  AlwaysSuccess()
+  AlwaysSuccess();
 }
 ```
 
@@ -27,8 +27,8 @@ import "./std.bt"
 
 tree Main() {
   Sequence {
-    Log(message: "Starting...")
-    AlwaysSuccess()
+    Log(message: "Starting...");
+    AlwaysSuccess();
   }
 }
 ```
@@ -41,9 +41,9 @@ tree Main() {
 
 ```bt-dsl
 Sequence {
-  DoFirst()
-  DoSecond()
-  DoThird()
+  DoFirst();
+  DoSecond();
+  DoThird();
 }
 ```
 
@@ -53,9 +53,9 @@ Sequence {
 
 ```bt-dsl
 Fallback {
-  TryThis()
-  TryThat()
-  DoFallback()
+  TryThis();
+  TryThat();
+  DoFallback();
 }
 ```
 
@@ -82,8 +82,8 @@ var TargetPos: Vector3
 var Health: int
 
 tree Main() {
-  FindEnemy(pos: out TargetPos)
-  MoveTo(goal: TargetPos)
+  FindEnemy(pos: out TargetPos);
+  MoveTo(goal: TargetPos);
 }
 ```
 
@@ -97,8 +97,8 @@ tree Counter() {
   var count: int = 0
 
   Sequence {
-    count += 1
-    Log(message: "Count is updated")
+    count += 1;
+    Log(message: "Count is updated");
   }
 }
 ```
