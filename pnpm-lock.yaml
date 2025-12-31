@@ -52,15 +52,12 @@ importers:
 
   docs:
     devDependencies:
-      '@mdit/plugin-katex':
-        specifier: ^0.24.1
-        version: 0.24.1(markdown-it@14.1.0)
-      katex:
-        specifier: ^0.16.22
-        version: 0.16.27
       markdown-it:
         specifier: ^14.1.0
         version: 14.1.0
+      markdown-it-mathjax3:
+        specifier: ^4.3.2
+        version: 4.3.2
       railroad-diagrams:
         specifier: ^1.0.0
         version: 1.0.0
@@ -665,33 +662,6 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
-
-  '@mdit/helper@0.22.1':
-    resolution: {integrity: sha512-lDpajcdAk84aYCNAM/Mi3djw38DJq7ocLw5VOSMu/u2YKX3/OD37a6Qb59in8Uyp4SiAbQoSHa8px6hgHEpB5g==}
-    engines: {node: '>= 18'}
-    peerDependencies:
-      markdown-it: ^14.1.0
-    peerDependenciesMeta:
-      markdown-it:
-        optional: true
-
-  '@mdit/plugin-katex@0.24.1':
-    resolution: {integrity: sha512-IgJ2sXpIC5+2vgdSmyiBI6MSGCIrnIRxdMnh/JhaOwdYBN0VCMVuH/9iBWHs2FhFvCL768ciY9JSSSnkIesEwA==}
-    engines: {node: '>= 18'}
-    peerDependencies:
-      markdown-it: ^14.1.0
-    peerDependenciesMeta:
-      markdown-it:
-        optional: true
-
-  '@mdit/plugin-tex@0.23.0':
-    resolution: {integrity: sha512-oiNlqzpa4S/6rGm5Ht5IvpzvVsDmm1kF95oxKR0ZQmkeMeSXJLVrYgxmMvt8Oj0D+/F5WJ4mYCD+kXDaLxI0gg==}
-    engines: {node: '>= 18'}
-    peerDependencies:
-      markdown-it: ^14.1.0
-    peerDependenciesMeta:
-      markdown-it:
-        optional: true
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -3626,27 +3596,6 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
-  '@mdit/helper@0.22.1(markdown-it@14.1.0)':
-    dependencies:
-      '@types/markdown-it': 14.1.2
-    optionalDependencies:
-      markdown-it: 14.1.0
-
-  '@mdit/plugin-katex@0.24.1(markdown-it@14.1.0)':
-    dependencies:
-      '@mdit/helper': 0.22.1(markdown-it@14.1.0)
-      '@mdit/plugin-tex': 0.23.0(markdown-it@14.1.0)
-      '@types/markdown-it': 14.1.2
-      katex: 0.16.27
-    optionalDependencies:
-      markdown-it: 14.1.0
-
-  '@mdit/plugin-tex@0.23.0(markdown-it@14.1.0)':
-    dependencies:
-      '@types/markdown-it': 14.1.2
-    optionalDependencies:
-      markdown-it: 14.1.0
-
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -4241,8 +4190,7 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@xmldom/xmldom@0.9.8':
-    optional: true
+  '@xmldom/xmldom@0.9.8': {}
 
   acorn-jsx@5.3.2(acorn@8.15.0):
     dependencies:
@@ -4405,7 +4353,6 @@ snapshots:
       domelementtype: 2.3.0
       domhandler: 4.3.1
       domutils: 2.8.0
-    optional: true
 
   cheerio-select@2.1.0:
     dependencies:
@@ -4425,7 +4372,6 @@ snapshots:
       parse5: 6.0.1
       parse5-htmlparser2-tree-adapter: 6.0.1
       tslib: 2.8.1
-    optional: true
 
   cheerio@1.1.2:
     dependencies:
@@ -4483,11 +4429,9 @@ snapshots:
 
   commander@12.1.0: {}
 
-  commander@13.1.0:
-    optional: true
+  commander@13.1.0: {}
 
-  commander@6.2.1:
-    optional: true
+  commander@6.2.1: {}
 
   commander@8.3.0: {}
 
@@ -4512,7 +4456,6 @@ snapshots:
       domhandler: 4.3.1
       domutils: 2.8.0
       nth-check: 2.1.1
-    optional: true
 
   css-select@5.2.2:
     dependencies:
@@ -4575,7 +4518,6 @@ snapshots:
       domelementtype: 2.3.0
       domhandler: 4.3.1
       entities: 2.2.0
-    optional: true
 
   dom-serializer@2.0.0:
     dependencies:
@@ -4588,12 +4530,10 @@ snapshots:
   domhandler@3.3.0:
     dependencies:
       domelementtype: 2.3.0
-    optional: true
 
   domhandler@4.3.1:
     dependencies:
       domelementtype: 2.3.0
-    optional: true
 
   domhandler@5.0.3:
     dependencies:
@@ -4604,7 +4544,6 @@ snapshots:
       dom-serializer: 1.4.1
       domelementtype: 2.3.0
       domhandler: 4.3.1
-    optional: true
 
   domutils@3.2.2:
     dependencies:
@@ -4645,8 +4584,7 @@ snapshots:
     dependencies:
       once: 1.4.0
 
-  entities@2.2.0:
-    optional: true
+  entities@2.2.0: {}
 
   entities@4.5.0: {}
 
@@ -4725,8 +4663,7 @@ snapshots:
 
   escalade@3.2.0: {}
 
-  escape-goat@3.0.0:
-    optional: true
+  escape-goat@3.0.0: {}
 
   escape-string-regexp@4.0.0: {}
 
@@ -4782,8 +4719,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  esm@3.2.25:
-    optional: true
+  esm@3.2.25: {}
 
   espree@10.4.0:
     dependencies:
@@ -5027,7 +4963,6 @@ snapshots:
       domhandler: 3.3.0
       domutils: 2.8.0
       entities: 2.2.0
-    optional: true
 
   htmlparser2@6.1.0:
     dependencies:
@@ -5035,7 +4970,6 @@ snapshots:
       domhandler: 4.3.1
       domutils: 2.8.0
       entities: 2.2.0
-    optional: true
 
   http-proxy-agent@7.0.2:
     dependencies:
@@ -5208,7 +5142,6 @@ snapshots:
       web-resource-inliner: 6.0.1
     transitivePeerDependencies:
       - encoding
-    optional: true
 
   jwa@2.0.1:
     dependencies:
@@ -5304,7 +5237,6 @@ snapshots:
       mathjax-full: 3.2.2
     transitivePeerDependencies:
       - encoding
-    optional: true
 
   markdown-it@14.1.0:
     dependencies:
@@ -5352,7 +5284,6 @@ snapshots:
       mhchemparser: 4.2.1
       mj-context-menu: 0.6.1
       speech-rule-engine: 4.1.2
-    optional: true
 
   mdast-util-from-markdown@2.0.2:
     dependencies:
@@ -5389,13 +5320,11 @@ snapshots:
 
   mdurl@2.0.0: {}
 
-  mensch@0.3.4:
-    optional: true
+  mensch@0.3.4: {}
 
   merge2@1.4.1: {}
 
-  mhchemparser@4.2.1:
-    optional: true
+  mhchemparser@4.2.1: {}
 
   micromark-core-commonmark@2.0.3:
     dependencies:
@@ -5589,8 +5518,7 @@ snapshots:
 
   mime@1.6.0: {}
 
-  mime@2.6.0:
-    optional: true
+  mime@2.6.0: {}
 
   mimic-function@5.0.1: {}
 
@@ -5621,8 +5549,7 @@ snapshots:
 
   mitt@3.0.1: {}
 
-  mj-context-menu@0.6.1:
-    optional: true
+  mj-context-menu@0.6.1: {}
 
   mkdirp-classic@0.5.3: {}
 
@@ -5672,7 +5599,6 @@ snapshots:
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
-    optional: true
 
   node-gyp-build@4.8.4: {}
 
@@ -5790,7 +5716,6 @@ snapshots:
   parse5-htmlparser2-tree-adapter@6.0.1:
     dependencies:
       parse5: 6.0.1
-    optional: true
 
   parse5-htmlparser2-tree-adapter@7.1.0:
     dependencies:
@@ -5801,8 +5726,7 @@ snapshots:
     dependencies:
       parse5: 7.3.0
 
-  parse5@6.0.1:
-    optional: true
+  parse5@6.0.1: {}
 
   parse5@7.3.0:
     dependencies:
@@ -6125,8 +6049,7 @@ snapshots:
       astral-regex: 2.0.0
       is-fullwidth-code-point: 3.0.0
 
-  slick@1.12.2:
-    optional: true
+  slick@1.12.2: {}
 
   source-map-js@1.2.1: {}
 
@@ -6153,7 +6076,6 @@ snapshots:
       '@xmldom/xmldom': 0.9.8
       commander: 13.1.0
       wicked-good-xpath: 1.3.0
-    optional: true
 
   stdin-discarder@0.2.2: {}
 
@@ -6269,8 +6191,7 @@ snapshots:
     dependencies:
       is-number: 7.0.0
 
-  tr46@0.0.3:
-    optional: true
+  tr46@0.0.3: {}
 
   tree-sitter-cli@0.22.6: {}
 
@@ -6378,8 +6299,7 @@ snapshots:
 
   uuid@8.3.2: {}
 
-  valid-data-url@3.0.1:
-    optional: true
+  valid-data-url@3.0.1: {}
 
   validate-npm-package-license@3.0.4:
     dependencies:
@@ -6492,12 +6412,10 @@ snapshots:
       valid-data-url: 3.0.1
     transitivePeerDependencies:
       - encoding
-    optional: true
 
   web-tree-sitter@0.23.2: {}
 
-  webidl-conversions@3.0.1:
-    optional: true
+  webidl-conversions@3.0.1: {}
 
   whatwg-encoding@3.1.1:
     dependencies:
@@ -6509,14 +6427,12 @@ snapshots:
     dependencies:
       tr46: 0.0.3
       webidl-conversions: 3.0.1
-    optional: true
 
   which@2.0.2:
     dependencies:
       isexe: 2.0.0
 
-  wicked-good-xpath@1.3.0:
-    optional: true
+  wicked-good-xpath@1.3.0: {}
 
   word-wrap@1.2.5: {}
 
