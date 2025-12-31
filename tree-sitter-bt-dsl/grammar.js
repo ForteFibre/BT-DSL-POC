@@ -234,10 +234,7 @@ module.exports = grammar({
     argument_list: ($) => seq($.argument, repeat(seq(',', $.argument))),
 
     argument: ($) =>
-      choice(
-        seq(field('name', $.identifier), ':', field('value', $.argument_expr)),
-        field('value', $.argument_expr),
-      ),
+      seq(field('name', $.identifier), ':', field('value', $.argument_expr)),
 
     argument_expr: ($) =>
       choice(

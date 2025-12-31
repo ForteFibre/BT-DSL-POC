@@ -629,7 +629,7 @@ Inline out var argument
 extern action Compute(out result: int32);
 
 tree InlineDecl() {
-  Compute(out var result);
+  Compute(result: out var x);
 }
 
 --------------------------------------------------------------------------------
@@ -656,6 +656,7 @@ tree InlineDecl() {
             (property_block
               (argument_list
                 (argument
+                  (identifier)
                   (argument_expr
                     (inline_blackboard_decl
                       (identifier))))))))))))
