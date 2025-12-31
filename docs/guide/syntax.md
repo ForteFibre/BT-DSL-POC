@@ -182,9 +182,6 @@ AlwaysSuccess();
 // 名前付き引数
 MoveTo(goal: TargetPos, speed: 1.5);
 
-// 位置引数（ポートが1つの場合のみ）
-Log("Hello, World!");
-
 // Blackboard 参照に方向を指定
 GetPosition(pos: out CurrentPos);
 UpdateValue(val: ref Counter);
@@ -247,11 +244,11 @@ ForceSuccess {
 ```bt-dsl
 // 条件が真なら実行せずに成功
 @success_if(cache_valid)
-FetchData(out data);
+FetchData(result: out data);
 
 // 条件が偽なら実行しない（Failure）
 @guard(target != null)
-MoveTo(target);
+MoveTo(goal: target);
 
 // 条件が偽になったら Running 中でも中断
 @run_while(is_active)

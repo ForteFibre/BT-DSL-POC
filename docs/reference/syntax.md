@@ -274,8 +274,7 @@ property_block    = "(" , [ argument_list ] , ")" ;
 
 argument_list     = argument , { "," , argument } ;
 
-argument          = identifier , ":" , argument_expr    (* named argument *)
-                  | argument_expr ;                      (* positional argument *)
+argument          = identifier , ":" , argument_expr ;
 
 argument_expr     = [ port_direction ] , expression
                   | "out" , inline_blackboard_decl ;    (* out var x 構文 *)
