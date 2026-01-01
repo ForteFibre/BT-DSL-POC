@@ -26,12 +26,12 @@ TEST(LspSemanticTokensTest, ClassifiesSubTreeCallsAsClass)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-Tree Sub() {
-  Sequence()
+tree Sub() {
+  Sequence {}
 }
 
-Tree Main() {
-  Sub()
+tree Main() {
+  Sub();
 }
 )";
 
@@ -66,8 +66,8 @@ TEST(LspSemanticTokensTest, MarksTreeDefinitionsAsDeclarations)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-Tree Main() {
-  Sequence()
+tree Main() {
+  Sequence {}
 }
 )";
 
@@ -113,9 +113,9 @@ TEST(LspSemanticTokensTest, MarksGlobalVarsAsVariableDeclarations)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-var TargetPos: Vector3
-Tree Main() {
-  Sequence()
+var TargetPos: Vector3;
+tree Main() {
+  Sequence {}
 }
 )";
 

@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "bt_dsl/syntax/completion_query.hpp"
+
 // External declaration for Tree-sitter BT-DSL language
 extern "C" const TSLanguage * tree_sitter_bt_dsl();
 
@@ -81,60 +83,6 @@ TSNode find_ancestor_of_any(TSNode n, const char * t1, const char * t2)
   return {};
 }
 
-// Embedded query. Keep in sync with tree-sitter-bt-dsl/queries/completion_context.scm.
-const char * k_completion_context_query = R"TSQ(
-(tree_def
-  "Tree"
-  name: (identifier) @bt.tree.name
-  "{" @bt.tree.lbrace
-  "}" @bt.tree.rbrace)
-
-(import_stmt
-  "import"
-  path: (string) @bt.import.path)
-
-(decorator
-  "@" @bt.decorator.at
-  name: (identifier) @bt.decorator.name)
-
-(node_stmt
-  name: (identifier) @bt.node.name)
-
-(node_stmt
-  name: (identifier) @bt.call.node.name
-  (property_block "(" @bt.call.args.lparen ")" @bt.call.args.rparen))
-
-(decorator
-  "@"
-  name: (identifier) @bt.call.decorator.name
-  (property_block "(" @bt.call.args.lparen ")" @bt.call.args.rparen))
-
-(property_block
-  "(" @bt.args.lparen
-  ")" @bt.args.rparen)
-
-(argument
-  name: (identifier) @bt.arg.name
-  ":" @bt.arg.colon
-  value: (_) @bt.arg.value)
-
-(argument
-  name: (identifier) @bt.arg.name
-  ":" @bt.arg.colon)
-
-(blackboard_ref
-  (port_direction) @bt.port.direction
-  name: (identifier) @bt.bb.name)
-
-(blackboard_ref
-  name: (identifier) @bt.bb.name)
-
-":" @bt.punct.colon
-"," @bt.punct.comma
-"(" @bt.punct.lparen
-")" @bt.punct.rparen
-)TSQ";
-
 struct Capture
 {
   std::string name;
@@ -171,18 +119,19 @@ std::vector<Capture> collect_captures(TSNode root, TSQuery * q)
       // property_block parens, callable name + its args parens).
       if (starts_with(c.name, "bt.tree.")) {
         c.parent_match_node = find_ancestor_of_type(c.node, "tree_def");
-      } else if (starts_with(c.name, "bt.args.")) {
+      } else if (c.name == "bt.args") {
         c.parent_match_node = find_ancestor_of_type(c.node, "property_block");
-      } else if (starts_with(c.name, "bt.call.decorator.")) {
-        c.parent_match_node = find_ancestor_of_type(c.node, "decorator");
-      } else if (starts_with(c.name, "bt.call.node.")) {
-        c.parent_match_node = find_ancestor_of_type(c.node, "node_stmt");
-      } else if (starts_with(c.name, "bt.call.args.")) {
-        c.parent_match_node = find_ancestor_of_any(c.node, "decorator", "node_stmt");
+      } else if (starts_with(c.name, "bt.call.")) {
+        // Calls (leaf_node_call / compound_node_call)
+        c.parent_match_node = find_ancestor_of_any(c.node, "leaf_node_call", "compound_node_call");
+      } else if (starts_with(c.name, "bt.precondition.")) {
+        c.parent_match_node = find_ancestor_of_type(c.node, "precondition");
       } else if (starts_with(c.name, "bt.arg.")) {
         c.parent_match_node = find_ancestor_of_type(c.node, "argument");
-      } else if (starts_with(c.name, "bt.bb.") || starts_with(c.name, "bt.port.")) {
-        c.parent_match_node = find_ancestor_of_type(c.node, "blackboard_ref");
+      } else if (starts_with(c.name, "bt.bb.")) {
+        c.parent_match_node = find_ancestor_of_type(c.node, "inline_blackboard_decl");
+      } else if (starts_with(c.name, "bt.port.")) {
+        c.parent_match_node = find_ancestor_of_type(c.node, "port_direction");
       } else {
         c.parent_match_node = ts_node_parent(c.node);
       }
@@ -229,8 +178,8 @@ std::optional<CompletionContext> classify_completion_context(
   uint32_t err_off = 0;
   TSQueryError err_type = TSQueryErrorNone;
   TSQuery * q = ts_query_new(
-    tree_sitter_bt_dsl(), k_completion_context_query,
-    static_cast<uint32_t>(std::strlen(k_completion_context_query)), &err_off, &err_type);
+    tree_sitter_bt_dsl(), bt_dsl::syntax::k_completion_context_query.data(),
+    static_cast<uint32_t>(bt_dsl::syntax::k_completion_context_query.size()), &err_off, &err_type);
   if (!q) {
     ts_tree_delete(tree);
     ts_parser_delete(parser);
@@ -275,22 +224,22 @@ std::optional<CompletionContext> classify_completion_context(
     return ctx;
   }
 
-  // 2) Decorator name context ("@" token also counts, inclusive end)
+  // 2) Precondition kind context ("@" token also counts, inclusive end)
   {
     for (const auto & c : caps) {
-      if (c.name == "bt.decorator.name" && contains_half_open(c.node, byte_offset)) {
-        ctx.kind = CompletionContextKind::DecoratorName;
+      if (c.name == "bt.precondition.kind" && contains_half_open(c.node, byte_offset)) {
+        ctx.kind = CompletionContextKind::PreconditionKind;
         break;
       }
-      if (c.name == "bt.decorator.at" && contains_inclusive_end(c.node, byte_offset)) {
-        ctx.kind = CompletionContextKind::DecoratorName;
+      if (c.name == "bt.precondition.at" && contains_inclusive_end(c.node, byte_offset)) {
+        ctx.kind = CompletionContextKind::PreconditionKind;
         break;
       }
     }
   }
 
   // 3) Node name context
-  if (ctx.kind != CompletionContextKind::DecoratorName) {
+  if (ctx.kind != CompletionContextKind::PreconditionKind) {
     if (auto n = best_containing("bt.node.name")) {
       ctx.kind = CompletionContextKind::NodeName;
     }
@@ -374,69 +323,19 @@ std::optional<CompletionContext> classify_completion_context(
     }
   }
 
-  // 5) Argument/property_block context: find active property_block parens and classify arg key/value
+  // 5) Argument/property_block context: find active property_block and classify arg key/value
   bool in_args = false;
   uint32_t args_lparen_end = 0;
   uint32_t args_rparen_start = 0;
   {
-    TSNode best_lparen = {};
-    TSNode best_rparen = {};
-    bool has = false;
-    uint32_t best_len = std::numeric_limits<uint32_t>::max();
-
-    // Use bt.args.lparen/rparen captures; group by match.node (property_block)
-    struct ArgsMatch
-    {
-      TSNode prop{};
-      TSNode lparen{};
-      TSNode rparen{};
-    };
-
-    std::unordered_map<uint64_t, ArgsMatch> by_match;
-    auto key_of = [](TSNode n) -> uint64_t {
-      return (static_cast<uint64_t>(ts_node_start_byte(n)) << 32) |
-             static_cast<uint64_t>(ts_node_end_byte(n));
-    };
-
-    for (const auto & c : caps) {
-      if (c.name != "bt.args.lparen" && c.name != "bt.args.rparen") {
-        continue;
-      }
-      const uint64_t k = key_of(c.parent_match_node);
-      auto & am = by_match[k];
-      am.prop = c.parent_match_node;
-      if (c.name == "bt.args.lparen") {
-        am.lparen = c.node;
-      } else {
-        am.rparen = c.node;
-      }
-    }
-
-    for (const auto & [_, am] : by_match) {
-      if (ts_node_is_null(am.lparen) || ts_node_is_null(am.rparen) || ts_node_is_null(am.prop)) {
-        continue;
-      }
-      const uint32_t lp_end = ts_node_end_byte(am.lparen);
-      const uint32_t rp_start = ts_node_start_byte(am.rparen);
-      if (byte_offset < lp_end || rp_start < byte_offset) {
-        continue;
-      }
-
-      const uint32_t s = ts_node_start_byte(am.prop);
-      const uint32_t e = ts_node_end_byte(am.prop);
-      const uint32_t len = (e > s) ? (e - s) : 0;
-      if (!has || len < best_len) {
-        best_lparen = am.lparen;
-        best_rparen = am.rparen;
-        best_len = len;
-        has = true;
-      }
-    }
-
-    if (has) {
+    if (auto n = best_containing("bt.args")) {
       in_args = true;
-      args_lparen_end = ts_node_end_byte(best_lparen);
-      args_rparen_start = ts_node_start_byte(best_rparen);
+      const uint32_t s = ts_node_start_byte(*n);
+      const uint32_t e = ts_node_end_byte(*n);
+      // property_block is "(" ... ")".
+      // Derive the inner range cheaply (ASCII parens => 1 byte each).
+      args_lparen_end = (s < e) ? (s + 1) : s;
+      args_rparen_start = (e > 0 && e > s) ? (e - 1) : e;
       if (
         ctx.kind == CompletionContextKind::TopLevelKeywords ||
         ctx.kind == CompletionContextKind::TreeBody) {
@@ -445,78 +344,67 @@ std::optional<CompletionContext> classify_completion_context(
     }
   }
 
-  // 6) When in args, pick callable name from captures that include the args range.
+  // 6) When in args, pick callable name from captures that own the active property_block.
   if (in_args) {
-    struct CallCandidate
+    struct CallMatch
     {
-      bool is_decorator = false;
+      TSNode call{};
       TSNode name{};
-      TSNode lparen{};
-      TSNode rparen{};
-      uint32_t span_len = std::numeric_limits<uint32_t>::max();
+      TSNode args{};
     };
 
-    std::optional<CallCandidate> best;
-
-    // Group by match.node is not reliable for call captures, so we infer by lparen/rparen matches.
-    // If a call's parens match the active args parens, use its name.
-    auto maybe_take = [&](bool is_decorator, const Capture & c_name) {
-      // Find sibling captures for lparen/rparen from the same match node.
-      // We key by parent_match_node.
-      const uint64_t key =
-        (static_cast<uint64_t>(ts_node_start_byte(c_name.parent_match_node)) << 32) |
-        static_cast<uint64_t>(ts_node_end_byte(c_name.parent_match_node));
-
-      TSNode lp = {};
-      TSNode rp = {};
-      for (const auto & c : caps) {
-        const uint64_t k2 = (static_cast<uint64_t>(ts_node_start_byte(c.parent_match_node)) << 32) |
-                            static_cast<uint64_t>(ts_node_end_byte(c.parent_match_node));
-        if (k2 != key) {
-          continue;
-        }
-        if (c.name == "bt.call.args.lparen") {
-          lp = c.node;
-        } else if (c.name == "bt.call.args.rparen") {
-          rp = c.node;
-        }
-      }
-      if (ts_node_is_null(lp) || ts_node_is_null(rp)) {
-        return;
-      }
-      if (ts_node_end_byte(lp) != args_lparen_end || ts_node_start_byte(rp) != args_rparen_start) {
-        return;
-      }
-
-      const uint32_t s = ts_node_start_byte(c_name.parent_match_node);
-      const uint32_t e = ts_node_end_byte(c_name.parent_match_node);
-      const uint32_t len = (e > s) ? (e - s) : 0;
-
-      CallCandidate cand;
-      cand.is_decorator = is_decorator;
-      cand.name = c_name.node;
-      cand.lparen = lp;
-      cand.rparen = rp;
-      cand.span_len = len;
-      if (!best || cand.span_len < best->span_len) {
-        best = cand;
-      }
+    std::unordered_map<uint64_t, CallMatch> by_call;
+    auto key_of = [](TSNode n) -> uint64_t {
+      return (static_cast<uint64_t>(ts_node_start_byte(n)) << 32) |
+             static_cast<uint64_t>(ts_node_end_byte(n));
     };
 
     for (const auto & c : caps) {
+      if (c.name != "bt.call.node.name" && c.name != "bt.call.args") {
+        continue;
+      }
+      const uint64_t k = key_of(c.parent_match_node);
+      auto & m = by_call[k];
+      m.call = c.parent_match_node;
       if (c.name == "bt.call.node.name") {
-        maybe_take(false, c);
-      } else if (c.name == "bt.call.decorator.name") {
-        maybe_take(true, c);
+        m.name = c.node;
+      } else {
+        m.args = c.node;
       }
     }
 
-    if (best && !ts_node_is_null(best->name)) {
-      const uint32_t ns = ts_node_start_byte(best->name);
-      const uint32_t ne = ts_node_end_byte(best->name);
+    TSNode best_name = {};
+    bool has_best = false;
+    uint32_t best_len = std::numeric_limits<uint32_t>::max();
+
+    for (const auto & [_, m] : by_call) {
+      if (ts_node_is_null(m.call) || ts_node_is_null(m.name) || ts_node_is_null(m.args)) {
+        continue;
+      }
+
+      const uint32_t as = ts_node_start_byte(m.args);
+      const uint32_t ae = ts_node_end_byte(m.args);
+      const uint32_t al = (as < ae) ? (as + 1) : as;
+      const uint32_t ar = (ae > 0 && ae > as) ? (ae - 1) : ae;
+      if (al != args_lparen_end || ar != args_rparen_start) {
+        continue;
+      }
+
+      const uint32_t s = ts_node_start_byte(m.call);
+      const uint32_t e = ts_node_end_byte(m.call);
+      const uint32_t len = (e > s) ? (e - s) : 0;
+      if (!has_best || len < best_len) {
+        best_len = len;
+        best_name = m.name;
+        has_best = true;
+      }
+    }
+
+    if (has_best && !ts_node_is_null(best_name)) {
+      const uint32_t ns = ts_node_start_byte(best_name);
+      const uint32_t ne = ts_node_end_byte(best_name);
       if (ne > ns && ne <= text.size()) {
         ctx.callable_name = std::string(text.substr(ns, ne - ns));
-        ctx.callable_is_decorator = best->is_decorator;
       }
     }
   }

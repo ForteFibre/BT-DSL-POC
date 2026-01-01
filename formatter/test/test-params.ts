@@ -1,9 +1,9 @@
 import { formatBtDslText } from '../src/index.js';
 
-// Test with just a tree definition
-const testInput = `Tree SearchAndDestroy(ref target, ref ammo, ref alert) {
+// Test with just a tree definition (typed params are required by the grammar)
+const testInput = `tree SearchAndDestroy(ref target: Vector3, ref ammo: int, ref alert: bool) {
   Sequence {
-    AlwaysSuccess()
+    AlwaysSuccess();
   }
 }`;
 

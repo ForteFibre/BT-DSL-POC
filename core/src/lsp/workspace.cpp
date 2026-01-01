@@ -19,6 +19,7 @@
 #include "bt_dsl/semantic/analyzer.hpp"
 #include "bt_dsl/semantic/node_registry.hpp"
 #include "bt_dsl/semantic/type_system.hpp"
+#include "bt_dsl/syntax/keywords.hpp"
 
 namespace bt_dsl::lsp
 {
@@ -201,7 +202,7 @@ struct AstHit
 {
   const bt_dsl::TreeDef * tree = nullptr;
   const bt_dsl::NodeStmt * node = nullptr;
-  const bt_dsl::BlackboardRef * bb_ref = nullptr;
+  const bt_dsl::InlineBlackboardDecl * inline_decl = nullptr;
   const bt_dsl::VarRef * var_ref = nullptr;
 };
 
@@ -225,19 +226,20 @@ void consider_node_hit(
   }
 }
 
-void consider_bb_hit(const bt_dsl::BlackboardRef & ref, uint32_t off, AstHit & hit)
+void consider_inline_decl_hit(const bt_dsl::InlineBlackboardDecl & decl, uint32_t off, AstHit & hit)
 {
-  if (!contains_byte(ref.range, off)) {
+  if (!contains_byte(decl.range, off)) {
     return;
   }
-  if (!hit.bb_ref) {
-    hit.bb_ref = &ref;
+  if (!hit.inline_decl) {
+    hit.inline_decl = &decl;
     return;
   }
-  const uint32_t cur_len = hit.bb_ref->range.end_byte - hit.bb_ref->range.start_byte;
-  const uint32_t new_len = ref.range.end_byte - ref.range.start_byte;
+
+  const uint32_t cur_len = hit.inline_decl->range.end_byte - hit.inline_decl->range.start_byte;
+  const uint32_t new_len = decl.range.end_byte - decl.range.start_byte;
   if (new_len < cur_len) {
-    hit.bb_ref = &ref;
+    hit.inline_decl = &decl;
   }
 }
 
@@ -255,14 +257,6 @@ void consider_varref_hit(const bt_dsl::VarRef & ref, uint32_t off, AstHit & hit)
   if (new_len < cur_len) {
     hit.var_ref = &ref;
   }
-}
-
-void visit_value_expr(const bt_dsl::ValueExpr & v, uint32_t off, AstHit & hit)
-{
-  if (const auto * bb = std::get_if<bt_dsl::BlackboardRef>(&v)) {
-    consider_bb_hit(*bb, off, hit);
-  }
-  // Literals are ignored for now.
 }
 
 void visit_expression(const bt_dsl::Expression & e, uint32_t off, AstHit & hit);
@@ -285,16 +279,63 @@ void visit_expression(const bt_dsl::Expression & e, uint32_t off, AstHit & hit)
         if (contains_byte(node->range, off)) {
           visit_expression(node->operand, off, hit);
         }
+      } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::CastExpr>>) {
+        if (contains_byte(node->range, off)) {
+          visit_expression(node->expr, off, hit);
+        }
+      } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::IndexExpr>>) {
+        if (contains_byte(node->range, off)) {
+          visit_expression(node->base, off, hit);
+          visit_expression(node->index, off, hit);
+        }
+      } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::ArrayLiteralExpr>>) {
+        if (contains_byte(node->range, off)) {
+          for (const auto & el : node->elements) {
+            visit_expression(el, off, hit);
+          }
+          if (node->repeat_value) {
+            visit_expression(*node->repeat_value, off, hit);
+          }
+          if (node->repeat_count) {
+            visit_expression(*node->repeat_count, off, hit);
+          }
+        }
+      } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::VecMacroExpr>>) {
+        if (contains_byte(node->range, off)) {
+          for (const auto & el : node->value.elements) {
+            visit_expression(el, off, hit);
+          }
+          if (node->value.repeat_value) {
+            visit_expression(*node->value.repeat_value, off, hit);
+          }
+          if (node->value.repeat_count) {
+            visit_expression(*node->value.repeat_count, off, hit);
+          }
+        }
       }
     },
     e);
 }
 
+void visit_argument_value(const bt_dsl::ArgumentValue & v, uint32_t off, AstHit & hit)
+{
+  std::visit(
+    [&](const auto & av) {
+      using T = std::decay_t<decltype(av)>;
+      if constexpr (std::is_same_v<T, bt_dsl::Expression>) {
+        visit_expression(av, off, hit);
+      } else if constexpr (std::is_same_v<T, bt_dsl::InlineBlackboardDecl>) {
+        consider_inline_decl_hit(av, off, hit);
+      }
+    },
+    v);
+}
+
 void visit_node_stmt(
   const bt_dsl::NodeStmt & node, uint32_t off, const bt_dsl::TreeDef & tree, AstHit & hit);
 
-void visit_child_element(
-  const bt_dsl::ChildElement & c, uint32_t off, const bt_dsl::TreeDef & tree, AstHit & hit)
+void visit_statement(
+  const bt_dsl::Statement & s, uint32_t off, const bt_dsl::TreeDef & tree, AstHit & hit)
 {
   std::visit(
     [&](const auto & elem) {
@@ -303,11 +344,22 @@ void visit_child_element(
         visit_node_stmt(*elem, off, tree, hit);
       } else if constexpr (std::is_same_v<T, bt_dsl::AssignmentStmt>) {
         if (contains_byte(elem.range, off)) {
+          for (const auto & idx : elem.indices) {
+            visit_expression(idx, off, hit);
+          }
+          visit_expression(elem.value, off, hit);
+        }
+      } else if constexpr (std::is_same_v<T, bt_dsl::BlackboardDeclStmt>) {
+        if (elem.initial_value && contains_byte(elem.range, off)) {
+          visit_expression(*elem.initial_value, off, hit);
+        }
+      } else if constexpr (std::is_same_v<T, bt_dsl::ConstDeclStmt>) {
+        if (contains_byte(elem.range, off)) {
           visit_expression(elem.value, off, hit);
         }
       }
     },
-    c);
+    s);
 }
 
 void visit_node_stmt(
@@ -318,17 +370,15 @@ void visit_node_stmt(
     return;
   }
 
-  for (const auto & decorator : node.decorators) {
-    for (const auto & arg : decorator.args) {
-      if (contains_byte(arg.range, off)) {
-        visit_value_expr(arg.value, off, hit);
-      }
+  for (const auto & pc : node.preconditions) {
+    if (contains_byte(pc.range, off)) {
+      visit_expression(pc.condition, off, hit);
     }
   }
 
   for (const auto & arg : node.args) {
     if (contains_byte(arg.range, off)) {
-      visit_value_expr(arg.value, off, hit);
+      visit_argument_value(arg.value, off, hit);
     }
   }
 
@@ -344,7 +394,7 @@ void visit_node_stmt(
       },
       child);
     if (child_contains) {
-      visit_child_element(child, off, tree, hit);
+      visit_statement(child, off, tree, hit);
     }
   }
 }
@@ -381,18 +431,20 @@ AstHit find_ast_hit(const bt_dsl::Program & p, uint32_t off)
   }
   hit.tree = *tree_opt;
 
-  // local var initializers
-  for (const auto & lv : hit.tree->local_vars) {
-    if (!lv.initial_value) {
-      continue;
+  for (const auto & stmt : hit.tree->body) {
+    const bool contains = std::visit(
+      [&](const auto & elem) {
+        using T = std::decay_t<decltype(elem)>;
+        if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::NodeStmt>>) {
+          return contains_byte(elem->range, off);
+        } else {
+          return contains_byte(elem.range, off);
+        }
+      },
+      stmt);
+    if (contains) {
+      visit_statement(stmt, off, *hit.tree, hit);
     }
-    if (contains_byte(lv.range, off)) {
-      visit_expression(*lv.initial_value, off, hit);
-    }
-  }
-
-  if (hit.tree->body) {
-    visit_node_stmt(*hit.tree->body, off, *hit.tree, hit);
   }
 
   return hit;
@@ -442,6 +494,30 @@ bool starts_with(std::string_view s, std::string_view prefix)
 bool is_relative_import_spec(std::string_view spec)
 {
   return starts_with(spec, "./") || starts_with(spec, "../");
+}
+
+bool has_required_extension(std::string_view spec)
+{
+  // Reference: docs/reference/declarations-and-scopes.md 4.1.3
+  // Require an explicit extension ("./foo.bt" ok, "./foo" not).
+  const size_t last_slash = spec.find_last_of('/');
+  const size_t name_start = (last_slash == std::string_view::npos) ? 0 : (last_slash + 1);
+  const std::string_view name = spec.substr(name_start);
+  if (name.empty()) return false;
+  const size_t dot = name.find_last_of('.');
+  if (dot == std::string_view::npos) return false;
+  if (dot == name.size() - 1) return false;
+  return true;
+}
+
+std::string package_import_uri(std::string_view spec)
+{
+  // Host-defined mapping. We use a stable synthetic URI so the host can
+  // provide document contents via Workspace::set_document().
+  // Example: import "my_pkg/foo.bt" -> bt-dsl-pkg://my_pkg/foo.bt
+  std::string out = "bt-dsl-pkg://";
+  out.append(spec.data(), spec.size());
+  return out;
 }
 
 // Remove dot-segments from a URI path, per RFC 3986 (simplified).
@@ -677,31 +753,59 @@ struct Workspace::Impl
     for (const auto & imp : doc->program.imports) {
       const std::string_view spec = imp.path;
 
-      if (!is_relative_import_spec(spec)) {
+      // Reference constraints: absolute path ban + extension required.
+      if (starts_with(spec, "/")) {
         json item;
         item["source"] = "import";
-        item["message"] = "Only relative imports are supported: \"" + std::string(spec) + "\"";
+        item["message"] = "Absolute import paths are not allowed: \"" + std::string(spec) + "\"";
+        item["severity"] = "Error";
+        item["range"] = range_to_json(imp.range);
+        out["items"].push_back(std::move(item));
+        continue;
+      }
+      if (!has_required_extension(spec)) {
+        json item;
+        item["source"] = "import";
+        item["message"] = "Import path must include an extension: \"" + std::string(spec) + "\"";
         item["severity"] = "Error";
         item["range"] = range_to_json(imp.range);
         out["items"].push_back(std::move(item));
         continue;
       }
 
-      auto resolved = resolve_relative_import_uri(doc->uri, spec);
-      if (!resolved) {
-        json item;
-        item["source"] = "import";
-        item["message"] = "Cannot resolve import relative to non-file document";
-        item["severity"] = "Error";
-        item["range"] = range_to_json(imp.range);
-        out["items"].push_back(std::move(item));
+      // Relative imports: resolve against file:// URIs.
+      if (is_relative_import_spec(spec)) {
+        auto resolved = resolve_relative_import_uri(doc->uri, spec);
+        if (!resolved) {
+          json item;
+          item["source"] = "import";
+          item["message"] = "Cannot resolve relative import against this document URI";
+          item["severity"] = "Error";
+          item["range"] = range_to_json(imp.range);
+          out["items"].push_back(std::move(item));
+          continue;
+        }
+
+        if (docs.find(*resolved) == docs.end()) {
+          json item;
+          item["source"] = "import";
+          item["message"] = "Imported document is not loaded: \"" + std::string(spec) + "\"";
+          item["severity"] = "Error";
+          item["range"] = range_to_json(imp.range);
+          out["items"].push_back(std::move(item));
+        }
         continue;
       }
 
-      if (docs.find(*resolved) == docs.end()) {
+      // Package imports: implementation-defined; in this serverless workspace
+      // they must be provided by the host via set_document() using the
+      // synthetic bt-dsl-pkg:// URI form.
+      const std::string pkg_uri = package_import_uri(spec);
+      if (docs.find(pkg_uri) == docs.end()) {
         json item;
         item["source"] = "import";
-        item["message"] = "Imported document is not loaded: \"" + std::string(spec) + "\"";
+        item["message"] =
+          "Cannot resolve package import (host must provide it): \"" + std::string(spec) + "\"";
         item["severity"] = "Error";
         item["range"] = range_to_json(imp.range);
         out["items"].push_back(std::move(item));
@@ -719,17 +823,26 @@ struct Workspace::Impl
     }
 
     // Semantic diagnostics
-    auto analysis = analyze_with_imports(uri, imported_uris);
-    for (const auto & d : analysis.diagnostics.all()) {
-      json item;
-      item["source"] = "analyzer";
-      item["message"] = d.message;
-      item["severity"] = severity_to_string(d.severity);
-      if (!d.code.empty()) {
-        item["code"] = d.code;
+    // If the document has parse errors, avoid emitting analyzer diagnostics.
+    // Parser recovery may insert placeholder expressions (e.g. 0/true), which
+    // can easily lead to misleading semantic errors in an incomplete AST.
+    const bool has_parse_error = std::any_of(
+      doc->parse_errors.begin(), doc->parse_errors.end(),
+      [](const ParseError & e) { return e.severity == ParseError::Severity::Error; });
+
+    if (!has_parse_error) {
+      auto analysis = analyze_with_imports(uri, imported_uris);
+      for (const auto & d : analysis.diagnostics.all()) {
+        json item;
+        item["source"] = "analyzer";
+        item["message"] = d.message;
+        item["severity"] = severity_to_string(d.severity);
+        if (!d.code.empty()) {
+          item["code"] = d.code;
+        }
+        item["range"] = range_to_json(d.range);
+        out["items"].push_back(std::move(item));
       }
-      item["range"] = range_to_json(d.range);
-      out["items"].push_back(std::move(item));
     }
 
     return out;
@@ -742,9 +855,9 @@ struct Workspace::Impl
     out["stdlibUri"] = std::string(stdlib_uri);
     out["uris"] = json::array();
 
-    std::unordered_set<std::string> closure;
-    std::unordered_set<std::string> traversed;
-    std::vector<std::string> work;
+    // Spec: import is non-transitive. Return only direct imports of the
+    // requested document (plus optional implicit stdlib).
+    std::unordered_set<std::string> seen;
 
     auto enqueue = [&](const std::string & u) {
       if (u.empty()) {
@@ -753,46 +866,28 @@ struct Workspace::Impl
       if (u == std::string(uri)) {
         return;
       }
-      if (!closure.insert(u).second) {
+      if (!seen.insert(u).second) {
         return;
       }
       out["uris"].push_back(u);
-      work.push_back(u);
     };
 
     if (!stdlib_uri.empty()) {
       enqueue(std::string(stdlib_uri));
     }
 
-    // Traverse starting from the root document.
-    work.emplace_back(uri);
-
-    while (!work.empty()) {
-      const std::string current_uri = std::move(work.back());
-      work.pop_back();
-
-      if (!traversed.insert(current_uri).second) {
-        continue;
-      }
-
-      auto * d = get_doc(current_uri);
-      if (!d) {
-        continue;
-      }
-      ensure_parsed(*d);
-
-      for (const auto & imp : d->program.imports) {
-        if (!is_relative_import_spec(imp.path)) {
-          // Policy errors are reported via diagnostics_json().
-          continue;
+    // Add direct imports.
+    auto * root = get_doc(uri);
+    if (root) {
+      ensure_parsed(*root);
+      for (const auto & imp : root->program.imports) {
+        if (is_relative_import_spec(imp.path)) {
+          if (auto resolved = resolve_relative_import_uri(root->uri, imp.path)) {
+            enqueue(*resolved);
+          }
+        } else {
+          enqueue(package_import_uri(imp.path));
         }
-
-        auto resolved = resolve_relative_import_uri(d->uri, imp.path);
-        if (!resolved) {
-          continue;
-        }
-
-        enqueue(*resolved);
       }
     }
 
@@ -842,9 +937,9 @@ struct Workspace::Impl
       };
 
     auto push_directions = [&]() {
-      push_item("in", "Keyword", "direction", "in ");
-      push_item("out", "Keyword", "direction", "out ");
-      push_item("ref", "Keyword", "direction", "ref ");
+      for (const auto & d : bt_dsl::syntax::k_port_directions) {
+        push_item(std::string(d), "Keyword", "direction", std::string(d) + " ");
+      }
     };
 
     auto push_visible_vars = [&]() {
@@ -895,10 +990,17 @@ struct Workspace::Impl
     }
 
     if (ctx.kind == CompletionContextKind::TopLevelKeywords) {
-      push_item("import", "Keyword", "keyword", "import ");
-      push_item("declare", "Keyword", "keyword", "declare ");
-      push_item("var", "Keyword", "keyword", "var ");
-      push_item("Tree", "Keyword", "keyword", "Tree ");
+      for (const auto & kw : bt_dsl::syntax::k_top_level_keywords) {
+        push_item(std::string(kw), "Keyword", "keyword", std::string(kw) + " ");
+      }
+      return out;
+    }
+
+    if (ctx.kind == CompletionContextKind::PreconditionKind) {
+      for (const auto & k : bt_dsl::syntax::k_precondition_kinds) {
+        // Cursor is after '@' (or within the kind identifier). Suggest kind + '('.
+        push_item(std::string(k), "Keyword", "precondition", std::string(k) + "(");
+      }
       return out;
     }
 
@@ -929,11 +1031,10 @@ struct Workspace::Impl
       return out;
     }
 
-    // Node/decorator name contexts inside Tree.
-    const bool want_decorators = (ctx.kind == CompletionContextKind::DecoratorName);
+    // Node name contexts inside tree bodies.
     const bool want_nodes =
       (ctx.kind == CompletionContextKind::TreeBody || ctx.kind == CompletionContextKind::NodeName);
-    if (!want_decorators && !want_nodes) {
+    if (!want_nodes) {
       return out;
     }
 
@@ -947,11 +1048,6 @@ struct Workspace::Impl
 
       for (const auto & n : names) {
         const bt_dsl::NodeInfo * info = analysis.nodes.get_node(n);
-        if (want_decorators) {
-          if (!info || info->category != bt_dsl::NodeCategory::Decorator) {
-            continue;
-          }
-        }
         if (want_nodes) {
           if (info && info->category == bt_dsl::NodeCategory::Decorator) {
             continue;
@@ -988,60 +1084,16 @@ struct Workspace::Impl
     const auto analysis = analyze_with_imports(uri, imported_uris);
     const auto hit = find_ast_hit(doc->program, byte_offset);
 
-    // Blackboard ref hover
-    if (hit.tree && hit.bb_ref) {
+    // Variable hover (VarRef + inline out var decl)
+    if (hit.tree && (hit.var_ref || hit.inline_decl)) {
+      const std::string name = hit.var_ref ? hit.var_ref->name : hit.inline_decl->name;
+      const bt_dsl::SourceRange r = hit.var_ref ? hit.var_ref->range : hit.inline_decl->range;
+
       const bt_dsl::Scope * scope = analysis.symbols.tree_scope(hit.tree->name);
-      const bt_dsl::Symbol * sym = analysis.symbols.resolve(hit.bb_ref->name, scope);
+      const bt_dsl::Symbol * sym = analysis.symbols.resolve(name, scope);
 
       std::string md;
-      md += "**" + hit.bb_ref->name + "**";
-
-      if (sym) {
-        md += "\n\n";
-        md += "Kind: ";
-        switch (sym->kind) {
-          case bt_dsl::SymbolKind::GlobalVariable:
-            md += "Global";
-            break;
-          case bt_dsl::SymbolKind::LocalVariable:
-            md += "Local";
-            break;
-          case bt_dsl::SymbolKind::Parameter:
-            md += "Parameter";
-            break;
-          default:
-            md += "Symbol";
-            break;
-        }
-
-        // Type (explicit or inferred)
-        std::optional<std::string> type_str;
-        if (sym->type_name) {
-          type_str = *sym->type_name;
-        } else if (hit.tree) {
-          if (const auto * ctx = analysis.get_tree_context(hit.tree->name)) {
-            if (const auto * t = ctx->get_type(sym->name)) {
-              type_str = t->to_string();
-            }
-          }
-        }
-        if (type_str) {
-          md += "\n\nType: `" + *type_str + "`";
-        }
-      }
-
-      out["contents"] = md;
-      out["range"] = range_to_json(hit.bb_ref->range);
-      return out;
-    }
-
-    // VarRef hover (expressions)
-    if (hit.tree && hit.var_ref) {
-      const bt_dsl::Scope * scope = analysis.symbols.tree_scope(hit.tree->name);
-      const bt_dsl::Symbol * sym = analysis.symbols.resolve(hit.var_ref->name, scope);
-
-      std::string md;
-      md += "**" + hit.var_ref->name + "**";
+      md += "**" + name + "**";
       if (sym) {
         std::optional<std::string> type_str;
         if (sym->type_name) {
@@ -1059,7 +1111,7 @@ struct Workspace::Impl
       }
 
       out["contents"] = md;
-      out["range"] = range_to_json(hit.var_ref->range);
+      out["range"] = range_to_json(r);
       return out;
     }
 
@@ -1151,9 +1203,9 @@ struct Workspace::Impl
     }
 
     // Blackboard ref definition
-    if (hit.tree && hit.bb_ref) {
+    if (hit.tree && hit.inline_decl) {
       const bt_dsl::Scope * scope = analysis.symbols.tree_scope(hit.tree->name);
-      if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(hit.bb_ref->name, scope)) {
+      if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(hit.inline_decl->name, scope)) {
         push_loc_same_doc(sym->definition_range, sym->name);
         return out;
       }
@@ -1256,6 +1308,8 @@ struct Workspace::Impl
         return "Write";
       case bt_dsl::PortDirection::Ref:
         return "Read";
+      case bt_dsl::PortDirection::Mut:
+        return "Write";
     }
     return "Read";
   }
@@ -1294,21 +1348,31 @@ struct Workspace::Impl
 
     // Collect all node name occurrences for a specific node call.
     auto collect_node_calls = [&](std::string_view node_name) {
-      if (!hit.tree || !hit.tree->body) {
+      if (!hit.tree) {
         return;
       }
-      std::function<void(const bt_dsl::NodeStmt &)> visit;
-      visit = [&](const bt_dsl::NodeStmt & n) {
+
+      std::function<void(const bt_dsl::Statement &)> visit_stmt;
+      std::function<void(const bt_dsl::NodeStmt &)> visit_node;
+
+      visit_node = [&](const bt_dsl::NodeStmt & n) {
         if (n.node_name == node_name) {
           push_item_narrowed(n.range, node_name, "Text");
         }
         for (const auto & child : n.children) {
-          if (const auto * child_node = std::get_if<bt_dsl::Box<bt_dsl::NodeStmt>>(&child)) {
-            visit(**child_node);
-          }
+          visit_stmt(child);
         }
       };
-      visit(*hit.tree->body);
+
+      visit_stmt = [&](const bt_dsl::Statement & s) {
+        if (const auto * n = std::get_if<bt_dsl::Box<bt_dsl::NodeStmt>>(&s)) {
+          visit_node(**n);
+        }
+      };
+
+      for (const auto & stmt : hit.tree->body) {
+        visit_stmt(stmt);
+      }
 
       // Also highlight same-document declaration name, if present.
       for (const auto & d : doc->program.declarations) {
@@ -1341,94 +1405,137 @@ struct Workspace::Impl
         }
       };
 
-      std::function<void(const bt_dsl::Expression &)> visit_expr;
-      std::function<void(const bt_dsl::ValueExpr &, const std::optional<bt_dsl::PortDirection> &)>
-        visit_value;
+      std::function<void(const bt_dsl::Expression &, const std::optional<bt_dsl::PortDirection> &)>
+        visit_expr;
+      std::function<void(
+        const bt_dsl::ArgumentValue &, const std::optional<bt_dsl::PortDirection> &)>
+        visit_arg_value;
+      std::function<void(const bt_dsl::Statement &)> visit_stmt;
+      std::function<void(const bt_dsl::NodeStmt &)> visit_node;
 
-      visit_value =
-        [&](const bt_dsl::ValueExpr & v, const std::optional<bt_dsl::PortDirection> & dir) {
-          if (const auto * bb = std::get_if<bt_dsl::BlackboardRef>(&v)) {
-            if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(bb->name, scope)) {
-              if (sym == target_sym) {
-                push_item_narrowed(bb->range, bb->name, highlight_kind_from_direction(dir));
-              }
-            }
-          }
-        };
-
-      visit_expr = [&](const bt_dsl::Expression & e) {
-        std::visit(
-          [&](const auto & node) {
-            using T = std::decay_t<decltype(node)>;
-            if constexpr (std::is_same_v<T, bt_dsl::Literal>) {
-              (void)node;
-            } else if constexpr (std::is_same_v<T, bt_dsl::VarRef>) {
-              if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(node.name, scope)) {
-                if (sym == target_sym) {
-                  push_item_narrowed(
-                    node.range, node.name, highlight_kind_from_direction(node.direction));
+      visit_expr =
+        [&](const bt_dsl::Expression & e, const std::optional<bt_dsl::PortDirection> & dir) {
+          std::visit(
+            [&](const auto & node) {
+              using T = std::decay_t<decltype(node)>;
+              if constexpr (std::is_same_v<T, bt_dsl::Literal>) {
+                (void)node;
+              } else if constexpr (std::is_same_v<T, bt_dsl::VarRef>) {
+                if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(node.name, scope)) {
+                  if (sym == target_sym) {
+                    push_item_narrowed(
+                      node.range, node.name,
+                      highlight_kind_from_direction(dir ? dir : node.direction));
+                  }
+                }
+              } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::BinaryExpr>>) {
+                visit_expr(node->left, dir);
+                visit_expr(node->right, dir);
+              } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::UnaryExpr>>) {
+                visit_expr(node->operand, dir);
+              } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::CastExpr>>) {
+                visit_expr(node->expr, dir);
+              } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::IndexExpr>>) {
+                visit_expr(node->base, dir);
+                visit_expr(node->index, dir);
+              } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::ArrayLiteralExpr>>) {
+                for (const auto & el : node->elements) {
+                  visit_expr(el, dir);
+                }
+                if (node->repeat_value) {
+                  visit_expr(*node->repeat_value, dir);
+                }
+                if (node->repeat_count) {
+                  visit_expr(*node->repeat_count, dir);
+                }
+              } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::VecMacroExpr>>) {
+                for (const auto & el : node->value.elements) {
+                  visit_expr(el, dir);
+                }
+                if (node->value.repeat_value) {
+                  visit_expr(*node->value.repeat_value, dir);
+                }
+                if (node->value.repeat_count) {
+                  visit_expr(*node->value.repeat_count, dir);
                 }
               }
-            } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::BinaryExpr>>) {
-              visit_expr(node->left);
-              visit_expr(node->right);
-            } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::UnaryExpr>>) {
-              visit_expr(node->operand);
-            }
-          },
-          e);
-      };
+            },
+            e);
+        };
 
-      std::function<void(const bt_dsl::NodeStmt &)> visit_node;
+      visit_arg_value =
+        [&](const bt_dsl::ArgumentValue & v, const std::optional<bt_dsl::PortDirection> & dir) {
+          std::visit(
+            [&](const auto & av) {
+              using T = std::decay_t<decltype(av)>;
+              if constexpr (std::is_same_v<T, bt_dsl::Expression>) {
+                visit_expr(av, dir);
+              } else if constexpr (std::is_same_v<T, bt_dsl::InlineBlackboardDecl>) {
+                if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(av.name, scope)) {
+                  if (sym == target_sym) {
+                    push_item_narrowed(
+                      av.range, av.name, highlight_kind_from_direction(bt_dsl::PortDirection::Out));
+                  }
+                }
+              }
+            },
+            v);
+        };
+
       visit_node = [&](const bt_dsl::NodeStmt & n) {
-        for (const auto & dec : n.decorators) {
-          for (const auto & arg : dec.args) {
-            // Use arg's direction if the value has one, otherwise unknown.
-            std::optional<bt_dsl::PortDirection> val_dir;
-            if (const auto * bb = std::get_if<bt_dsl::BlackboardRef>(&arg.value)) {
-              val_dir = bb->direction;
-            }
-            visit_value(arg.value, val_dir);
-          }
+        for (const auto & pc : n.preconditions) {
+          visit_expr(pc.condition, std::nullopt);
         }
 
         for (const auto & arg : n.args) {
-          std::optional<bt_dsl::PortDirection> val_dir;
-          if (const auto * bb = std::get_if<bt_dsl::BlackboardRef>(&arg.value)) {
-            val_dir = bb->direction;
-          }
-          visit_value(arg.value, val_dir);
+          visit_arg_value(arg.value, arg.direction);
         }
 
         for (const auto & child : n.children) {
-          std::visit(
-            [&](const auto & elem) {
-              using T = std::decay_t<decltype(elem)>;
-              if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::NodeStmt>>) {
-                visit_node(*elem);
-              } else if constexpr (std::is_same_v<T, bt_dsl::AssignmentStmt>) {
-                // Highlight assignment target if it resolves to the symbol.
-                if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(elem.target, scope)) {
-                  if (sym == target_sym) {
-                    push_item_narrowed(elem.range, elem.target, "Write");
-                  }
-                }
-                visit_expr(elem.value);
-              }
-            },
-            child);
+          visit_stmt(child);
         }
       };
 
-      // local var initializers
-      for (const auto & lv : hit.tree->local_vars) {
-        if (lv.initial_value) {
-          visit_expr(*lv.initial_value);
-        }
-      }
+      visit_stmt = [&](const bt_dsl::Statement & s) {
+        std::visit(
+          [&](const auto & elem) {
+            using T = std::decay_t<decltype(elem)>;
+            if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::NodeStmt>>) {
+              visit_node(*elem);
+            } else if constexpr (std::is_same_v<T, bt_dsl::AssignmentStmt>) {
+              // Highlight assignment target if it resolves to the symbol.
+              if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(elem.target, scope)) {
+                if (sym == target_sym) {
+                  push_item_narrowed(elem.range, elem.target, "Write");
+                }
+              }
+              for (const auto & idx : elem.indices) {
+                visit_expr(idx, std::nullopt);
+              }
+              visit_expr(elem.value, std::nullopt);
+            } else if constexpr (std::is_same_v<T, bt_dsl::BlackboardDeclStmt>) {
+              if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(elem.name, scope)) {
+                if (sym == target_sym) {
+                  push_item_narrowed(elem.range, elem.name, "Write");
+                }
+              }
+              if (elem.initial_value) {
+                visit_expr(*elem.initial_value, std::nullopt);
+              }
+            } else if constexpr (std::is_same_v<T, bt_dsl::ConstDeclStmt>) {
+              if (const bt_dsl::Symbol * sym = analysis.symbols.resolve(elem.name, scope)) {
+                if (sym == target_sym) {
+                  push_item_narrowed(elem.range, elem.name, "Write");
+                }
+              }
+              visit_expr(elem.value, std::nullopt);
+            }
+          },
+          s);
+      };
 
-      if (hit.tree->body) {
-        visit_node(*hit.tree->body);
+      for (const auto & stmt : hit.tree->body) {
+        visit_stmt(stmt);
       }
 
       maybe_push_definition();
@@ -1440,11 +1547,11 @@ struct Workspace::Impl
       return out;
     }
 
-    // Blackboard ref highlight
-    if (hit.bb_ref) {
+    // Inline out-var decl highlight
+    if (hit.inline_decl) {
       const bt_dsl::Scope * scope = analysis.symbols.tree_scope(hit.tree->name);
       const bt_dsl::Symbol * sym =
-        scope ? analysis.symbols.resolve(hit.bb_ref->name, scope) : nullptr;
+        scope ? analysis.symbols.resolve(hit.inline_decl->name, scope) : nullptr;
       collect_symbol_occurrences(sym);
       return out;
     }
@@ -1519,26 +1626,28 @@ struct Workspace::Impl
     // Global variables
     for (const auto & g : doc->program.global_vars) {
       push_token(narrow_to_identifier(doc->text, g.range, g.name), "variable", "declaration");
-      if (!g.type_name.empty()) {
-        push_token(narrow_to_identifier(doc->text, g.range, g.type_name), "type");
+      if (g.type_name) {
+        push_token(narrow_to_identifier(doc->text, g.range, *g.type_name), "type");
       }
     }
 
     // Trees and bodies
-    std::function<void(const bt_dsl::Expression &)> visit_expr;
-    std::function<void(const bt_dsl::ValueExpr &, const std::optional<bt_dsl::PortDirection> &)>
-      visit_value;
+    std::function<void(const bt_dsl::Expression &, const std::optional<bt_dsl::PortDirection> &)>
+      visit_expr;
+    std::function<void(const bt_dsl::ArgumentValue &, const std::optional<bt_dsl::PortDirection> &)>
+      visit_arg_value;
+    std::function<void(const bt_dsl::Statement &)> visit_stmt;
+    std::function<void(const bt_dsl::NodeStmt &)> visit_node;
 
-    visit_value = [&](
-                    const bt_dsl::ValueExpr & v, const std::optional<bt_dsl::PortDirection> & dir) {
-      if (const auto * bb = std::get_if<bt_dsl::BlackboardRef>(&v)) {
-        const std::string_view mod =
-          (dir && *dir == bt_dsl::PortDirection::Out) ? "modification" : std::string_view{};
-        push_token(narrow_to_identifier(doc->text, bb->range, bb->name), "variable", mod);
+    auto is_write_dir = [](const std::optional<bt_dsl::PortDirection> & dir) {
+      if (!dir) {
+        return false;
       }
+      return *dir == bt_dsl::PortDirection::Out || *dir == bt_dsl::PortDirection::Mut;
     };
 
-    visit_expr = [&](const bt_dsl::Expression & e) {
+    visit_expr = [&](
+                   const bt_dsl::Expression & e, const std::optional<bt_dsl::PortDirection> & dir) {
       std::visit(
         [&](const auto & node) {
           using T = std::decay_t<decltype(node)>;
@@ -1546,21 +1655,58 @@ struct Workspace::Impl
             (void)node;
           } else if constexpr (std::is_same_v<T, bt_dsl::VarRef>) {
             const std::string_view mod =
-              (node.direction && *node.direction == bt_dsl::PortDirection::Out)
-                ? "modification"
-                : std::string_view{};
+              is_write_dir(dir ? dir : node.direction) ? "modification" : std::string_view{};
             push_token(narrow_to_identifier(doc->text, node.range, node.name), "variable", mod);
           } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::BinaryExpr>>) {
-            visit_expr(node->left);
-            visit_expr(node->right);
+            visit_expr(node->left, dir);
+            visit_expr(node->right, dir);
           } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::UnaryExpr>>) {
-            visit_expr(node->operand);
+            visit_expr(node->operand, dir);
+          } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::CastExpr>>) {
+            visit_expr(node->expr, dir);
+          } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::IndexExpr>>) {
+            visit_expr(node->base, dir);
+            visit_expr(node->index, dir);
+          } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::ArrayLiteralExpr>>) {
+            for (const auto & el : node->elements) {
+              visit_expr(el, dir);
+            }
+            if (node->repeat_value) {
+              visit_expr(*node->repeat_value, dir);
+            }
+            if (node->repeat_count) {
+              visit_expr(*node->repeat_count, dir);
+            }
+          } else if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::VecMacroExpr>>) {
+            for (const auto & el : node->value.elements) {
+              visit_expr(el, dir);
+            }
+            if (node->value.repeat_value) {
+              visit_expr(*node->value.repeat_value, dir);
+            }
+            if (node->value.repeat_count) {
+              visit_expr(*node->value.repeat_count, dir);
+            }
           }
         },
         e);
     };
 
-    std::function<void(const bt_dsl::NodeStmt &)> visit_node;
+    visit_arg_value =
+      [&](const bt_dsl::ArgumentValue & v, const std::optional<bt_dsl::PortDirection> & dir) {
+        std::visit(
+          [&](const auto & av) {
+            using T = std::decay_t<decltype(av)>;
+            if constexpr (std::is_same_v<T, bt_dsl::Expression>) {
+              visit_expr(av, dir);
+            } else if constexpr (std::is_same_v<T, bt_dsl::InlineBlackboardDecl>) {
+              push_token(
+                narrow_to_identifier(doc->text, av.range, av.name), "variable", "declaration");
+            }
+          },
+          v);
+      };
+
     visit_node = [&](const bt_dsl::NodeStmt & n) {
       // Node name (Action/SubTree/Control/...)
       std::string node_type = "function";
@@ -1569,16 +1715,8 @@ struct Workspace::Impl
       }
       push_token(narrow_to_identifier(doc->text, n.range, n.node_name), node_type);
 
-      // Decorators attached to the node
-      for (const auto & dec : n.decorators) {
-        push_token(narrow_to_identifier(doc->text, dec.range, dec.name), "decorator");
-        for (const auto & arg : dec.args) {
-          std::optional<bt_dsl::PortDirection> val_dir;
-          if (const auto * bb = std::get_if<bt_dsl::BlackboardRef>(&arg.value)) {
-            val_dir = bb->direction;
-          }
-          visit_value(arg.value, val_dir);
-        }
+      for (const auto & pc : n.preconditions) {
+        visit_expr(pc.condition, std::nullopt);
       }
 
       // Arguments
@@ -1586,29 +1724,47 @@ struct Workspace::Impl
         if (arg.name) {
           push_token(narrow_to_identifier(doc->text, arg.range, *arg.name), "property");
         }
-        std::optional<bt_dsl::PortDirection> val_dir;
-        if (const auto * bb = std::get_if<bt_dsl::BlackboardRef>(&arg.value)) {
-          val_dir = bb->direction;
-        }
-        visit_value(arg.value, val_dir);
+        visit_arg_value(arg.value, arg.direction);
       }
 
       // Children and assignments
       for (const auto & child : n.children) {
-        std::visit(
-          [&](const auto & elem) {
-            using T = std::decay_t<decltype(elem)>;
-            if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::NodeStmt>>) {
-              visit_node(*elem);
-            } else if constexpr (std::is_same_v<T, bt_dsl::AssignmentStmt>) {
-              push_token(
-                narrow_to_identifier(doc->text, elem.range, elem.target), "variable",
-                "modification");
-              visit_expr(elem.value);
-            }
-          },
-          child);
+        visit_stmt(child);
       }
+    };
+
+    visit_stmt = [&](const bt_dsl::Statement & s) {
+      std::visit(
+        [&](const auto & elem) {
+          using T = std::decay_t<decltype(elem)>;
+          if constexpr (std::is_same_v<T, bt_dsl::Box<bt_dsl::NodeStmt>>) {
+            visit_node(*elem);
+          } else if constexpr (std::is_same_v<T, bt_dsl::AssignmentStmt>) {
+            push_token(
+              narrow_to_identifier(doc->text, elem.range, elem.target), "variable", "modification");
+            for (const auto & idx : elem.indices) {
+              visit_expr(idx, std::nullopt);
+            }
+            visit_expr(elem.value, std::nullopt);
+          } else if constexpr (std::is_same_v<T, bt_dsl::BlackboardDeclStmt>) {
+            push_token(
+              narrow_to_identifier(doc->text, elem.range, elem.name), "variable", "declaration");
+            if (elem.type_name) {
+              push_token(narrow_to_identifier(doc->text, elem.range, *elem.type_name), "type");
+            }
+            if (elem.initial_value) {
+              visit_expr(*elem.initial_value, std::nullopt);
+            }
+          } else if constexpr (std::is_same_v<T, bt_dsl::ConstDeclStmt>) {
+            push_token(
+              narrow_to_identifier(doc->text, elem.range, elem.name), "variable", "declaration");
+            if (elem.type_name) {
+              push_token(narrow_to_identifier(doc->text, elem.range, *elem.type_name), "type");
+            }
+            visit_expr(elem.value, std::nullopt);
+          }
+        },
+        s);
     };
 
     for (const auto & t : doc->program.trees) {
@@ -1616,22 +1772,14 @@ struct Workspace::Impl
 
       for (const auto & p : t.params) {
         push_token(narrow_to_identifier(doc->text, p.range, p.name), "parameter", "declaration");
-        if (p.type_name) {
-          push_token(narrow_to_identifier(doc->text, p.range, *p.type_name), "type");
-        }
-      }
-      for (const auto & lv : t.local_vars) {
-        push_token(narrow_to_identifier(doc->text, lv.range, lv.name), "variable", "declaration");
-        if (lv.type_name) {
-          push_token(narrow_to_identifier(doc->text, lv.range, *lv.type_name), "type");
-        }
-        if (lv.initial_value) {
-          visit_expr(*lv.initial_value);
+        push_token(narrow_to_identifier(doc->text, p.range, p.type_name), "type");
+        if (p.default_value) {
+          visit_expr(*p.default_value, std::nullopt);
         }
       }
 
-      if (t.body) {
-        visit_node(*t.body);
+      for (const auto & stmt : t.body) {
+        visit_stmt(stmt);
       }
     }
 

@@ -15,6 +15,7 @@
 
 enum TokenType {
   IDENTIFIER,
+  INFER_TYPE_WILDCARD,
 };
 
 static bool is_alpha_(int32_t c)
@@ -94,7 +95,7 @@ bool tree_sitter_bt_dsl_external_scanner_scan(
 {
   (void)payload;
 
-  if (!valid_symbols[IDENTIFIER]) {
+  if (!valid_symbols[IDENTIFIER] && !valid_symbols[INFER_TYPE_WILDCARD]) {
     return false;
   }
 
@@ -139,13 +140,29 @@ bool tree_sitter_bt_dsl_external_scanner_scan(
     }
   }
 
-  // `_` is the infer-type wildcard token in the grammar (infer_type), not an identifier.
+  // `_` can be either:
+  // - the type inference wildcard in type position (infer_type)
+  // - a normal identifier lexeme in other positions
+  // The grammar exposes `infer_type` as a dedicated external token, so we can
+  // decide based on `valid_symbols`.
   if (len == 1 && buf[0] == '_') {
-    return false;
+    if (valid_symbols[INFER_TYPE_WILDCARD]) {
+      lexer->result_symbol = INFER_TYPE_WILDCARD;
+      return true;
+    }
+    if (!valid_symbols[IDENTIFIER]) {
+      return false;
+    }
+    lexer->result_symbol = IDENTIFIER;
+    return true;
   }
 
   // If the lexeme is a reserved keyword, do not emit IDENTIFIER.
   if (is_keyword(buf, len)) {
+    return false;
+  }
+
+  if (!valid_symbols[IDENTIFIER]) {
     return false;
   }
 

@@ -467,33 +467,43 @@ struct ServerState
   {
     ensure_stdlib_loaded();
 
-    // Iteratively expand the import closure until it stops growing.
-    std::unordered_set<std::string> loaded;
-    loaded.insert(uri);
-    if (!stdlib_uri.empty()) loaded.insert(stdlib_uri);
+    // Reference spec: import visibility is non-transitive (docs/reference/declarations-and-scopes.md 4.1.3).
+    // Therefore, we return only *direct* imports of `uri` (plus optional stdlib).
+    // However, for analysis/navigation convenience, we still try to ensure the full
+    // transitive import closure is loaded into the workspace.
 
-    std::vector<std::string> imported;
-    if (!stdlib_uri.empty()) imported.push_back(stdlib_uri);
+    const std::vector<std::string> imported_direct =
+      parse_uris(ws.resolve_imports_json(uri, stdlib_uri));
 
-    for (int iter = 0; iter < 16; iter++) {
-      const std::string raw = ws.resolve_imports_json(uri, stdlib_uri);
-      const auto next = parse_uris(raw);
-      imported = next;
+    std::unordered_set<std::string> visited;
+    visited.insert(uri);
+    if (!stdlib_uri.empty()) visited.insert(stdlib_uri);
 
-      bool loaded_any = false;
-      for (const auto & u : next) {
-        if (loaded.insert(u).second) {
-          ensure_doc_loaded_from_disk(u);
-          loaded_any = true;
-        }
-      }
+    std::vector<std::string> queue;
+    queue.reserve(imported_direct.size());
 
-      if (!loaded_any) {
-        break;
+    for (const auto & u : imported_direct) {
+      if (visited.insert(u).second) {
+        queue.push_back(u);
       }
     }
 
-    return imported;
+    // BFS over direct imports of each document.
+    for (size_t qi = 0; qi < queue.size() && qi < 256; ++qi) {
+      const std::string cur = queue[qi];
+
+      // Make sure the document exists in the workspace before asking it for its imports.
+      ensure_doc_loaded_from_disk(cur);
+
+      const auto next = parse_uris(ws.resolve_imports_json(cur, stdlib_uri));
+      for (const auto & u : next) {
+        if (visited.insert(u).second) {
+          queue.push_back(u);
+        }
+      }
+    }
+
+    return imported_direct;
   }
 
   std::optional<std::string_view> get_doc_text(std::string_view uri) const

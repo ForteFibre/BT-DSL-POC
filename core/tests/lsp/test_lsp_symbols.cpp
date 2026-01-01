@@ -1,31 +1,32 @@
 // test_lsp_symbols.cpp - Serverless LSP document symbols tests
 
-#include "bt_dsl/lsp/lsp.hpp"
-
 #include <gtest/gtest.h>
+
 #include <nlohmann/json.hpp>
+
+#include "bt_dsl/lsp/lsp.hpp"
 
 using json = nlohmann::json;
 
-static bool has_symbol(const json &symbols, const std::string &name,
-                       const std::string &kind) {
-  for (const auto &s : symbols) {
-    if (s.contains("name") && s.contains("kind") && s["name"] == name &&
-        s["kind"] == kind) {
+static bool has_symbol(const json & symbols, const std::string & name, const std::string & kind)
+{
+  for (const auto & s : symbols) {
+    if (s.contains("name") && s.contains("kind") && s["name"] == name && s["kind"] == kind) {
       return true;
     }
   }
   return false;
 }
 
-TEST(LspDocumentSymbolsTest, ListsTreesDeclaresAndGlobals) {
+TEST(LspDocumentSymbolsTest, ListsTreesDeclaresAndGlobals)
+{
   bt_dsl::lsp::Workspace ws;
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-declare Action MyAction(in target: string)
-var GlobalX: int
-Tree Main() {
+extern action MyAction(in target: string<256>);
+var GlobalX: int;
+tree Main() {
   Sequence {}
 }
 )";

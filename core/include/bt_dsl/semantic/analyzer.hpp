@@ -25,7 +25,12 @@ struct AnalysisResult
 {
   DiagnosticBag diagnostics;
   SymbolTable symbols;
+  // Nodes visible from the analyzed program (local + imported public).
   NodeRegistry nodes;
+  // All nodes/trees available in the analysis set (local + imported, including private).
+  // This is useful for whole-program analyses; name resolution for the current file
+  // must still use `nodes` to enforce visibility.
+  NodeRegistry all_nodes;
   std::unordered_map<std::string, TypeContext> tree_type_contexts;
 
   /**
@@ -38,6 +43,14 @@ struct AnalysisResult
    * @return nullptr if tree not found
    */
   const TypeContext * get_tree_context(std::string_view tree_name) const;
+
+  /**
+   * Get the type context for a specific tree (mutable).
+   * This is used during semantic validation to refine/normalize types in a
+   * reference-site sensitive way.
+   * @return nullptr if tree not found
+   */
+  TypeContext * get_tree_context_mut(std::string_view tree_name);
 };
 
 // ============================================================================
@@ -57,6 +70,11 @@ class Analyzer
 {
 public:
   Analyzer();
+
+  enum class StatementListKind {
+    TreeBody,
+    ChildrenBlock,
+  };
 
   /**
    * Analyze a single program.
@@ -80,8 +98,12 @@ private:
   // Analysis passes
   static void collect_declarations(const Program & program, AnalysisResult & result);
   static void check_duplicates(const Program & program, AnalysisResult & result);
-  static void resolve_types(const Program & program, AnalysisResult & result);
-  static void validate_semantics(const Program & program, AnalysisResult & result);
+  static void resolve_types(
+    const Program & program, const std::vector<const Program *> & imported_programs,
+    AnalysisResult & result);
+  static void validate_semantics(
+    const Program & program, const std::vector<const Program *> & imported_programs,
+    AnalysisResult & result);
 
   // Individual validation checks
   static void check_duplicate_trees(const Program & program, AnalysisResult & result);
@@ -90,32 +112,34 @@ private:
   static void check_duplicate_declares(const Program & program, AnalysisResult & result);
   static void check_declare_conflicts(const Program & program, AnalysisResult & result);
 
-  static void validate_tree(const Program & program, const TreeDef & tree, AnalysisResult & result);
+  static void validate_tree(
+    const Program & program, const std::vector<const Program *> & imported_programs,
+    const TreeDef & tree, AnalysisResult & result);
   static void validate_node_stmt(
-    const NodeStmt & node, const TreeDef & tree, const TypeContext & ctx, AnalysisResult & result);
+    const Program & program, const NodeStmt & node, const TreeDef & tree, TypeContext & ctx,
+    Scope * scope, StatementListKind list_kind, AnalysisResult & result);
   static void validate_assignment_stmt(
-    const Program & program, const AssignmentStmt & stmt, const TreeDef & tree,
-    const TypeContext & ctx, AnalysisResult & result);
+    const Program & program, const AssignmentStmt & stmt, const TreeDef & tree, TypeContext & ctx,
+    Scope * scope, AnalysisResult & result);
+  static void validate_statement_block(
+    const Program & program, const std::vector<Statement> & stmts, const TreeDef & tree,
+    TypeContext & ctx, Scope * scope, AnalysisResult & result);
+  static void validate_statement(
+    const Program & program, const Statement & stmt, const TreeDef & tree, TypeContext & ctx,
+    Scope * scope, StatementListKind list_kind, AnalysisResult & result);
   static void validate_node_category(const NodeStmt & node, AnalysisResult & result);
   static void validate_arguments(
-    const NodeStmt & node, const TreeDef & tree, const TypeContext & ctx, AnalysisResult & result);
-  static void validate_decorator(const Decorator & decorator, AnalysisResult & result);
+    const Program & program, const NodeStmt & node, const TreeDef & tree, const TypeContext & ctx,
+    Scope * scope, StatementListKind list_kind, AnalysisResult & result);
   static void check_direction_permission(
     const Argument & arg, const PortInfo * port, const TreeDef & tree, const TypeContext & ctx,
     AnalysisResult & result);
   static void check_write_param_usage(const TreeDef & tree, AnalysisResult & result);
-  static void validate_declare_stmt(const DeclareStmt & decl, AnalysisResult & result);
-  static void validate_local_vars(
-    const TreeDef & tree, const TypeContext & ctx, AnalysisResult & result);
+  static void validate_declare_stmt(
+    const Program & program, const DeclareStmt & decl, AnalysisResult & result);
 
-  // Helper functions
-  [[nodiscard]] static const Type * get_global_var_type(
-    std::string_view name, const Program & program);
-
-  [[nodiscard]] static bool is_parameter_writable(std::string_view name, const TreeDef & tree);
-
-  static void collect_write_usages(
-    const NodeStmt & node, const std::unordered_set<std::string> & writable_params,
+  static void collect_write_usages_in_block(
+    const std::vector<Statement> & stmts, const std::unordered_set<std::string> & writable_params,
     std::unordered_set<std::string> & used_for_write);
 };
 

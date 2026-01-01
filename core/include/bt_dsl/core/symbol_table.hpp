@@ -22,7 +22,11 @@ namespace bt_dsl
  */
 enum class SymbolKind : uint8_t {
   GlobalVariable,  // var at program level
+  GlobalConst,     // const at program level
   LocalVariable,   // var inside Tree
+  LocalConst,      // const inside Tree/blocks
+  BlockVariable,   // var declared in a children_block
+  BlockConst,      // const declared in a children_block
   Parameter,       // Tree parameter
   Tree,            // Tree definition
   DeclaredNode,    // declare statement
@@ -44,6 +48,7 @@ struct Symbol
 
   // Helper methods
   [[nodiscard]] bool is_variable() const;
+  [[nodiscard]] bool is_const() const;
   [[nodiscard]] bool is_writable() const;  // out or ref direction
 };
 
@@ -64,6 +69,11 @@ public:
    * @return true if defined successfully, false if name already exists
    */
   bool define(Symbol symbol);
+
+  /**
+   * Insert or overwrite a symbol in this scope.
+   */
+  void upsert(Symbol symbol);
 
   /**
    * Lookup a symbol by name in this scope only.
@@ -100,11 +110,14 @@ private:
 // ============================================================================
 
 /**
- * Symbol table managing all scopes in a program.
+ * Symbol table managing Value-space scopes in a program.
+ *
+ * Reference: docs/reference/declarations-and-scopes.md 4.1.1
+ * (Type / Node / Value namespaces are separate).
  *
  * Structure:
- * - One global scope for global variables and declarations
- * - One scope per Tree definition for parameters and local variables
+ * - One global scope for global value-space declarations (var/const)
+ * - One scope per Tree definition for parameters and tree-local var/const
  */
 class SymbolTable
 {
@@ -150,6 +163,17 @@ public:
    * Get a global symbol by name.
    */
   const Symbol * get_global(std::string_view name) const;
+
+  /**
+   * Define a global symbol; returns false if a symbol with the same name
+   * already exists in the global scope.
+   */
+  bool try_define_global(Symbol symbol);
+
+  /**
+   * Insert or overwrite a global symbol.
+   */
+  void upsert_global(Symbol symbol);
 
 private:
   std::unique_ptr<Scope> global_scope_;

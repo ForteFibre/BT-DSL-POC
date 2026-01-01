@@ -14,10 +14,10 @@ TEST(LspDocumentHighlightTest, HighlightsNodeCallOccurrencesInSameTree)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-declare Action MyAction(in target: string)
-Tree Main() {
-  MyAction(target: Foo)
-  MyAction(target: Bar)
+extern action MyAction(in target: string<256>);
+tree Main() {
+  MyAction(target: Foo);
+  MyAction(target: Bar);
 }
 )";
 
@@ -41,11 +41,11 @@ TEST(LspDocumentHighlightTest, HighlightsSymbolOccurrencesAndDefinition)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-declare Action MyAction(in target: string)
-var MyTarget: string
-Tree Main() {
-  MyAction(target: MyTarget)
-  MyAction(target: MyTarget)
+extern action MyAction(in target: string<256>);
+var MyTarget: string<256>;
+tree Main() {
+  MyAction(target: MyTarget);
+  MyAction(target: MyTarget);
 }
 )";
 

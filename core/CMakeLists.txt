@@ -72,8 +72,18 @@ if(NOT EXISTS "${TS_BT_DSL_DIR}/src/parser.c")
     )
 endif()
 
+# If the grammar uses an external scanner (e.g. keyword-aware identifiers), it must be
+# compiled and linked alongside parser.c.
+if(NOT EXISTS "${TS_BT_DSL_DIR}/src/scanner.c")
+    message(FATAL_ERROR
+        "Tree-sitter external scanner not found at ${TS_BT_DSL_DIR}/src/scanner.c\n"
+        "Please ensure tree-sitter-bt-dsl/src/scanner.c exists (required when externals are used)."
+    )
+endif()
+
 add_library(tree_sitter_bt_dsl STATIC
     "${TS_BT_DSL_DIR}/src/parser.c"
+    "${TS_BT_DSL_DIR}/src/scanner.c"
 )
 target_include_directories(tree_sitter_bt_dsl PUBLIC
     "${TS_BT_DSL_DIR}/src"
@@ -82,12 +92,33 @@ target_include_directories(tree_sitter_bt_dsl PUBLIC
 target_link_libraries(tree_sitter_bt_dsl PUBLIC tree-sitter)
 
 # =============================================================================
+# Generated headers (single-source-of-truth sync with tree-sitter-bt-dsl)
+# =============================================================================
+
+file(READ "${TS_BT_DSL_DIR}/queries/completion_context.scm" BT_DSL_COMPLETION_CONTEXT_QUERY)
+
+set(BT_DSL_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(BT_DSL_GENERATED_COMPLETION_QUERY_HPP
+    "${BT_DSL_GENERATED_INCLUDE_DIR}/bt_dsl/syntax/completion_query.hpp")
+
+file(MAKE_DIRECTORY "${BT_DSL_GENERATED_INCLUDE_DIR}/bt_dsl/syntax")
+
+configure_file(
+    "${CMAKE_SOURCE_DIR}/include/bt_dsl/syntax/completion_query.hpp.in"
+    "${BT_DSL_GENERATED_COMPLETION_QUERY_HPP}"
+    @ONLY
+)
+
+# =============================================================================
 # Core library
 # =============================================================================
 set(BT_DSL_CORE_SOURCES
     src/parser/parser.cpp
     src/core/diagnostic.cpp
     src/core/symbol_table.cpp
+    src/semantic/behavior.cpp
+    src/semantic/init_safety.cpp
+    src/semantic/const_eval.cpp
     src/semantic/type_system.cpp
     src/semantic/node_registry.cpp
     src/semantic/analyzer.cpp
@@ -99,6 +130,7 @@ set(BT_DSL_CORE_SOURCES
 add_library(bt_dsl_core STATIC ${BT_DSL_CORE_SOURCES})
 target_include_directories(bt_dsl_core PUBLIC
     include
+    "${BT_DSL_GENERATED_INCLUDE_DIR}"
     "${TREE_SITTER_INCLUDE_DIR}"
 )
 target_link_libraries(bt_dsl_core PUBLIC tree_sitter_bt_dsl)

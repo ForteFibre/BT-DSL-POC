@@ -34,6 +34,13 @@ enum class PortKind : uint8_t {
   InOut,
 };
 
+enum class NodeModelKind : uint8_t {
+  Action,
+  Condition,
+  Control,
+  Decorator,
+};
+
 struct PortModel
 {
   PortKind kind;
@@ -43,6 +50,13 @@ struct PortModel
 
 struct SubTreeModel
 {
+  std::string id;
+  std::vector<PortModel> ports;
+};
+
+struct NodeModel
+{
+  NodeModelKind kind;
   std::string id;
   std::vector<PortModel> ports;
 };
@@ -57,7 +71,9 @@ struct BehaviorTreeModel
 struct Document
 {
   std::string main_tree_to_execute;
-  std::vector<SubTreeModel> tree_nodes_model;
+  // TreeNodesModel manifest
+  std::vector<NodeModel> node_models;
+  std::vector<SubTreeModel> subtree_models;
   std::vector<BehaviorTreeModel> behavior_trees;
 };
 

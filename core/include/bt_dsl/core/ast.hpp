@@ -2,7 +2,6 @@
 #pragma once
 
 #include <cstdint>
-#include <expected>
 #include <memory>
 #include <optional>
 #include <string>
@@ -73,7 +72,8 @@ struct SourceRange
 enum class PortDirection : uint8_t {
   In,   // Input (read-only)
   Out,  // Output (write-only)
-  Ref   // Reference (read-write)
+  Ref,  // View (live read-only)
+  Mut   // State (live read/write)
 };
 
 /**
@@ -99,6 +99,7 @@ enum class BinaryOp : uint8_t {
   // Bitwise
   BitAnd,  // &
   BitOr,   // |
+  BitXor,  // ^
 };
 
 /**
@@ -118,6 +119,7 @@ enum class AssignOp : uint8_t {
   SubAssign,  // -=
   MulAssign,  // *=
   DivAssign,  // /=
+  ModAssign,  // %=
 };
 
 // ============================================================================
@@ -148,7 +150,12 @@ struct BoolLiteral
   SourceRange range;
 };
 
-using Literal = std::variant<StringLiteral, IntLiteral, FloatLiteral, BoolLiteral>;
+struct NullLiteral
+{
+  SourceRange range;
+};
+
+using Literal = std::variant<StringLiteral, IntLiteral, FloatLiteral, BoolLiteral, NullLiteral>;
 
 // ============================================================================
 // Expression Types
@@ -157,6 +164,22 @@ using Literal = std::variant<StringLiteral, IntLiteral, FloatLiteral, BoolLitera
 // Forward declarations for recursive types
 struct BinaryExpr;
 struct UnaryExpr;
+struct CastExpr;
+struct IndexExpr;
+struct ArrayLiteralExpr;
+struct VecMacroExpr;
+
+/**
+ * Placeholder expression used by parser recovery when a syntactically required
+ * expression is missing.
+ *
+ * This should not appear in successfully parsed programs (i.e. when parse
+ * diagnostics are empty).
+ */
+struct MissingExpr
+{
+  SourceRange range;
+};
 
 /**
  * Variable reference with optional direction.
@@ -164,6 +187,9 @@ struct UnaryExpr;
 struct VarRef
 {
   std::string name;
+  // Optional direction marker used in argument expressions.
+  // NOTE: This is *not* part of general expression syntax, but is used
+  // by the DSL to disambiguate port intent in argument passing.
   std::optional<PortDirection> direction;
   SourceRange range;
 };
@@ -172,7 +198,9 @@ struct VarRef
  * Expression node - can be a literal, variable reference, or compound
  * expression.
  */
-using Expression = std::variant<Literal, VarRef, Box<BinaryExpr>, Box<UnaryExpr>>;
+using Expression = std::variant<
+  Literal, VarRef, MissingExpr, Box<BinaryExpr>, Box<UnaryExpr>, Box<CastExpr>, Box<IndexExpr>,
+  Box<ArrayLiteralExpr>, Box<VecMacroExpr>>;
 
 /**
  * Binary expression: left op right.
@@ -192,6 +220,51 @@ struct UnaryExpr
 {
   UnaryOp op;
   Expression operand;
+  SourceRange range;
+};
+
+/**
+ * Cast expression: expr as type.
+ * NOTE: type is currently stored as source text.
+ */
+struct CastExpr
+{
+  Expression expr;
+  std::string type_name;
+  SourceRange range;
+};
+
+/**
+ * Index expression: base[index]
+ */
+struct IndexExpr
+{
+  Expression base;
+  Expression index;
+  SourceRange range;
+};
+
+/**
+ * Array literal: [a, b, c] or repeat-init form [value; count]
+ */
+struct ArrayLiteralExpr
+{
+  // If repeat_init is used, elements is empty.
+  std::vector<Expression> elements;
+
+  // repeat_init := value ; count
+  std::optional<Expression> repeat_value;
+  std::optional<Expression> repeat_count;
+
+  SourceRange range;
+};
+
+/**
+ * vec! macro: vec![...]
+ */
+struct VecMacroExpr
+{
+  ArrayLiteralExpr value;
   SourceRange range;
 };
 
@@ -216,6 +289,7 @@ struct DeclarePort
   std::string name;
   std::optional<PortDirection> direction;
   std::string type_name;
+  std::optional<Expression> default_value;
   std::vector<std::string> docs;
   SourceRange range;
 };
@@ -230,6 +304,32 @@ struct DeclareStmt
   std::string name;
   std::vector<DeclarePort> ports;
   std::vector<std::string> docs;
+  // Optional behavior attribute: #[behavior(DataPolicy[, FlowPolicy])]
+  // When omitted, defaults are All + Chained.
+  std::optional<std::string> data_policy;
+  std::optional<std::string> flow_policy;
+  SourceRange range;
+};
+
+/**
+ * extern type statement.
+ */
+struct ExternTypeStmt
+{
+  std::string name;
+  std::vector<std::string> docs;
+  SourceRange range;
+};
+
+/**
+ * type alias statement.
+ * NOTE: The aliased type is currently stored as source text.
+ */
+struct TypeAliasStmt
+{
+  std::string name;
+  std::string value;
+  std::vector<std::string> docs;
   SourceRange range;
 };
 
@@ -239,7 +339,11 @@ struct DeclareStmt
 struct GlobalVarDecl
 {
   std::string name;
-  std::string type_name;
+  std::optional<std::string> type_name;
+  std::optional<Expression> initial_value;
+  // Outer doc comments (///) attached to this declaration.
+  // Reference: docs/reference/lexical-structure.md 1.2.3, docs/reference/syntax.md 2.6.2
+  std::vector<std::string> docs;
   SourceRange range;
 };
 
@@ -261,7 +365,8 @@ struct ParamDecl
 {
   std::string name;
   std::optional<PortDirection> direction;
-  std::optional<std::string> type_name;
+  std::string type_name;
+  std::optional<Expression> default_value;
   SourceRange range;
 };
 
@@ -270,20 +375,23 @@ struct ParamDecl
 // ============================================================================
 
 /**
- * Blackboard reference in an argument.
+ * Inline Blackboard declaration used in argument_expr:
+ *   out var identifier
  */
-struct BlackboardRef
+struct InlineBlackboardDecl
 {
   std::string name;
-  std::optional<PortDirection> direction;
   SourceRange range;
 };
 
 /**
- * Value expression for node arguments - can be a literal or blackboard
- * reference.
+ * Value used in node arguments.
+ *
+ * Spec:
+ *   argument_expr := [port_direction] expression
+ *                 |  'out' inline_blackboard_decl
  */
-using ValueExpr = std::variant<Literal, BlackboardRef>;
+using ArgumentValue = std::variant<Expression, InlineBlackboardDecl>;
 
 // ============================================================================
 // Tree Structure
@@ -295,17 +403,21 @@ using ValueExpr = std::variant<Literal, BlackboardRef>;
 struct Argument
 {
   std::optional<std::string> name;  // Positional if nullopt
-  ValueExpr value;
+  // Optional direction prefix in argument_expr.
+  // For inline decl form (out var x), this is always Out.
+  std::optional<PortDirection> direction;
+
+  ArgumentValue value;
   SourceRange range;
 };
 
 /**
- * Decorator attached to a node.
+ * Precondition attached to a node call.
  */
-struct Decorator
+struct Precondition
 {
-  std::string name;
-  std::vector<Argument> args;
+  std::string kind;  // success_if | failure_if | skip_if | run_while | guard
+  Expression condition;
   SourceRange range;
 };
 
@@ -314,9 +426,49 @@ struct Decorator
  */
 struct AssignmentStmt
 {
+  // Preconditions attached to this assignment statement.
+  // Reference: docs/reference/execution-model.md 5.3.3 and syntax.md (statement forms)
+  std::vector<Precondition> preconditions;
+
+  // lvalue := identifier { index_suffix }
   std::string target;
+  std::vector<Expression> indices;
   AssignOp op;
   Expression value;
+
+  // Outer doc comments (///) attached to this statement.
+  // Reference: docs/reference/lexical-structure.md 1.2.3
+  std::vector<std::string> docs;
+
+  SourceRange range;
+};
+
+/**
+ * Blackboard declaration statement (`var`).
+ */
+struct BlackboardDeclStmt
+{
+  std::string name;
+  std::optional<std::string> type_name;
+  std::optional<Expression> initial_value;
+  // Outer doc comments (///) attached to this declaration.
+  // Reference: docs/reference/lexical-structure.md 1.2.3, docs/reference/syntax.md 2.6.3
+  std::vector<std::string> docs;
+  SourceRange range;
+};
+
+/**
+ * Local const declaration statement (`const`).
+ * NOTE: const_expr is currently represented as Expression.
+ */
+struct ConstDeclStmt
+{
+  std::string name;
+  std::optional<std::string> type_name;
+  Expression value;
+  // Outer doc comments (///) attached to this declaration.
+  // Reference: docs/reference/lexical-structure.md 1.2.3, docs/reference/syntax.md 2.6.2/2.6.3
+  std::vector<std::string> docs;
   SourceRange range;
 };
 
@@ -324,9 +476,9 @@ struct AssignmentStmt
 struct NodeStmt;
 
 /**
- * Child element in a children block - can be a node or assignment.
+ * Statement inside tree bodies and children blocks.
  */
-using ChildElement = std::variant<Box<NodeStmt>, AssignmentStmt>;
+using Statement = std::variant<Box<NodeStmt>, AssignmentStmt, BlackboardDeclStmt, ConstDeclStmt>;
 
 /**
  * Node statement (tree node invocation).
@@ -334,13 +486,19 @@ using ChildElement = std::variant<Box<NodeStmt>, AssignmentStmt>;
 struct NodeStmt
 {
   std::string node_name;
-  std::vector<Decorator> decorators;
+  std::vector<Precondition> preconditions;
   std::vector<Argument> args;
+
+  // True if the source had an explicit property_block `(...)`.
+  // Leaf node calls always have this, but compound calls may omit it.
+  bool has_property_block = false;
+
   // True if the source had an explicit children block `{ ... }`, even if
   // it's empty. This allows semantic validation to distinguish `Node()` from
   // `Node {}`.
   bool has_children_block = false;
-  std::vector<ChildElement> children;
+
+  std::vector<Statement> children;
   std::vector<std::string> docs;
   SourceRange range;
 };
@@ -352,8 +510,7 @@ struct TreeDef
 {
   std::string name;
   std::vector<ParamDecl> params;
-  std::vector<LocalVarDecl> local_vars;
-  std::optional<NodeStmt> body;
+  std::vector<Statement> body;
   std::vector<std::string> docs;
   SourceRange range;
 };
@@ -369,8 +526,16 @@ struct Program
 {
   std::vector<std::string> inner_docs;
   std::vector<ImportStmt> imports;
+
+  std::vector<ExternTypeStmt> extern_types;
+  std::vector<TypeAliasStmt> type_aliases;
+
   std::vector<DeclareStmt> declarations;
+
+  // Global declarations
   std::vector<GlobalVarDecl> global_vars;
+  std::vector<ConstDeclStmt> global_consts;
+
   std::vector<TreeDef> trees;
   SourceRange range;
 };
@@ -391,6 +556,8 @@ constexpr std::string_view to_string(PortDirection dir)
       return "out";
     case PortDirection::Ref:
       return "ref";
+    case PortDirection::Mut:
+      return "mut";
   }
   return "";
 }
@@ -431,6 +598,8 @@ constexpr std::string_view to_string(BinaryOp op)
       return "&";
     case BinaryOp::BitOr:
       return "|";
+    case BinaryOp::BitXor:
+      return "^";
   }
   return "";
 }
@@ -465,6 +634,8 @@ constexpr std::string_view to_string(AssignOp op)
       return "*=";
     case AssignOp::DivAssign:
       return "/=";
+    case AssignOp::ModAssign:
+      return "%=";
   }
   return "";
 }
@@ -479,10 +650,12 @@ inline SourceRange get_range(const Expression & expr)
       using T = std::decay_t<decltype(e)>;
       if constexpr (std::is_same_v<T, Literal>) {
         return std::visit([](const auto & lit) { return lit.range; }, e);
-      } else if constexpr (std::is_same_v<T, VarRef>) {
+      } else if constexpr (std::is_same_v<T, VarRef> || std::is_same_v<T, MissingExpr>) {
         return e.range;
       } else if constexpr (
-        std::is_same_v<T, Box<BinaryExpr>> || std::is_same_v<T, Box<UnaryExpr>>) {
+        std::is_same_v<T, Box<BinaryExpr>> || std::is_same_v<T, Box<UnaryExpr>> ||
+        std::is_same_v<T, Box<CastExpr>> || std::is_same_v<T, Box<IndexExpr>> ||
+        std::is_same_v<T, Box<ArrayLiteralExpr>> || std::is_same_v<T, Box<VecMacroExpr>>) {
         return e->range;
       } else {
         return {};

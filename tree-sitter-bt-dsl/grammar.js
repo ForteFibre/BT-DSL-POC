@@ -14,7 +14,12 @@ module.exports = grammar({
   // Enforce the reference rule `identifier = /.../ - keyword` via an external scanner.
   // Tree-sitter's regex engine does not support lookahead, and contextual lexing would
   // otherwise allow keywords when only `identifier` is expected.
-  externals: ($) => [$.identifier],
+  // NOTE:
+  // The reference spec allows `_` as an identifier lexeme (it matches /[a-zA-Z_][a-zA-Z0-9_]*/),
+  // but also reserves `_` as the type inference wildcard (infer_type).
+  // To support both, we scan `_` as a dedicated external token when the grammar expects
+  // an inferred type, and as `identifier` otherwise.
+  externals: ($) => [$.identifier, $.infer_type_wildcard],
 
   rules: {
     // ========================================================
@@ -51,7 +56,7 @@ module.exports = grammar({
 
     bounded_string: ($) => seq('string', '<', field('max_len', $.array_size), '>'),
 
-    infer_type: ($) => '_',
+    infer_type: ($) => $.infer_type_wildcard,
 
     static_array_type: ($) =>
       seq('[', field('element', $.type), ';', field('size', $.array_size_spec), ']'),
@@ -233,8 +238,7 @@ module.exports = grammar({
 
     argument_list: ($) => seq($.argument, repeat(seq(',', $.argument))),
 
-    argument: ($) =>
-      seq(field('name', $.identifier), ':', field('value', $.argument_expr)),
+    argument: ($) => seq(field('name', $.identifier), ':', field('value', $.argument_expr)),
 
     argument_expr: ($) =>
       choice(
@@ -260,7 +264,7 @@ module.exports = grammar({
 
     lvalue: ($) => seq(field('base', $.identifier), repeat(field('index', $.index_suffix))),
 
-    assignment_op: ($) => choice('=', '+=', '-=', '*=', '/='),
+    assignment_op: ($) => choice('=', '+=', '-=', '*=', '/=', '%='),
 
     expression: ($) => $.or_expr,
 
@@ -269,30 +273,33 @@ module.exports = grammar({
     and_expr: ($) => prec.left(4, seq($.bitwise_or_expr, repeat(seq('&&', $.bitwise_or_expr)))),
 
     bitwise_or_expr: ($) =>
-      prec.left(5, seq($.bitwise_and_expr, repeat(seq('|', $.bitwise_and_expr)))),
+      prec.left(5, seq($.bitwise_xor_expr, repeat(seq('|', $.bitwise_xor_expr)))),
 
-    bitwise_and_expr: ($) => prec.left(6, seq($.equality_expr, repeat(seq('&', $.equality_expr)))),
+    bitwise_xor_expr: ($) =>
+      prec.left(6, seq($.bitwise_and_expr, repeat(seq('^', $.bitwise_and_expr)))),
+
+    bitwise_and_expr: ($) => prec.left(7, seq($.equality_expr, repeat(seq('&', $.equality_expr)))),
 
     equality_expr: ($) =>
-      prec.left(7, seq($.comparison_expr, optional(seq(choice('==', '!='), $.comparison_expr)))),
+      prec.left(8, seq($.comparison_expr, optional(seq(choice('==', '!='), $.comparison_expr)))),
 
     comparison_expr: ($) =>
       prec.left(
-        8,
+        9,
         seq($.additive_expr, optional(seq(choice('<', '<=', '>', '>='), $.additive_expr))),
       ),
 
     additive_expr: ($) =>
       prec.left(
-        9,
+        10,
         seq($.multiplicative_expr, repeat(seq(choice('+', '-'), $.multiplicative_expr))),
       ),
 
     multiplicative_expr: ($) =>
-      prec.left(10, seq($.cast_expr, repeat(seq(choice('*', '/', '%'), $.cast_expr)))),
+      prec.left(11, seq($.cast_expr, repeat(seq(choice('*', '/', '%'), $.cast_expr)))),
 
     // Reference: cast_expr = unary_expr , { "as" , type } ;  (left-associative)
-    cast_expr: ($) => prec.left(11, seq($.unary_expr, repeat(seq('as', $.type)))),
+    cast_expr: ($) => prec.left(12, seq($.unary_expr, repeat(seq('as', $.type)))),
 
     unary_expr: ($) => choice(seq(choice('!', '-'), $.unary_expr), $.primary_expr),
 

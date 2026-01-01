@@ -22,6 +22,13 @@
 ; Node / precondition names
 ; ---------------------------------------------------------------------------
 
+; '@' token (common during incomplete typing, may not yet be part of a precondition node)
+"@" @bt.precondition.at
+
+; Precondition '@' token (useful while the kind is not formed yet)
+(precondition
+  "@" @bt.precondition.at)
+
 (precondition
   "@" @bt.precondition.at
   kind: (precond_kind) @bt.precondition.kind)

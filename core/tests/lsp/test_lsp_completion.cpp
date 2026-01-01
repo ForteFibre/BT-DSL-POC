@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <nlohmann/json.hpp>
 
 #include "bt_dsl/lsp/lsp.hpp"
@@ -10,12 +11,9 @@ using json = nlohmann::json;
 
 static bool has_label(const json & items, const std::string & label)
 {
-  for (const auto & it : items) {
-    if (it.contains("label") && it["label"].get<std::string>() == label) {
-      return true;
-    }
-  }
-  return false;
+  return std::any_of(items.begin(), items.end(), [&label](const json & it) {
+    return it.contains("label") && it["label"].get<std::string>() == label;
+  });
 }
 
 static json completion_items(
@@ -35,8 +33,8 @@ TEST(LspCompletionTest, SuggestsDeclaredNodes)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-declare Action MyAction(in target: string)
-Tree Main() {
+extern action MyAction(in target: string<256>);
+tree Main() {
   
 }
 )";
@@ -55,10 +53,10 @@ TEST(LspCompletionTest, SuggestsPortsInsideArgumentList)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-declare Action MyAction(in target: string, out result: bool)
-var MyTarget: string
-Tree Main() {
-  MyAction()
+extern action MyAction(in target: string<256>, out result: bool);
+var MyTarget: string<256>;
+tree Main() {
+  MyAction();
 }
 )";
 
@@ -85,16 +83,16 @@ TEST(LspCompletionTest, SuggestsPortsAtStartOfExistingNamedArg)
   // - request completion at the byte position immediately after '('
   //   (i.e. at the start of the existing arg name)
   ws.set_document(decl_uri, R"(
-declare Action TestAction(in pos: int, out found: bool)
+extern action TestAction(in pos: int32, out found: bool);
 )");
 
   const std::string src = R"(
 //! Fixture
 import "./test-nodes.bt"
 
-Tree Main() {
+tree Main() {
   Sequence {
-    TestAction(pos: 1, found: out Foo)
+    TestAction(pos: 1, found: out Found);
   }
 }
  )";
@@ -118,7 +116,7 @@ TEST(LspCompletionTest, SuggestsPortsInArgsWithUtf8CommentBeforeTree)
   const std::string decl_uri = "file:///test-nodes.bt";
 
   ws.set_document(decl_uri, R"(
-declare Action TestAction(in pos: int, out found: bool)
+extern action TestAction(in pos: int32, out found: bool);
 )");
 
   // NOTE: This mirrors vscode/test/fixture-workspace/main.bt which contains
@@ -128,14 +126,14 @@ declare Action TestAction(in pos: int, out found: bool)
 import "./test-nodes.bt"
 
 // 日本語🙂 を入れて UTF-8/UTF-16 変換のズレを検出しやすくする
-var Ammo: int
-var Found: bool
+var Ammo: int32;
+var Found: bool;
 
 /// main tree
-Tree Main() {
-  @TestDeco(enabled: true)
+tree Main() {
+  @guard(true)
   Sequence {
-    TestAction(pos: 1, found: out Found)
+    TestAction(pos: 1, found: out Found);
   }
 }
  )";
@@ -159,10 +157,10 @@ TEST(LspCompletionTest, DoesNotReplacePreviousWordWhenCompletingAtWhitespace)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-declare Action MyAction(in target: string)
-var MyTarget: string
-Tree Main() {
-  MyAction(target: )
+extern action MyAction(in target: string<256>);
+var MyTarget: string<256>;
+tree Main() {
+  MyAction(target: );
 }
 )";
 
@@ -189,10 +187,10 @@ TEST(LspCompletionTest, ArgValueSuggestsVarsAndDirectionsButNotPorts)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-declare Action MyAction(in target: string, out result: bool)
-var MyTarget: string
-Tree Main() {
-  MyAction(target: )
+extern action MyAction(in target: string<256>, out result: bool);
+var MyTarget: string<256>;
+tree Main() {
+  MyAction(target: );
 }
 )";
 
@@ -210,6 +208,7 @@ Tree Main() {
   EXPECT_TRUE(has_label(items, "in"));
   EXPECT_TRUE(has_label(items, "out"));
   EXPECT_TRUE(has_label(items, "ref"));
+  EXPECT_TRUE(has_label(items, "mut"));
 
   // Ports (argument keys) should NOT be suggested in value position.
   EXPECT_FALSE(has_label(items, "target"));
@@ -222,10 +221,10 @@ TEST(LspCompletionTest, ArgNameSuggestsPortsButNotVarsOrDirections)
 
   const std::string uri = "file:///main.bt";
   const std::string src = R"(
-declare Action MyAction(in target: string, out result: bool)
-var MyTarget: string
-Tree Main() {
-  MyAction(ta: )
+extern action MyAction(in target: string<256>, out result: bool);
+var MyTarget: string<256>;
+tree Main() {
+  MyAction(ta: );
 }
 )";
 
@@ -245,20 +244,22 @@ Tree Main() {
   EXPECT_FALSE(has_label(items, "in"));
   EXPECT_FALSE(has_label(items, "out"));
   EXPECT_FALSE(has_label(items, "ref"));
+  EXPECT_FALSE(has_label(items, "mut"));
 }
 
-TEST(LspCompletionTest, DecoratorsAreSuggestedOnlyAfterAtSign)
+TEST(LspCompletionTest, PreconditionsAreSuggestedOnlyAfterAtSign)
 {
   bt_dsl::lsp::Workspace ws;
 
   const std::string main_uri = "file:///main.bt";
   const std::string std_uri = "file:///stdlib.bt";
 
-  ws.set_document(std_uri, "declare Decorator Repeat()\n");
+  // No imports needed for precondition kinds.
+  ws.set_document(std_uri, "\n");
 
   const std::string src = R"(
 import "./stdlib.bt"
-Tree Main() {
+tree Main() {
   @
   Sequence {
     
@@ -267,17 +268,17 @@ Tree Main() {
 )";
   ws.set_document(main_uri, src);
 
-  // After '@' -> should suggest Repeat.
+  // After '@' -> should suggest precondition kinds.
   const auto at_pos = src.find("@\n") + 1;
   ASSERT_NE(at_pos, std::string::npos);
   const auto items_at = completion_items(ws, main_uri, static_cast<uint32_t>(at_pos), {std_uri});
-  EXPECT_TRUE(has_label(items_at, "Repeat"));
+  EXPECT_TRUE(has_label(items_at, "guard"));
 
-  // Inside the tree body at blank line -> should NOT suggest decorators.
+  // Inside the tree body at blank line -> should NOT suggest precondition kinds.
   const auto blank_pos = static_cast<uint32_t>(src.rfind("\n    \n") + 6);
   ASSERT_NE(blank_pos, static_cast<uint32_t>(std::string::npos));
   const auto items_blank = completion_items(ws, main_uri, blank_pos, {std_uri});
-  EXPECT_FALSE(has_label(items_blank, "Repeat"));
+  EXPECT_FALSE(has_label(items_blank, "guard"));
 }
 
 TEST(LspCompletionTest, TopLevelSuggestsKeywordsButNotNodes)
@@ -286,7 +287,7 @@ TEST(LspCompletionTest, TopLevelSuggestsKeywordsButNotNodes)
 
   const std::string main_uri = "file:///main.bt";
   const std::string std_uri = "file:///stdlib.bt";
-  ws.set_document(std_uri, "declare Control Sequence()\n");
+  ws.set_document(std_uri, "extern control Sequence();\n");
 
   const std::string src = R"(
 import "./stdlib.bt"
@@ -296,8 +297,11 @@ import "./stdlib.bt"
 
   const auto pos = static_cast<uint32_t>(src.size());
   const auto items = completion_items(ws, main_uri, pos, {std_uri});
-  EXPECT_TRUE(has_label(items, "Tree"));
+  EXPECT_TRUE(has_label(items, "tree"));
   EXPECT_TRUE(has_label(items, "var"));
   EXPECT_TRUE(has_label(items, "import"));
+  EXPECT_TRUE(has_label(items, "extern"));
+  EXPECT_TRUE(has_label(items, "type"));
+  EXPECT_TRUE(has_label(items, "const"));
   EXPECT_FALSE(has_label(items, "Sequence"));
 }

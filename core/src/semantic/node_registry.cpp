@@ -12,11 +12,13 @@ namespace bt_dsl
 
 std::optional<NodeCategory> node_category_from_string(std::string_view name)
 {
-  if (name == "Action") return NodeCategory::Action;
-  if (name == "Condition") return NodeCategory::Condition;
-  if (name == "Control") return NodeCategory::Control;
-  if (name == "Decorator") return NodeCategory::Decorator;
-  if (name == "SubTree") return NodeCategory::SubTree;
+  // Spec grammar uses lowercase category keywords.
+  // Keep accepting legacy/PascalCase for robustness.
+  if (name == "action" || name == "Action") return NodeCategory::Action;
+  if (name == "condition" || name == "Condition") return NodeCategory::Condition;
+  if (name == "control" || name == "Control") return NodeCategory::Control;
+  if (name == "decorator" || name == "Decorator") return NodeCategory::Decorator;
+  if (name == "subtree" || name == "SubTree") return NodeCategory::SubTree;
   return std::nullopt;
 }
 
@@ -24,15 +26,15 @@ std::string_view node_category_to_string(NodeCategory category)
 {
   switch (category) {
     case NodeCategory::Action:
-      return "Action";
+      return "action";
     case NodeCategory::Condition:
-      return "Condition";
+      return "condition";
     case NodeCategory::Control:
-      return "Control";
+      return "control";
     case NodeCategory::Decorator:
-      return "Decorator";
+      return "decorator";
     case NodeCategory::SubTree:
-      return "SubTree";
+      return "subtree";
   }
   return "Unknown";
 }
@@ -59,7 +61,10 @@ std::optional<std::string> NodeInfo::get_single_port_name() const
   return std::nullopt;
 }
 
-bool NodeInfo::can_have_children() const { return category == NodeCategory::Control; }
+bool NodeInfo::can_have_children() const
+{
+  return category == NodeCategory::Control || category == NodeCategory::Decorator;
+}
 
 // ============================================================================
 // NodeRegistry Implementation
@@ -114,6 +119,23 @@ bool NodeRegistry::register_node(NodeInfo node)
     }
   }
   return inserted;
+}
+
+void NodeRegistry::upsert_node(NodeInfo node)
+{
+  const std::string name = node.id;
+
+  // Erase previous source tracking (if any)
+  tree_names_.erase(name);
+  declare_names_.erase(name);
+
+  nodes_.insert_or_assign(name, std::move(node));
+  const auto & stored = nodes_.at(name);
+  if (stored.source == NodeSource::Tree) {
+    tree_names_.insert(name);
+  } else {
+    declare_names_.insert(name);
+  }
 }
 
 const NodeInfo * NodeRegistry::get_node(std::string_view id) const
@@ -196,6 +218,7 @@ NodeInfo NodeRegistry::from_tree_def(const TreeDef & tree)
   NodeInfo node;
   node.id = tree.name;
   node.category = NodeCategory::SubTree;
+  node.behavior = Behavior{};
   node.source = NodeSource::Tree;
   node.definition_range = tree.range;
 
@@ -205,6 +228,7 @@ NodeInfo NodeRegistry::from_tree_def(const TreeDef & tree)
     port.name = param.name;
     port.direction = param.direction.value_or(PortDirection::In);
     port.type_name = param.type_name;
+    port.default_value = param.default_value;
     port.description = std::nullopt;
     port.definition_range = param.range;
     node.ports.push_back(std::move(port));
@@ -220,6 +244,19 @@ NodeInfo NodeRegistry::from_declare_stmt(const DeclareStmt & decl)
   node.source = NodeSource::Declare;
   node.definition_range = decl.range;
 
+  // Behavior attribute (defaults to All + Chained)
+  node.behavior = Behavior{};
+  if (decl.data_policy) {
+    if (auto dp = data_policy_from_string(*decl.data_policy)) {
+      node.behavior.data = *dp;
+    }
+  }
+  if (decl.flow_policy) {
+    if (auto fp = flow_policy_from_string(*decl.flow_policy)) {
+      node.behavior.flow = *fp;
+    }
+  }
+
   // Convert category string to enum
   auto category = node_category_from_string(decl.category);
   node.category = category.value_or(NodeCategory::Action);
@@ -232,6 +269,7 @@ NodeInfo NodeRegistry::from_declare_stmt(const DeclareStmt & decl)
     port.name = dp.name;
     port.direction = dp.direction.value_or(PortDirection::In);
     port.type_name = dp.type_name;  // type_name is std::string, not optional
+    port.default_value = dp.default_value;
     // Convert docs vector to description string
     if (!dp.docs.empty()) {
       std::string desc;

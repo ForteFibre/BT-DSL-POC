@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "bt_dsl/core/ast.hpp"
+#include "bt_dsl/semantic/behavior.hpp"
 
 namespace bt_dsl
 {
@@ -47,6 +48,9 @@ struct PortInfo
   std::string name;
   PortDirection direction;
   std::optional<std::string> type_name;
+  // Optional default value (const_expr) for input ports.
+  // Reference spec: defaults are only allowed for `in` ports.
+  std::optional<Expression> default_value;
   std::optional<std::string> description;
   SourceRange definition_range;
 };
@@ -66,6 +70,9 @@ struct NodeInfo
 {
   std::string id;
   NodeCategory category;
+  // Optional behavior definition for nodes that own children.
+  // Spec: omitted behavior means All + Chained.
+  Behavior behavior;
   std::vector<PortInfo> ports;
   NodeSource source;
   SourceRange definition_range;
@@ -84,7 +91,7 @@ struct NodeInfo
 
   /**
    * Check if this node type can have children.
-   * Only Control nodes can have children in BehaviorTree.CPP.
+    * In this DSL, both Control and Decorator category nodes can have children.
    */
   [[nodiscard]] bool can_have_children() const;
 
@@ -125,6 +132,13 @@ public:
    * @return true if registered successfully, false if name already exists
    */
   bool register_node(NodeInfo node);
+
+  /**
+   * Insert or overwrite a node definition.
+   * Intended for analyzers that need deterministic precedence (e.g. local
+   * definitions override imported ones) while still reporting a conflict.
+   */
+  void upsert_node(NodeInfo node);
 
   /**
    * Get a node by ID.

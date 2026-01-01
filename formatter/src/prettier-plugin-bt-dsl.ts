@@ -1,8 +1,8 @@
 import { doc } from 'prettier';
 import type { AstPath, Doc, ParserOptions, Plugin } from 'prettier';
 import Parser from 'web-tree-sitter';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 const { builders } = doc;
 const { group, indent, line, softline, hardline, join: joinDocs } = builders;
@@ -161,29 +161,47 @@ function printNode(
     case 'import_stmt':
       return printImportStmt(node, text);
 
-    case 'declare_stmt':
-      return printDeclareStmt(node, text);
+    case 'extern_type_stmt':
+      return printExternTypeStmt(node, text);
 
-    case 'declare_port':
-      return printDeclarePort(node, text);
+    case 'type_alias_stmt':
+      return printTypeAliasStmt(node, text);
 
-    case 'global_var_decl':
-      return printGlobalVarDecl(node, text);
+    case 'extern_stmt':
+      return printExternStmt(node, text);
+
+    case 'global_blackboard_decl':
+      return printGlobalBlackboardDecl(node, text);
+
+    case 'global_const_decl':
+      return printGlobalConstDecl(node, text);
 
     case 'tree_def':
       return printTreeDef(node, text, path, print);
 
+    case 'tree_body':
+      return printStatementBlock(node, text, path, print);
+
     case 'param_decl':
       return printParamDecl(node, text);
 
-    case 'local_var_decl':
-      return printLocalVarDecl(node, text);
+    case 'statement':
+      return printStatement(node, text, path, print);
 
-    case 'node_stmt':
-      return printNodeStmt(node, text, path, print);
+    case 'blackboard_decl':
+      return printBlackboardDecl(node, text);
 
-    case 'decorator':
-      return printDecorator(node, text);
+    case 'local_const_decl':
+      return printLocalConstDecl(node, text);
+
+    case 'assignment_stmt':
+      return printAssignmentStmt(node, text);
+
+    case 'leaf_node_call':
+      return printLeafNodeCall(node, text);
+
+    case 'compound_node_call':
+      return printCompoundNodeCall(node, text, path, print);
 
     case 'property_block':
       return printPropertyBlock(node, text);
@@ -191,11 +209,14 @@ function printNode(
     case 'argument':
       return printArgument(node, text);
 
+    case 'precondition':
+      return printPrecondition(node, text);
+
+    case 'decorator':
+      return printDecorator(node, text);
+
     case 'children_block':
       return printChildrenBlock(node, text, path, print);
-
-    case 'expression_stmt':
-      return printExpressionStmt(node, text);
 
     case 'comment':
     case 'line_comment':
@@ -268,105 +289,134 @@ function printImportStmt(node: BtDslNode, text: string): PrettierDoc {
   return concat(['import ', pathText]);
 }
 
-function printDeclareStmt(node: BtDslNode, text: string): PrettierDoc {
+function printExternTypeStmt(node: BtDslNode, text: string): PrettierDoc {
   const parts: PrettierDoc[] = [];
-
-  // Collect outer docs
-  const outerDocs: string[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'outer_doc') {
-      outerDocs.push(getText(child, text));
-    }
-  }
-
+  const outerDocs = collectOuterDocs(node, text);
   if (outerDocs.length > 0) {
     parts.push(joinDocs(hardline, outerDocs), hardline);
   }
 
-  const category = getChild(node, 'category');
   const name = getChild(node, 'name');
-  const categoryText = category ? getText(category, text) : '';
+  const nameText = name ? getText(name, text) : '';
+  parts.push('extern type ', nameText, ';');
+  return concat(parts);
+}
+
+function printTypeAliasStmt(node: BtDslNode, text: string): PrettierDoc {
+  const parts: PrettierDoc[] = [];
+  const outerDocs = collectOuterDocs(node, text);
+  if (outerDocs.length > 0) {
+    parts.push(joinDocs(hardline, outerDocs), hardline);
+  }
+
+  const name = getChild(node, 'name');
+  const value = getChild(node, 'value');
+  const nameText = name ? getText(name, text) : '';
+  const valueText = value ? getText(value, text) : '';
+  parts.push('type ', nameText, ' = ', valueText, ';');
+  return concat(parts);
+}
+
+function printExternStmt(node: BtDslNode, text: string): PrettierDoc {
+  const parts: PrettierDoc[] = [];
+
+  const outerDocs = collectOuterDocs(node, text);
+  if (outerDocs.length > 0) {
+    parts.push(joinDocs(hardline, outerDocs), hardline);
+  }
+
+  // Optional behavior_attr as its own line (common style in docs)
+  const behavior = getAllNamedChildren(node).find((c) => c.type === 'behavior_attr');
+  if (behavior) {
+    parts.push(getText(behavior, text), hardline);
+  }
+
+  const def = getChild(node, 'def');
+  if (!def) {
+    parts.push('extern ;');
+    return concat(parts);
+  }
+
+  parts.push('extern ', printExternDef(def, text));
+  return concat(parts);
+}
+
+function printExternDef(node: BtDslNode, text: string): PrettierDoc {
+  // extern_def is a choice of sequences. Most keywords are anonymous tokens,
+  // so we derive the category from the raw text.
+  const raw = getText(node, text).trim();
+  const kindMatch = /^(action|subtree|condition|control|decorator)\b/.exec(raw);
+  const kind = kindMatch?.[1] ?? '';
+
+  const name = getChild(node, 'name');
   const nameText = name ? getText(name, text) : '';
 
-  // Get ports from declare_port_list
+  // Collect ports
   const ports: BtDslNode[] = [];
   for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'declare_port_list') {
+    if (child.type === 'extern_port_list') {
       for (const port of getAllNamedChildren(child)) {
-        if (port.type === 'declare_port') {
+        if (port.type === 'extern_port') {
           ports.push(port);
         }
       }
     }
   }
 
-  if (ports.length === 0) {
-    parts.push('declare ', categoryText, ' ', nameText, '()');
-  } else {
-    const printedPorts = ports.map((p) => printDeclarePort(p, text));
-    parts.push(
-      group(
-        concat([
-          'declare ',
-          categoryText,
-          ' ',
-          nameText,
-          '(',
-          indent(concat([softline, joinDocs(concat([',', line]), printedPorts)])),
-          softline,
-          ')',
-        ]),
-      ),
-    );
+  const printedPorts = ports.map((p) => printExternPort(p, text));
+
+  // Reference syntax requires parentheses for all extern declarations, even
+  // when there are zero ports (e.g. `extern control Sequence();`).
+  // Only fall back to a minimal print if we couldn't determine the kind.
+  const needsParens = kind !== '';
+  if (!needsParens) {
+    return concat([raw, ';']);
   }
 
-  return concat(parts);
+  return group(
+    concat([
+      kind,
+      ' ',
+      nameText,
+      '(',
+      ports.length === 0
+        ? ''
+        : indent(concat([softline, joinDocs(concat([',', line]), printedPorts)])),
+      ports.length === 0 ? '' : softline,
+      ')',
+      ';',
+    ]),
+  );
 }
 
-function printDeclarePort(node: BtDslNode, text: string): PrettierDoc {
+function printExternPort(node: BtDslNode, text: string): PrettierDoc {
   const parts: PrettierDoc[] = [];
-
-  // Collect outer docs
-  const outerDocs: string[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'outer_doc') {
-      outerDocs.push(getText(child, text));
-    }
-  }
-
+  const outerDocs = collectOuterDocs(node, text);
   if (outerDocs.length > 0) {
     parts.push(joinDocs(hardline, outerDocs), hardline);
   }
 
-  // Find port_direction child node (not a named field)
-  let direction: BtDslNode | null = null;
-  for (let i = 0; i < node.childCount; i++) {
-    const child = node.child(i);
-    if (child?.type === 'port_direction') {
-      direction = child;
-      break;
-    }
-  }
-
+  const direction = findFirstChildOfType(node, 'port_direction');
   const name = getChild(node, 'name');
   const type = getChild(node, 'type');
+  const def = getChild(node, 'default');
 
-  const directionText = direction ? getText(direction, text) + ' ' : 'in ';
-  const nameText = name ? getText(name, text) : '';
-  const typeText = type ? getText(type, text) : '';
-
-  parts.push(directionText, nameText, ': ', typeText);
+  if (direction) {
+    parts.push(getText(direction, text), ' ');
+  }
+  parts.push(name ? getText(name, text) : '', ': ', type ? getText(type, text) : '');
+  if (def) {
+    parts.push(' = ', getText(def, text));
+  }
   return concat(parts);
 }
 
-function printGlobalVarDecl(node: BtDslNode, text: string): PrettierDoc {
-  const name = getChild(node, 'name');
-  const type = getChild(node, 'type');
+function printGlobalBlackboardDecl(node: BtDslNode, text: string): PrettierDoc {
+  return printVarDeclLike(node, text, 'init');
+}
 
-  const nameText = name ? getText(name, text) : '';
-  const typeText = type ? getText(type, text) : '';
-
-  return concat(['var ', nameText, ': ', typeText]);
+function printGlobalConstDecl(node: BtDslNode, text: string): PrettierDoc {
+  return printConstDeclLike(node, text);
 }
 
 function printTreeDef(
@@ -377,14 +427,7 @@ function printTreeDef(
 ): PrettierDoc {
   const parts: PrettierDoc[] = [];
 
-  // Collect outer docs
-  const outerDocs: string[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'outer_doc') {
-      outerDocs.push(getText(child, text));
-    }
-  }
-
+  const outerDocs = collectOuterDocs(node, text);
   if (outerDocs.length > 0) {
     parts.push(joinDocs(hardline, outerDocs), hardline);
   }
@@ -405,57 +448,29 @@ function printTreeDef(
   }
 
   const paramsDoc =
-    params.length > 0
-      ? group(
-          joinDocs(
-            concat([',', line]),
-            params.map((p) => printParamDecl(p, text)),
-          ),
-        )
-      : '';
-
-  // Collect local vars AND comments
-  const bodyChildren: BtDslNode[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (
-      child.type === 'local_var_decl' ||
-      child.type === 'comment' ||
-      child.type === 'line_comment' ||
-      child.type === 'block_comment'
-    ) {
-      bodyChildren.push(child);
-    }
-  }
-
-  const bodyChildrenDoc =
-    bodyChildren.length > 0
-      ? concat([
-          joinDocs(
-            hardline,
-            bodyChildren.map((c) => printNode(c, text, path, print)),
-          ),
-          hardline,
-        ])
-      : '';
+    params.length === 0
+      ? concat(['(', ')'])
+      : group(
+          concat([
+            '(',
+            indent(
+              concat([
+                softline,
+                joinDocs(
+                  concat([',', line]),
+                  params.map((p) => printParamDecl(p, text)),
+                ),
+              ]),
+            ),
+            softline,
+            ')',
+          ]),
+        );
 
   const body = getChild(node, 'body');
   const bodyDoc = body ? printNode(body, text, path, print) : '';
 
-  parts.push(
-    group(
-      concat([
-        'Tree ',
-        nameText,
-        '(',
-        paramsDoc,
-        ') ',
-        '{',
-        indent(concat([hardline, bodyChildrenDoc, bodyDoc])),
-        hardline,
-        '}',
-      ]),
-    ),
-  );
+  parts.push(group(concat(['tree ', nameText, paramsDoc, ' ', bodyDoc])));
 
   return concat(parts);
 }
@@ -473,6 +488,7 @@ function printParamDecl(node: BtDslNode, text: string): PrettierDoc {
 
   const name = getChild(node, 'name');
   const type = getChild(node, 'type');
+  const def = getChild(node, 'default');
 
   const parts: PrettierDoc[] = [];
 
@@ -488,32 +504,100 @@ function printParamDecl(node: BtDslNode, text: string): PrettierDoc {
     parts.push(': ', getText(type, text));
   }
 
+  if (def) {
+    parts.push(' = ', getText(def, text));
+  }
+
   return concat(parts);
 }
 
-function printLocalVarDecl(node: BtDslNode, text: string): PrettierDoc {
+function printStatement(
+  node: BtDslNode,
+  text: string,
+  path: AstPath<BtDslNode>,
+  print: PrintFn,
+): PrettierDoc {
+  // statement := simple_stmt [';'] | block_stmt
+  const inner = findFirstNamedDescendantOfAny(node, [
+    'compound_node_call',
+    'leaf_node_call',
+    'assignment_stmt',
+    'blackboard_decl',
+    'local_const_decl',
+  ]);
+  if (!inner) {
+    return '';
+  }
+
+  if (inner.type === 'compound_node_call') {
+    return printCompoundNodeCall(inner, text, path, print);
+  }
+
+  const innerDoc = printNode(inner, text, path, print);
+  const raw = getText(node, text);
+  const hasSemicolon = raw.trimEnd().endsWith(';');
+  return hasSemicolon ? concat([innerDoc, ';']) : innerDoc;
+}
+
+function printBlackboardDecl(node: BtDslNode, text: string): PrettierDoc {
+  return printVarDeclLike(node, text, 'init');
+}
+
+function printLocalConstDecl(node: BtDslNode, text: string): PrettierDoc {
+  return printConstDeclLike(node, text);
+}
+
+function printAssignmentStmt(node: BtDslNode, text: string): PrettierDoc {
+  const parts: PrettierDoc[] = [];
+
+  const outerDocs = collectOuterDocs(node, text);
+  if (outerDocs.length > 0) {
+    parts.push(joinDocs(hardline, outerDocs), hardline);
+  }
+
+  const preconds = collectPreconditions(node, text);
+  if (preconds.length > 0) {
+    parts.push(joinDocs(hardline, preconds), hardline);
+  }
+
+  const target = getChild(node, 'target');
+  const op = getChild(node, 'op');
+  const value = getChild(node, 'value');
+
+  const targetText = target ? getText(target, text) : '';
+  const opText = op ? getText(op, text) : '=';
+  const valueText = value ? getText(value, text) : '';
+
+  parts.push(concat([targetText, ' ', opText, ' ', valueText]));
+  return concat(parts);
+}
+
+function printLeafNodeCall(node: BtDslNode, text: string): PrettierDoc {
+  const parts: PrettierDoc[] = [];
+
+  const outerDocs = collectOuterDocs(node, text);
+  if (outerDocs.length > 0) {
+    parts.push(joinDocs(hardline, outerDocs), hardline);
+  }
+
+  const decorators = collectDecorators(node, text);
+  if (decorators.length > 0) {
+    parts.push(joinDocs(hardline, decorators), hardline);
+  }
+
+  const preconds = collectPreconditions(node, text);
+  if (preconds.length > 0) {
+    parts.push(joinDocs(hardline, preconds), hardline);
+  }
+
   const name = getChild(node, 'name');
-  const type = getChild(node, 'type');
-  const init = getChild(node, 'init');
+  const args = getChild(node, 'args');
 
-  const parts: PrettierDoc[] = ['var '];
-
-  if (name) {
-    parts.push(getText(name, text));
-  }
-
-  if (type) {
-    parts.push(': ', getText(type, text));
-  }
-
-  if (init) {
-    parts.push(' = ', getText(init, text));
-  }
-
+  parts.push(name ? getText(name, text) : '', args ? printPropertyBlock(args, text) : '()');
   return concat(parts);
 }
 
-function printNodeStmt(
+function printCompoundNodeCall(
   node: BtDslNode,
   text: string,
   path: AstPath<BtDslNode>,
@@ -521,62 +605,38 @@ function printNodeStmt(
 ): PrettierDoc {
   const parts: PrettierDoc[] = [];
 
-  // Collect outer docs and decorators
-  const outerDocs: string[] = [];
-  const decorators: BtDslNode[] = [];
-
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'outer_doc') {
-      outerDocs.push(getText(child, text));
-    } else if (child.type === 'decorator') {
-      decorators.push(child);
-    }
-  }
-
+  const outerDocs = collectOuterDocs(node, text);
   if (outerDocs.length > 0) {
     parts.push(joinDocs(hardline, outerDocs), hardline);
   }
 
+  const decorators = collectDecorators(node, text);
   if (decorators.length > 0) {
-    parts.push(
-      joinDocs(
-        hardline,
-        decorators.map((d) => printDecorator(d, text)),
-      ),
-      hardline,
-    );
+    parts.push(joinDocs(hardline, decorators), hardline);
+  }
+
+  const preconds = collectPreconditions(node, text);
+  if (preconds.length > 0) {
+    parts.push(joinDocs(hardline, preconds), hardline);
   }
 
   const name = getChild(node, 'name');
-  const nameText = name ? getText(name, text) : '';
+  parts.push(name ? getText(name, text) : '');
 
-  const propertyBlock = getAllNamedChildren(node).find((c) => c.type === 'property_block');
-  const childrenBlock = getAllNamedChildren(node).find((c) => c.type === 'children_block');
-
-  parts.push(nameText);
-
-  if (propertyBlock) {
-    parts.push(printPropertyBlock(propertyBlock, text));
+  const body = getChild(node, 'body');
+  if (!body) {
+    return concat(parts);
   }
 
-  if (childrenBlock) {
-    parts.push(' '); // Always add space before children block
-    parts.push(printChildrenBlock(childrenBlock, text, path, print));
+  // node_body_with_children := (property_block children_block) | children_block
+  const prop = getAllNamedChildren(body).find((c) => c.type === 'property_block');
+  const children = getAllNamedChildren(body).find((c) => c.type === 'children_block');
+
+  if (prop) {
+    parts.push(printPropertyBlock(prop, text));
   }
-
-  return concat(parts);
-}
-
-function printDecorator(node: BtDslNode, text: string): PrettierDoc {
-  const name = getChild(node, 'name');
-  const nameText = name ? getText(name, text) : '';
-
-  const propertyBlock = getAllNamedChildren(node).find((c) => c.type === 'property_block');
-
-  const parts: PrettierDoc[] = ['@', nameText];
-
-  if (propertyBlock) {
-    parts.push(printPropertyBlock(propertyBlock, text));
+  if (children) {
+    parts.push(' ', printChildrenBlock(children, text, path, print));
   }
 
   return concat(parts);
@@ -616,14 +676,47 @@ function printArgument(node: BtDslNode, text: string): PrettierDoc {
 
   if (!name) {
     // Positional argument
-    return value ? getText(value, text) : '';
+    return value ? printArgumentExpr(value, text) : '';
   }
 
   // Named argument
   const nameText = getText(name, text);
-  const valueText = value ? getText(value, text) : '';
+  const valueText = value ? printArgumentExpr(value, text) : '';
 
   return concat([nameText, ': ', valueText]);
+}
+
+function printArgumentExpr(node: BtDslNode, text: string): PrettierDoc {
+  // argument_expr := 'out' inline_blackboard_decl | [port_direction] expression
+  const inlineDecl = getChild(node, 'inline_decl');
+  if (inlineDecl) {
+    const name = getChild(inlineDecl, 'name');
+    return concat(['out var ', name ? getText(name, text) : '']);
+  }
+
+  const direction = findFirstChildOfType(node, 'port_direction');
+  const value = getChild(node, 'value');
+  const valueText = value ? getText(value, text) : '';
+  if (direction) {
+    return concat([getText(direction, text), ' ', valueText]);
+  }
+  return valueText;
+}
+
+function printPrecondition(node: BtDslNode, text: string): PrettierDoc {
+  const kind = getChild(node, 'kind');
+  const cond = getChild(node, 'cond');
+  const kindText = kind ? getText(kind, text) : '';
+  const condText = cond ? getText(cond, text) : '';
+  return concat(['@', kindText, '(', condText, ')']);
+}
+
+function printDecorator(node: BtDslNode, text: string): PrettierDoc {
+  const name = getChild(node, 'name');
+  const args = getChild(node, 'args');
+  const nameText = name ? getText(name, text) : '';
+  const argsDoc = args ? printPropertyBlock(args, text) : concat(['(', ')']);
+  return concat(['@', nameText, argsDoc]);
 }
 
 function printChildrenBlock(
@@ -632,32 +725,111 @@ function printChildrenBlock(
   path: AstPath<BtDslNode>,
   print: PrintFn,
 ): PrettierDoc {
-  // Get ALL children including comments
-  const children = getAllNamedChildren(node);
+  return printStatementBlock(node, text, path, print);
+}
 
+function printStatementBlock(
+  node: BtDslNode,
+  text: string,
+  path: AstPath<BtDslNode>,
+  print: PrintFn,
+): PrettierDoc {
+  // tree_body / children_block := '{' { statement } '}'
+  // Include comment nodes as well (they come from `extras`).
+  const children = getAllNamedChildren(node);
   if (children.length === 0) {
     return concat(['{', '}']);
   }
 
   const printedChildren = children.map((c) => printNode(c, text, path, print));
   const childrenDoc = joinWithPreservedBlankLines(printedChildren, children);
-
   return group(concat(['{', indent(concat([hardline, childrenDoc])), hardline, '}']));
 }
 
-function printExpressionStmt(node: BtDslNode, text: string): PrettierDoc {
-  const assignment = getAllNamedChildren(node).find((c) => c.type === 'assignment_expr');
-  if (!assignment) return '';
+function collectOuterDocs(node: BtDslNode, text: string): string[] {
+  const docs: string[] = [];
+  for (const child of getAllNamedChildren(node)) {
+    if (child.type === 'outer_doc') {
+      docs.push(getText(child, text));
+    }
+  }
+  return docs;
+}
 
-  const target = getChild(assignment, 'target');
-  const op = getChild(assignment, 'op');
-  const value = getChild(assignment, 'value');
+function collectDecorators(node: BtDslNode, text: string): PrettierDoc[] {
+  const decorators: PrettierDoc[] = [];
+  for (const child of getAllNamedChildren(node)) {
+    if (child.type === 'decorator') {
+      decorators.push(printDecorator(child, text));
+    }
+  }
+  return decorators;
+}
 
-  const targetText = target ? getText(target, text) : '';
-  const opText = op ? getText(op, text) : '=';
-  const valueText = value ? getText(value, text) : '';
+function collectPreconditions(node: BtDslNode, text: string): PrettierDoc[] {
+  const list = getAllNamedChildren(node).find((c) => c.type === 'precondition_list');
+  if (!list) return [];
+  const preconds: PrettierDoc[] = [];
+  for (const child of getAllNamedChildren(list)) {
+    if (child.type === 'precondition') {
+      preconds.push(printPrecondition(child, text));
+    }
+  }
+  return preconds;
+}
 
-  return concat([targetText, ' ', opText, ' ', valueText]);
+function printVarDeclLike(node: BtDslNode, text: string, initField: 'init'): PrettierDoc {
+  const name = getChild(node, 'name');
+  const type = getChild(node, 'type');
+  const init = getChild(node, initField);
+
+  const parts: PrettierDoc[] = ['var ', name ? getText(name, text) : ''];
+  if (type) {
+    parts.push(': ', getText(type, text));
+  }
+  if (init) {
+    parts.push(' = ', getText(init, text));
+  }
+  return concat(parts);
+}
+
+function printConstDeclLike(node: BtDslNode, text: string): PrettierDoc {
+  const name = getChild(node, 'name');
+  const type = getChild(node, 'type');
+  const value = getChild(node, 'value');
+
+  const parts: PrettierDoc[] = ['const ', name ? getText(name, text) : ''];
+  if (type) {
+    parts.push(': ', getText(type, text));
+  }
+  parts.push(' = ', value ? getText(value, text) : '');
+  return concat(parts);
+}
+
+function findFirstChildOfType(node: BtDslNode, type: string): BtDslNode | null {
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (child?.type === type) {
+      return child;
+    }
+  }
+  return null;
+}
+
+function findFirstNamedDescendantOfAny(node: BtDslNode, types: string[]): BtDslNode | null {
+  // BFS across named nodes.
+  const queue: BtDslNode[] = [node];
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (!cur) continue;
+    for (const child of getAllNamedChildren(cur)) {
+      if (types.includes(child.type)) {
+        return child;
+      }
+      queue.push(child);
+    }
+  }
+  return null;
 }
 
 const btDslPrettierPlugin: Plugin<BtDslNode> = {

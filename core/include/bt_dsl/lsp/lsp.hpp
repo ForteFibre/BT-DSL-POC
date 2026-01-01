@@ -50,12 +50,14 @@ public:
 
   // Import resolution (host-driven loading)
   //
-  // Resolves relative import specs against each document's URI and returns a
-  // JSON payload describing the transitive import closure that can be
-  // discovered from documents currently present in the workspace.
+  // Resolves import specs and returns a JSON payload describing the *direct*
+  // imports of a document.
+  //
+  // Spec: import is non-transitive. If A imports B and B imports C, A does not
+  // see C unless A explicitly imports C.
   //
   // The host may call this repeatedly: if new documents are added via
-  // set_document(), the returned closure can expand.
+  // set_document(), imports can become resolvable.
   //
   // If stdlib_uri is non-empty, it will be included as an implicit import.
   std::string resolve_imports_json(std::string_view uri, std::string_view stdlib_uri = {});

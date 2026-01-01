@@ -20,6 +20,7 @@ add_executable(bt_dsl_tests
     semantic/test_semantic.cpp
     codegen/test_xml_generator.cpp
     cli/test_manifest_converter.cpp
+    cli/test_cli_imports.cpp
     lsp/test_lsp_diagnostics.cpp
     lsp/test_lsp_completion.cpp
     lsp/test_lsp_hover_definition.cpp
@@ -37,6 +38,13 @@ target_link_libraries(bt_dsl_tests PRIVATE
     bt_dsl_core
     GTest::gtest_main
 )
+
+if(TARGET bt_dsl_cli)
+    add_dependencies(bt_dsl_tests bt_dsl_cli)
+    target_compile_definitions(bt_dsl_tests PRIVATE
+        BT_DSL_CLI_PATH="$<TARGET_FILE:bt_dsl_cli>"
+    )
+endif()
 
 # =============================================================================
 # Test discovery

@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
-
-#include <nlohmann/json.hpp>
+#include <poll.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include <cerrno>
 #include <chrono>
@@ -9,8 +11,8 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <optional>
-#include <poll.h>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -18,10 +20,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -66,18 +64,15 @@ std::pair<uint32_t, size_t> decode_utf8(std::string_view s, size_t i)
     const unsigned char b2 = static_cast<unsigned char>(s[i + 2]);
     const unsigned char b3 = static_cast<unsigned char>(s[i + 3]);
     if (((b1 & 0xC0) == 0x80) && ((b2 & 0xC0) == 0x80) && ((b3 & 0xC0) == 0x80)) {
-      const uint32_t cp = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) |
-                          (b3 & 0x3F);
+      const uint32_t cp =
+        ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
       return {cp, 4};
     }
   }
   return {0xFFFDu, 1};
 }
 
-int utf16_units(uint32_t cp)
-{
-  return (cp > 0xFFFFu) ? 2 : 1;
-}
+int utf16_units(uint32_t cp) { return (cp > 0xFFFFu) ? 2 : 1; }
 
 LspPos lsp_pos_at_utf8_byte(std::string_view text, uint32_t target_byte)
 {
@@ -213,7 +208,8 @@ std::optional<json> read_framed_json(int fd, int timeout_ms)
 
   if (content_length <= 0) return std::nullopt;
 
-  const auto body_opt = read_exact_with_timeout(fd, static_cast<size_t>(content_length), timeout_ms);
+  const auto body_opt =
+    read_exact_with_timeout(fd, static_cast<size_t>(content_length), timeout_ms);
   if (!body_opt) return std::nullopt;
 
   try {
@@ -307,7 +303,9 @@ public:
     while (std::chrono::steady_clock::now() < deadline) {
       const auto msg = read_framed_json(proc_.out_fd, 200);
       if (!msg) continue;
-      if (msg->contains("method") && (*msg)["method"].is_string() && (*msg)["method"].get<std::string>() == method) {
+      if (
+        msg->contains("method") && (*msg)["method"].is_string() &&
+        (*msg)["method"].get<std::string>() == method) {
         return msg;
       }
       // ignore other messages
@@ -445,7 +443,7 @@ TEST(LspServerJsonRpcTest, PublishDiagnosticsOnDidOpen)
 {
   LspServer srv;
 
-  const std::string text = "Tree Main() {\n  Sequence {\n";  // missing closing braces
+  const std::string text = "tree Main() {\n  Sequence {\n";  // missing closing braces
 
   const fs::path tmp = fs::temp_directory_path() / fs::path("bt_dsl_lsp_diag.bt");
   const std::string uri = to_file_uri(tmp);
@@ -463,7 +461,9 @@ TEST(LspServerJsonRpcTest, PublishDiagnosticsOnDidOpen)
 
   bool saw_parser = false;
   for (const auto & d : params["diagnostics"]) {
-    if (d.contains("source") && d["source"].is_string() && d["source"].get<std::string>() == "parser") {
+    if (
+      d.contains("source") && d["source"].is_string() &&
+      d["source"].get<std::string>() == "parser") {
       saw_parser = true;
       break;
     }
@@ -479,8 +479,8 @@ TEST(LspServerJsonRpcTest, CompletionWorksWithUtf8Comments)
 //! Fixture
 // 日本語🙂 を入れて UTF-8/UTF-16 変換のズレを検出しやすくする
 
-declare Action MyAction(in target: string)
-Tree Main() {
+extern action MyAction(in target: string<256>);
+tree Main() {
   
 }
 )";
@@ -500,7 +500,9 @@ Tree Main() {
 
   bool saw = false;
   for (const auto & it : result["items"]) {
-    if (it.contains("label") && it["label"].is_string() && it["label"].get<std::string>() == "MyAction") {
+    if (
+      it.contains("label") && it["label"].is_string() &&
+      it["label"].get<std::string>() == "MyAction") {
       saw = true;
       break;
     }
@@ -520,16 +522,16 @@ TEST(LspServerJsonRpcTest, DefinitionResolvesIntoImportedFile)
 
   {
     std::ofstream ofs(decl);
-    ofs << "declare Action TestAction(in pos: int, out found: bool)\n";
+    ofs << "extern action TestAction(in pos: int, out found: bool);\n";
   }
 
   const std::string main_text = R"(
 //! Fixture
 import "./test-nodes.bt"
 
-Tree Main() {
+tree Main() {
   Sequence {
-    TestAction(pos: 1, found: out Found)
+    TestAction(pos: 1, found: out Found);
   }
 }
 )";
@@ -553,7 +555,8 @@ Tree Main() {
   bool saw_decl = false;
   const std::string decl_uri = to_file_uri(decl);
   for (const auto & loc : resp["result"]) {
-    if (loc.contains("uri") && loc["uri"].is_string() && loc["uri"].get<std::string>() == decl_uri) {
+    if (
+      loc.contains("uri") && loc["uri"].is_string() && loc["uri"].get<std::string>() == decl_uri) {
       saw_decl = true;
       break;
     }
