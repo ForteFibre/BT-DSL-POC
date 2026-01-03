@@ -65,8 +65,7 @@ std::optional<AssignOp> AstBuilder::parse_assign_op(ts_ll::Node assign_op_node)
   if (t == "/=") return AssignOp::DivAssign;
   if (t == "%=") return AssignOp::ModAssign;
 
-  diags_.error(
-    node_range(assign_op_node), "Unknown assignment operator: '" + std::string(t) + "'");
+  diags_.error(node_range(assign_op_node), "Unknown assignment operator: '" + std::string(t) + "'");
   return std::nullopt;
 }
 
@@ -95,8 +94,7 @@ InlineBlackboardDecl * AstBuilder::build_inline_blackboard_decl(ts_ll::Node inli
       ast_.intern("<missing>"), node_range(inline_decl_node));
   }
 
-  return ast_.create<InlineBlackboardDecl>(
-    intern_text(name_node), node_range(inline_decl_node));
+  return ast_.create<InlineBlackboardDecl>(intern_text(name_node), node_range(inline_decl_node));
 }
 
 Precondition * AstBuilder::build_precondition(ts_ll::Node precond_node)

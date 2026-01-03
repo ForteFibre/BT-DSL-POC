@@ -15,7 +15,8 @@
 #include "bt_dsl/sema/types/type_table.hpp"
 #include "bt_dsl/syntax/frontend.hpp"
 
-namespace bt_dsl {
+namespace bt_dsl
+{
 
 // ============================================================================
 // Module Info
@@ -27,12 +28,13 @@ namespace bt_dsl {
  * Each module has its own symbol tables for types, nodes, and values.
  * The imports list contains resolved ModuleInfo pointers for direct imports.
  */
-struct ModuleInfo {
+struct ModuleInfo
+{
   /// Absolute path to the source file
   std::filesystem::path absolutePath;
 
   /// Parsed AST (owned by parsedUnit)
-  Program* program = nullptr;
+  Program * program = nullptr;
 
   /// Full parsed unit (owns AstContext, SourceManager, DiagnosticBag)
   std::unique_ptr<struct ParsedUnit> parsedUnit;
@@ -43,8 +45,7 @@ struct ModuleInfo {
   SymbolTable values;
 
   /// Direct imports (resolved ModuleInfo pointers)
-  std::vector<ModuleInfo*> imports;
-
+  std::vector<ModuleInfo *> imports;
 
   // ===========================================================================
   // Visibility Helpers
@@ -55,14 +56,16 @@ struct ModuleInfo {
    *
    * Per spec §4.1.2: names starting with '_' are private.
    */
-  [[nodiscard]] static bool is_public(std::string_view name) noexcept {
+  [[nodiscard]] static bool is_public(std::string_view name) noexcept
+  {
     return !name.empty() && name[0] != '_';
   }
 
   /**
    * Check if a name is private (not visible to importing modules).
    */
-  [[nodiscard]] static bool is_private(std::string_view name) noexcept {
+  [[nodiscard]] static bool is_private(std::string_view name) noexcept
+  {
     return !name.empty() && name[0] == '_';
   }
 };
@@ -76,15 +79,16 @@ struct ModuleInfo {
  *
  * Manages module lifetime and provides lookup by path.
  */
-class ModuleGraph {
+class ModuleGraph
+{
 public:
   ModuleGraph() = default;
 
   // Non-copyable, non-movable (owns modules)
-  ModuleGraph(const ModuleGraph&) = delete;
-  ModuleGraph& operator=(const ModuleGraph&) = delete;
-  ModuleGraph(ModuleGraph&&) = default;
-  ModuleGraph& operator=(ModuleGraph&&) = default;
+  ModuleGraph(const ModuleGraph &) = delete;
+  ModuleGraph & operator=(const ModuleGraph &) = delete;
+  ModuleGraph(ModuleGraph &&) = default;
+  ModuleGraph & operator=(ModuleGraph &&) = default;
 
   // ===========================================================================
   // Module Management
@@ -98,7 +102,8 @@ public:
    * @param path Absolute path to the module
    * @return Pointer to the ModuleInfo (never null)
    */
-  ModuleInfo* add_module(const std::filesystem::path& path) {
+  ModuleInfo * add_module(const std::filesystem::path & path)
+  {
     auto canonical = std::filesystem::weakly_canonical(path);
     auto it = modules_.find(canonical);
     if (it != modules_.end()) {
@@ -106,7 +111,7 @@ public:
     }
     auto info = std::make_unique<ModuleInfo>();
     info->absolutePath = canonical;
-    auto* ptr = info.get();
+    auto * ptr = info.get();
     modules_.emplace(canonical, std::move(info));
     return ptr;
   }
@@ -117,7 +122,8 @@ public:
    * @param path Path to look up (will be canonicalized)
    * @return Pointer to ModuleInfo if found, nullptr otherwise
    */
-  [[nodiscard]] ModuleInfo* get_module(const std::filesystem::path& path) const {
+  [[nodiscard]] ModuleInfo * get_module(const std::filesystem::path & path) const
+  {
     auto canonical = std::filesystem::weakly_canonical(path);
     auto it = modules_.find(canonical);
     return it != modules_.end() ? it->second.get() : nullptr;
@@ -126,17 +132,19 @@ public:
   /**
    * Check if a module exists in the graph.
    */
-  [[nodiscard]] bool has_module(const std::filesystem::path& path) const {
+  [[nodiscard]] bool has_module(const std::filesystem::path & path) const
+  {
     return get_module(path) != nullptr;
   }
 
   /**
    * Get all modules in the graph.
    */
-  [[nodiscard]] std::vector<ModuleInfo*> get_all_modules() const {
-    std::vector<ModuleInfo*> result;
+  [[nodiscard]] std::vector<ModuleInfo *> get_all_modules() const
+  {
+    std::vector<ModuleInfo *> result;
     result.reserve(modules_.size());
-    for (const auto& [path, info] : modules_) {
+    for (const auto & [path, info] : modules_) {
       result.push_back(info.get());
     }
     return result;

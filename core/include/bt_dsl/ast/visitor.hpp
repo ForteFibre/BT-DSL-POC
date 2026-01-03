@@ -132,7 +132,7 @@ public:
 #include "bt_dsl/ast/ast_nodes.def"
 
 #define AST_NODE_TOP(Class, Kind, Snake) \
-  case NodeKind::Kind:                  \
+  case NodeKind::Kind:                   \
     return get_derived().visit_##Snake(cast<Class>(node));
 #include "bt_dsl/ast/ast_nodes.def"
     }
@@ -146,50 +146,50 @@ public:
   // ===========================================================================
 
   // Expressions - default implementation calls visitExpr
-#define AST_NODE_EXPR(Class, Kind, Snake)                                  \
+#define AST_NODE_EXPR(Class, Kind, Snake)                                   \
   ReturnType visit_##Snake(detail::propagate_const_t<NodePtrT, Class> node) \
-  {                                                                        \
-    return visit_expr(node);                                               \
+  {                                                                         \
+    return visit_expr(node);                                                \
   }
 #include "bt_dsl/ast/ast_nodes.def"
 
   // Types - default implementation calls visitTypeNode
-#define AST_NODE_TYPE(Class, Kind, Snake)                                  \
+#define AST_NODE_TYPE(Class, Kind, Snake)                                   \
   ReturnType visit_##Snake(detail::propagate_const_t<NodePtrT, Class> node) \
-  {                                                                        \
-    return visit_type_node(node);                                          \
+  {                                                                         \
+    return visit_type_node(node);                                           \
   }
 #include "bt_dsl/ast/ast_nodes.def"
 
   // Statements - default implementation calls visitStmt
-#define AST_NODE_STMT(Class, Kind, Snake)                                  \
+#define AST_NODE_STMT(Class, Kind, Snake)                                   \
   ReturnType visit_##Snake(detail::propagate_const_t<NodePtrT, Class> node) \
-  {                                                                        \
-    return visit_stmt(node);                                               \
+  {                                                                         \
+    return visit_stmt(node);                                                \
   }
 #include "bt_dsl/ast/ast_nodes.def"
 
   // Declarations - default implementation calls visitDecl
-#define AST_NODE_DECL(Class, Kind, Snake)                                  \
+#define AST_NODE_DECL(Class, Kind, Snake)                                   \
   ReturnType visit_##Snake(detail::propagate_const_t<NodePtrT, Class> node) \
-  {                                                                        \
-    return visit_decl(node);                                               \
+  {                                                                         \
+    return visit_decl(node);                                                \
   }
 #include "bt_dsl/ast/ast_nodes.def"
 
   // Supporting nodes - default implementation calls visitNode
-#define AST_NODE_SUPPORT(Class, Kind, Snake)                               \
+#define AST_NODE_SUPPORT(Class, Kind, Snake)                                \
   ReturnType visit_##Snake(detail::propagate_const_t<NodePtrT, Class> node) \
-  {                                                                        \
-    return visit_node(node);                                               \
+  {                                                                         \
+    return visit_node(node);                                                \
   }
 #include "bt_dsl/ast/ast_nodes.def"
 
   // Top-level - default implementation calls visitNode
-#define AST_NODE_TOP(Class, Kind, Snake)                                   \
+#define AST_NODE_TOP(Class, Kind, Snake)                                    \
   ReturnType visit_##Snake(detail::propagate_const_t<NodePtrT, Class> node) \
-  {                                                                        \
-    return visit_node(node);                                               \
+  {                                                                         \
+    return visit_node(node);                                                \
   }
 #include "bt_dsl/ast/ast_nodes.def"
 
@@ -378,7 +378,10 @@ public:
     return true;
   }
 
-  bool visit_precondition(NodePtr<Precondition> node) { return get_derived().visit(node->condition); }
+  bool visit_precondition(NodePtr<Precondition> node)
+  {
+    return get_derived().visit(node->condition);
+  }
 
   bool visit_param_decl(NodePtr<ParamDecl> node)
   {

@@ -179,7 +179,10 @@ public:
   }
 
   /// Check if this is a non-negative integer (valid for array sizes)
-  [[nodiscard]] bool is_non_negative_integer() const noexcept { return is_integer() && intValue_ >= 0; }
+  [[nodiscard]] bool is_non_negative_integer() const noexcept
+  {
+    return is_integer() && intValue_ >= 0;
+  }
 
   // ===========================================================================
   // Type Information

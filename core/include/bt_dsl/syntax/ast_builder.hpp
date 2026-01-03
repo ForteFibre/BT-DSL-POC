@@ -59,7 +59,8 @@ private:
   [[nodiscard]] std::vector<Precondition *> build_precondition_list(ts_ll::Node precond_list_node);
 
   [[nodiscard]] std::optional<PortDirection> parse_port_direction(ts_ll::Node port_dir_node);
-  [[nodiscard]] std::optional<PreconditionKind> parse_precondition_kind(ts_ll::Node precond_kind_node);
+  [[nodiscard]] std::optional<PreconditionKind> parse_precondition_kind(
+    ts_ll::Node precond_kind_node);
   [[nodiscard]] std::optional<AssignOp> parse_assign_op(ts_ll::Node assign_op_node);
 
   // Blocks

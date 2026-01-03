@@ -298,7 +298,10 @@ public:
   // ===========================================================================
 
   /// Check if a global symbol exists
-  [[nodiscard]] bool has_global(std::string_view name) const { return global_scope_->contains(name); }
+  [[nodiscard]] bool has_global(std::string_view name) const
+  {
+    return global_scope_->contains(name);
+  }
 
   /// Get a global symbol by name
   [[nodiscard]] const Symbol * get_global(std::string_view name) const

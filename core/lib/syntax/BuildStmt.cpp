@@ -97,7 +97,7 @@ Stmt * AstBuilder::build_statement(ts_ll::Node stmt_node)
 
   diags_.error(
     node_range(inner), "Statement kind not implemented in core_v2 CST->AST builder yet: '" +
-                        std::string(inner.kind()) + "'");
+                         std::string(inner.kind()) + "'");
   return nullptr;
 }
 
@@ -173,8 +173,7 @@ NodeStmt * AstBuilder::build_compound_node_call(ts_ll::Node compound_call_node)
   }
 
   const auto docs_vec = collect_outer_docs(compound_call_node);
-  const ts_ll::Node pre_list =
-    find_first_named_child(compound_call_node, "precondition_list");
+  const ts_ll::Node pre_list = find_first_named_child(compound_call_node, "precondition_list");
   const auto pre_vec = build_precondition_list(pre_list);
 
   const ts_ll::Node name_node = compound_call_node.child_by_field("name");
