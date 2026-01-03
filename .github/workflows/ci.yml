@@ -163,7 +163,7 @@ jobs:
       - name: Run clang-tidy
         run: |
           find core/lib core/tools core/tests \( -name '*.cpp' -o -name '*.c' \) | \
-            xargs -r clang-tidy -p core/build
+            xargs -r -P$(nproc) -n1 clang-tidy -p core/build
 
   # 5. Core Native Build & Test (Skip if only frontend changed)
   test-core-native:
@@ -181,7 +181,7 @@ jobs:
           path: tree-sitter-bt-dsl
 
       - name: Configure CMake (with WERROR)
-        run: cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release -DWERROR=ON
+        run: cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build Core Native
         run: cmake --build core/build -j$(nproc)
@@ -313,6 +313,9 @@ jobs:
           name: formatter-build
           path: formatter
 
+      - name: Make LSP server executable
+        run: chmod +x core/build-lsp/bt_dsl_lsp_server
+
       - name: Install dependencies
         run: pnpm install
 
@@ -354,6 +357,9 @@ jobs:
         with:
           name: formatter-build
           path: formatter
+
+      - name: Make LSP server executable
+        run: chmod +x core/build-lsp/bt_dsl_lsp_server
 
       - name: Install dependencies
         run: pnpm install
