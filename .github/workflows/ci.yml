@@ -170,12 +170,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Grammar Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: grammar-build
-          path: tree-sitter-bt-dsl
-
       - name: Configure for clang-tidy
         run: cmake -S core -B core/build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
@@ -191,13 +185,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # Download Grammar Source (Required for C++ build)
-      - name: Download Grammar Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: grammar-build
-          path: tree-sitter-bt-dsl
 
       - name: Configure CMake (with WERROR)
         run: cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release
@@ -215,12 +202,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download Grammar Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: grammar-build
-          path: tree-sitter-bt-dsl
 
       - name: Configure CMake (with Sanitizers)
         run: cmake -S core -B core/build-san -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON
