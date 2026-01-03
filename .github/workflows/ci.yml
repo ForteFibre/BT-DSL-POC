@@ -162,8 +162,8 @@ jobs:
 
       - name: Run clang-tidy
         run: |
-          find core/src -name '*.cpp' | \
-            xargs clang-tidy -p core/build
+          find core/lib core/tools core/tests \( -name '*.cpp' -o -name '*.c' \) | \
+            xargs -r clang-tidy -p core/build
 
   # 5. Core Native Build & Test (Skip if only frontend changed)
   test-core-native:
@@ -318,6 +318,7 @@ jobs:
 
       - name: Build & Test VS Code Extension
         run: |
+          pnpm --filter bt-dsl-vscode prebuild
           pnpm --filter bt-dsl-vscode build
           pnpm --filter bt-dsl-vscode test
 
@@ -359,6 +360,7 @@ jobs:
 
       - name: Build all packages
         run: |
+          pnpm --filter bt-dsl-vscode prebuild
           pnpm --filter bt-dsl-vscode build
           pnpm --filter bt-dsl-vscode compile-tests
 
