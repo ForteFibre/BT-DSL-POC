@@ -1,42 +1,45 @@
 //! Soldier AI Definition v1.0
 
-import "./StandardNodes.bt"
+import "./StandardNodes.bt";
+import "std/nodes.bt";
 
-// 1. Global Blackboard
-// ここで定義された変数は全Treeからアクセス可能
-var TargetPos: Vector3
-var Ammo: int
-var IsAlerted: bool
+var TargetPos: Vector3;
+var Ammo: int;
+var IsAlerted: bool;
+
+extern type Vector3;
 
 // 2. Main Tree
 /// 兵士のメインループ
 tree Main() {
-  Repeat(num_cycles: -1) {
+  const num_cycles = -1;
+  // 無限ループ
+  Repeat(num_cycles: num_cycles) {
     Sequence {
-    // グローバル変数の受け渡し
-    // 内部で書き換える変数には 'ref' を付ける
-    SearchAndDestroy(
-      target: ref TargetPos,
-      ammo: ref Ammo,
-      alert: ref IsAlerted
-    );
-
-    Fallback {
-      AlwaysFailure();
-      AlwaysSuccess();
-    }
-
-    Sequence {
-      AlwaysFailure();
+      // グローバル変数の受け渡し
+      // 内部で書き換える変数には 'ref' を付ける
       SearchAndDestroy(
         target: ref TargetPos,
         ammo: ref Ammo,
         alert: ref IsAlerted
       );
-    }
 
-    AlwaysSuccess();
-    AlwaysSuccess();
+      Fallback {
+        AlwaysFailure();
+        AlwaysSuccess();
+      }
+
+      Sequence {
+        AlwaysFailure();
+        SearchAndDestroy(
+          target: ref TargetPos,
+          ammo: ref Ammo,
+          alert: ref IsAlerted
+        );
+      }
+
+      AlwaysSuccess();
+      AlwaysSuccess();
     }
   }
 }

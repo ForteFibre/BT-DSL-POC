@@ -1,14 +1,15 @@
 //! Fixture for VS Code extension e2e tests
-import "./test-nodes.bt"
+import "./test-nodes.bt";
 
 // 日本語🙂 を入れて UTF-8/UTF-16 変換のズレを検出しやすくする
-var Ammo: int
-var Found: bool
+var Ammo: int;
+var Found: bool;
 
 /// main tree
-Tree Main() {
-  @TestDeco(enabled: true)
-  Sequence {
-    TestAction(pos: 1, found: out Found)
+tree Main() {
+  TestDeco(enabled: true) {
+    Sequence {
+      TestAction(pos: 1, found: out Found);
+    }
   }
 }

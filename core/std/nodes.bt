@@ -1,0 +1,45 @@
+/// BT-DSL standard library
+///
+/// Built-in nodes (primarily aligned with BehaviorTree.CPP conventions).
+extern action AlwaysFailure();
+extern action AlwaysSuccess();
+/// Sleep for specified milliseconds
+extern action Sleep(in msec: int);
+
+// Control nodes
+#[behavior(Any, Chained)]
+extern control Fallback();
+/// Execute children in parallel
+#[behavior(None, Isolated)]
+extern control Parallel(
+  /// number of children that need to fail to trigger a FAILURE
+  in failure_count: int,
+  /// number of children that need to succeed to trigger a SUCCESS
+  in success_count: int
+);
+#[behavior(All, Isolated)]
+extern control ParallelAll();
+#[behavior(Any, Chained)]
+extern control ReactiveFallback();
+extern control ReactiveSequence();
+extern control Sequence();
+extern control SequenceWithMemory();
+
+// Decorators
+/// Tick the child after a few milliseconds
+extern decorator Delay(in delay_msec: int);
+#[behavior(None)]
+extern decorator ForceFailure();
+#[behavior(None)]
+extern decorator ForceSuccess();
+#[behavior(None)]
+extern decorator Inverter();
+extern decorator KeepRunningUntilFailure();
+/// Repeat a successful child up to N times. Use -1 to create an infinite loop.
+extern decorator Repeat(in num_cycles: int);
+/// Execute again a failing child up to N times. Use -1 to create an infinite loop.
+extern decorator RetryUntilSuccessful(in num_attempts: int);
+/// If true, skip after the first execution
+extern decorator RunOnce(in then_skip: bool);
+/// After a certain amount of time, halt() the child if it is still running.
+extern decorator Timeout(in msec: int);

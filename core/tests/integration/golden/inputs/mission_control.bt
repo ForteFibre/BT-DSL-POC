@@ -1,0 +1,110 @@
+//! Mission Control Example (integration-golden)
+
+//
+// This file is intentionally large (100-200 lines) and uses many language
+// features together. The golden test verifies both:
+// - XML output (BehaviorTree.CPP v4 mapping)
+// - AST dump (debug view)
+
+import "std/nodes.bt";
+
+extern type Vector3;
+extern type Quaternion;
+extern type Pose;
+
+type Seconds = float64;
+type Millis = int;
+
+type MaybePose = Pose?;
+
+const DEFAULT_TIMEOUT_MS: Millis = 2500;
+const MAX_RETRIES: int = 3;
+const SEARCH_RADIUS: float = 10.0;
+
+var TargetPose: MaybePose = null;
+var HasTarget: bool = false;
+var Ammo: int32 = 30;
+var Goal: Vector3;
+var LastError: string = "";
+
+extern action Log(in msg: string);
+extern action GetTimeMs(out now: int64);
+extern action FindTarget(in radius: float, out found: bool, out pose: Pose);
+extern action ComputeGoal(in pose: Pose, out goal: Vector3);
+extern action MoveTo(
+  in goal: Vector3,
+  in timeout_ms: Millis = DEFAULT_TIMEOUT_MS,
+  out ok: bool
+);
+extern action Shoot(in burst: int32, out ok: bool);
+extern action Reload(out ok: bool);
+
+// Subtree demonstrates parameters + defaults + ref/out usage.
+tree EngageTarget(ref pose: Pose, ref ammo: int32, out ok: bool) {
+  Sequence {
+    var local_ok: bool = true;
+
+    ComputeGoal(pose: pose, goal: out Goal);
+
+    // If we cannot move, record error.
+    MoveTo(goal: Goal, ok: out local_ok);
+
+    @failure_if(local_ok == false)
+    Log(msg: "MoveTo failed");
+
+    // If ammo is low, reload before shooting.
+    Fallback {
+      @success_if(ammo > 0)
+      AlwaysSuccess();
+
+      Reload(ok: out local_ok);
+    }
+
+    // Shoot 3 times at most.
+    Repeat(num_cycles: 3) {
+      @guard(local_ok)
+      Shoot(burst: 1, ok: out local_ok);
+    }
+
+    ok = local_ok;
+  }
+}
+
+// Main: search for target, then engage.
+tree Main() {
+  Sequence {
+    // Capture time (tests out-var declaration + init)
+    GetTimeMs(now: out var t0);
+
+    // Search until target found, but bounded retries.
+    Repeat(num_cycles: MAX_RETRIES) {
+      var found_now: bool = false;
+      FindTarget(radius: SEARCH_RADIUS, found: out found_now, pose: out var p);
+
+      // Update global state.
+      HasTarget = found_now;
+      @failure_if(found_now == false)
+      TargetPose = p;
+
+      @failure_if(!found_now)
+      Log(msg: "No target yet");
+    }
+
+    // Narrow Nullable: only inside guard.
+    @guard(TargetPose != null)
+    Sequence {
+      // In this block, TargetPose can be treated as Pose.
+      EngageTarget(pose: ref TargetPose, ammo: ref Ammo, ok: out var ok);
+
+      @failure_if(ok == false)
+      Log(msg: "EngageTarget returned failure");
+
+      // Update error string to force XML escaping & scripts.
+      @failure_if(ok == false)
+      LastError = "<none> & ok";
+    }
+
+    // keep tree alive
+    AlwaysSuccess();
+  }
+}

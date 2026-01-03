@@ -1,0 +1,8 @@
+import "./cycle_a.bt";
+
+extern action DoNothing();
+
+tree TreeB() {
+  TreeA();
+  DoNothing();
+}

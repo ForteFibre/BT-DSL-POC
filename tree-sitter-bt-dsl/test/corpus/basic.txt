@@ -4,9 +4,7 @@ Program structure (imports / extern / globals / tree)
 
 //! Module doc
 
-//
-
-import "./stdlib.bt"
+import "./stdlib.bt";
 
 extern type Pose;
 type PoseRef = Pose?;
@@ -32,8 +30,6 @@ tree Main(ref target: Pose?) {
 
 (program
   (inner_doc)
-  (comment
-    (line_comment))
   (import_stmt
     (string))
   (extern_type_stmt

@@ -67,6 +67,14 @@ function getText(node: BtDslNode, text: string): string {
 }
 
 /**
+ * Check if the original node text ends with a semicolon
+ */
+function hasTrailingSemicolon(node: BtDslNode, text: string): boolean {
+  const nodeText = getText(node, text);
+  return nodeText.trimEnd().endsWith(';');
+}
+
+/**
  * Get child node by field name
  */
 function getChild(node: BtDslNode, fieldName: string): BtDslNode | null {
@@ -85,6 +93,20 @@ function getAllNamedChildren(node: BtDslNode): BtDslNode[] {
     }
   }
   return children;
+}
+
+/**
+ * Collect trailing comments that were absorbed into a node due to missing semicolons.
+ * Returns the comment text nodes that appear after the actual content.
+ */
+function collectTrailingComments(node: BtDslNode, text: string): PrettierDoc[] {
+  const comments: PrettierDoc[] = [];
+  for (const child of getAllNamedChildren(node)) {
+    if (child.type === 'comment' || child.type === 'line_comment' || child.type === 'block_comment') {
+      comments.push(getText(child, text));
+    }
+  }
+  return comments;
 }
 
 /**
@@ -155,6 +177,11 @@ function printNode(
   const type = node.type;
 
   switch (type) {
+    // Preserve ERROR and MISSING nodes as-is to prevent content loss
+    case 'ERROR':
+    case 'MISSING':
+      return getText(node, text);
+
     case 'program':
       return printProgram(node, text, path, print);
 
@@ -286,7 +313,15 @@ function printProgram(
 function printImportStmt(node: BtDslNode, text: string): PrettierDoc {
   const pathNode = getChild(node, 'path');
   const pathText = pathNode ? printString(getText(pathNode, text)) : '""';
-  return concat(['import ', pathText]);
+  const semi = hasTrailingSemicolon(node, text) ? ';' : '';
+  const parts: PrettierDoc[] = ['import ', pathText, semi];
+
+  // Append any trailing comments that were absorbed into this node
+  const trailingComments = collectTrailingComments(node, text);
+  if (trailingComments.length > 0) {
+    parts.push(hardline, joinDocs(hardline, trailingComments));
+  }
+  return concat(parts);
 }
 
 function printExternTypeStmt(node: BtDslNode, text: string): PrettierDoc {
@@ -790,6 +825,15 @@ function printVarDeclLike(node: BtDslNode, text: string, initField: 'init'): Pre
   if (init) {
     parts.push(' = ', getText(init, text));
   }
+  if (hasTrailingSemicolon(node, text)) {
+    parts.push(';');
+  }
+
+  // Append any trailing comments that were absorbed into this node
+  const trailingComments = collectTrailingComments(node, text);
+  if (trailingComments.length > 0) {
+    parts.push(hardline, joinDocs(hardline, trailingComments));
+  }
   return concat(parts);
 }
 
@@ -803,6 +847,15 @@ function printConstDeclLike(node: BtDslNode, text: string): PrettierDoc {
     parts.push(': ', getText(type, text));
   }
   parts.push(' = ', value ? getText(value, text) : '');
+  if (hasTrailingSemicolon(node, text)) {
+    parts.push(';');
+  }
+
+  // Append any trailing comments that were absorbed into this node
+  const trailingComments = collectTrailingComments(node, text);
+  if (trailingComments.length > 0) {
+    parts.push(hardline, joinDocs(hardline, trailingComments));
+  }
   return concat(parts);
 }
 

@@ -1,0 +1,7 @@
+extern action DoNothing();
+tree Helper() {
+  DoNothing();
+}
+tree _PrivateHelper() {
+  DoNothing();
+}

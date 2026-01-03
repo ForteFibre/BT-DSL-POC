@@ -34,8 +34,6 @@ struct CompletionContext
 };
 
 // Classify completion context at a byte offset using Tree-sitter CST + Query.
-//
-// This function intentionally does NOT use text/brace/AST fallbacks.
 std::optional<CompletionContext> classify_completion_context(
   std::string_view text, uint32_t byte_offset);
 

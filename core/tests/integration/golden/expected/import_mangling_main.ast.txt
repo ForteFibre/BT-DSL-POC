@@ -1,0 +1,19 @@
+Program [1 docs]
+|-ImportDecl path='std/nodes.bt'
+|-ImportDecl path='pkg1/dep.bt'
+|-ImportDecl path='pkg2/dep.bt'
+|-ExternDecl action name='Print'
+| `-ExternPort name='txt' in
+|   `-TypeExpr
+|     `-PrimaryType name='string'
+`-TreeDecl name='Main'
+  `-NodeStmt name='Sequence' [children]
+    |-NodeStmt name='Print' [props]
+    | `-Argument name='txt'
+    |   `-StringLiteralExpr "begin"
+    |-NodeStmt name='Entry1' [props]
+    |-NodeStmt name='Entry2' [props]
+    `-NodeStmt name='Print' [props]
+      `-Argument name='txt'
+        `-StringLiteralExpr "end"
+

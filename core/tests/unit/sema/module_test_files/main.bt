@@ -1,0 +1,5 @@
+import "./helper.bt";
+extern action DoNothing();
+tree Main() {
+  DoNothing();
+}

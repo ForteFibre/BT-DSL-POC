@@ -7,7 +7,10 @@
 module.exports = grammar({
   name: 'bt_dsl',
 
-  extras: ($) => [/\s/, $.comment],
+  // NOTE: `extras` must list token rules directly. Using an intermediate non-terminal
+  // (e.g. `$.comment = choice($.line_comment, $.block_comment)`) does not reliably
+  // get treated as an extra token by tree-sitter and can surface as parse errors.
+  extras: ($) => [/\s/, $.line_comment, $.block_comment],
 
   word: ($) => $.identifier,
 
@@ -42,7 +45,7 @@ module.exports = grammar({
     // ========================================================
     // 2. Import statement
     // ========================================================
-    import_stmt: ($) => seq('import', field('path', $.string)),
+    import_stmt: ($) => seq('import', field('path', $.string), ';'),
 
     // ========================================================
     // 3. Types
@@ -264,7 +267,7 @@ module.exports = grammar({
 
     lvalue: ($) => seq(field('base', $.identifier), repeat(field('index', $.index_suffix))),
 
-    assignment_op: ($) => choice('=', '+=', '-=', '*=', '/=', '%='),
+    assignment_op: ($) => choice('=', '+=', '-=', '*=', '/='),
 
     expression: ($) => $.or_expr,
 

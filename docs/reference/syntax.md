@@ -109,7 +109,9 @@ or_expr              = and_expr , { "||" , and_expr } ;
 
 and_expr             = bitwise_or_expr , { "&&" , bitwise_or_expr } ;
 
-bitwise_or_expr      = bitwise_and_expr , { "|" , bitwise_and_expr } ;
+bitwise_or_expr      = bitwise_xor_expr , { "|" , bitwise_xor_expr } ;
+
+bitwise_xor_expr     = bitwise_and_expr , { "^" , bitwise_and_expr } ;
 
 bitwise_and_expr     = equality_expr , { "&" , equality_expr } ;
 
@@ -161,9 +163,10 @@ index_suffix         = "[" , expression , "]" ;
 |        8 | `<` `<=` `>` `>=`   | 非結合   | 比較（連鎖禁止）   |
 |        7 | `==` `!=`           | 非結合   | 等価（連鎖禁止）   |
 |        6 | `&`                 | 左結合   | ビット AND         |
-|        5 | `\|`                | 左結合   | ビット OR          |
-|        4 | `&&`                | 左結合   | 論理 AND           |
-|        3 | `\|\|`              | 左結合   | 論理 OR            |
+|        5 | `^`                 | 左結合   | ビット XOR         |
+|        4 | `\|`                | 左結合   | ビット OR          |
+|        3 | `&&`                | 左結合   | 論理 AND           |
+|        2 | `\|\|`              | 左結合   | 論理 OR            |
 
 > [!NOTE]
 > 2.4.1 の EBNF と本表（2.4.2）は、通常は同一の優先順位/結合規則を表すことを意図します。

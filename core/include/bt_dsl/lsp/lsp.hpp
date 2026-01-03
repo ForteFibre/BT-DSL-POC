@@ -20,12 +20,9 @@ struct ByteRange
  *
  * This provides LSP-equivalent features
  * (diagnostics/completion/hover/definition/outline) without implementing an LSP
- * server. It is intended to be called from a host (e.g. VS Code) and can be
- * exposed via WASM.
+ * server.
  *
- * All positions are expressed in UTF-8 byte offsets to avoid UTF-16/Unicode
- * ambiguities at the WASM boundary. The host is responsible for converting byte
- * offsets to editor positions.
+ * All positions are expressed in UTF-8 byte offsets.
  */
 class Workspace
 {
@@ -49,17 +46,6 @@ public:
     std::string_view uri, const std::vector<std::string> & imported_uris);
 
   // Import resolution (host-driven loading)
-  //
-  // Resolves import specs and returns a JSON payload describing the *direct*
-  // imports of a document.
-  //
-  // Spec: import is non-transitive. If A imports B and B imports C, A does not
-  // see C unless A explicitly imports C.
-  //
-  // The host may call this repeatedly: if new documents are added via
-  // set_document(), imports can become resolvable.
-  //
-  // If stdlib_uri is non-empty, it will be included as an implicit import.
   std::string resolve_imports_json(std::string_view uri, std::string_view stdlib_uri = {});
 
   // Completion
@@ -81,15 +67,12 @@ public:
   // Document symbols (outline)
   std::string document_symbols_json(std::string_view uri);
 
-  // Document highlights (like LSP textDocument/documentHighlight)
+  // Document highlights
   std::string document_highlights_json(std::string_view uri, uint32_t byte_offset);
   std::string document_highlights_json(
     std::string_view uri, uint32_t byte_offset, const std::vector<std::string> & imported_uris);
 
-  // Semantic tokens (like LSP textDocument/semanticTokens/full)
-  //
-  // The returned JSON contains UTF-8 byte ranges and semantic classifications
-  // derived from the analyzer/node registry.
+  // Semantic tokens
   std::string semantic_tokens_json(std::string_view uri);
   std::string semantic_tokens_json(
     std::string_view uri, const std::vector<std::string> & imported_uris);

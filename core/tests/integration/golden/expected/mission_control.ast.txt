@@ -1,0 +1,205 @@
+Program [1 docs]
+|-ImportDecl path='std/nodes.bt'
+|-ExternTypeDecl name='Vector3'
+|-ExternTypeDecl name='Quaternion'
+|-ExternTypeDecl name='Pose'
+|-TypeAliasDecl name='Seconds'
+| `-TypeExpr
+|   `-PrimaryType name='float64'
+|-TypeAliasDecl name='Millis'
+| `-TypeExpr
+|   `-PrimaryType name='int'
+|-TypeAliasDecl name='MaybePose'
+| `-TypeExpr nullable
+|   `-PrimaryType name='Pose'
+|-ExternDecl action name='Log'
+| `-ExternPort name='msg' in
+|   `-TypeExpr
+|     `-PrimaryType name='string'
+|-ExternDecl action name='GetTimeMs'
+| `-ExternPort name='now' out
+|   `-TypeExpr
+|     `-PrimaryType name='int64'
+|-ExternDecl action name='FindTarget'
+| |-ExternPort name='radius' in
+| | `-TypeExpr
+| |   `-PrimaryType name='float'
+| |-ExternPort name='found' out
+| | `-TypeExpr
+| |   `-PrimaryType name='bool'
+| `-ExternPort name='pose' out
+|   `-TypeExpr
+|     `-PrimaryType name='Pose'
+|-ExternDecl action name='ComputeGoal'
+| |-ExternPort name='pose' in
+| | `-TypeExpr
+| |   `-PrimaryType name='Pose'
+| `-ExternPort name='goal' out
+|   `-TypeExpr
+|     `-PrimaryType name='Vector3'
+|-ExternDecl action name='MoveTo'
+| |-ExternPort name='goal' in
+| | `-TypeExpr
+| |   `-PrimaryType name='Vector3'
+| |-ExternPort name='timeout_ms' in
+| | |-TypeExpr
+| | | `-PrimaryType name='Millis'
+| | `-VarRefExpr name='DEFAULT_TIMEOUT_MS'
+| `-ExternPort name='ok' out
+|   `-TypeExpr
+|     `-PrimaryType name='bool'
+|-ExternDecl action name='Shoot'
+| |-ExternPort name='burst' in
+| | `-TypeExpr
+| |   `-PrimaryType name='int32'
+| `-ExternPort name='ok' out
+|   `-TypeExpr
+|     `-PrimaryType name='bool'
+|-ExternDecl action name='Reload'
+| `-ExternPort name='ok' out
+|   `-TypeExpr
+|     `-PrimaryType name='bool'
+|-GlobalVarDecl name='TargetPose'
+| |-TypeExpr
+| | `-PrimaryType name='MaybePose'
+| `-NullLiteralExpr
+|-GlobalVarDecl name='HasTarget'
+| |-TypeExpr
+| | `-PrimaryType name='bool'
+| `-BoolLiteralExpr false
+|-GlobalVarDecl name='Ammo'
+| |-TypeExpr
+| | `-PrimaryType name='int32'
+| `-IntLiteralExpr 30
+|-GlobalVarDecl name='Goal'
+| `-TypeExpr
+|   `-PrimaryType name='Vector3'
+|-GlobalVarDecl name='LastError'
+| |-TypeExpr
+| | `-PrimaryType name='string'
+| `-StringLiteralExpr ""
+|-GlobalConstDecl name='DEFAULT_TIMEOUT_MS'
+| |-TypeExpr
+| | `-PrimaryType name='Millis'
+| `-IntLiteralExpr 2500
+|-GlobalConstDecl name='MAX_RETRIES'
+| |-TypeExpr
+| | `-PrimaryType name='int'
+| `-IntLiteralExpr 3
+|-GlobalConstDecl name='SEARCH_RADIUS'
+| |-TypeExpr
+| | `-PrimaryType name='float'
+| `-FloatLiteralExpr 10.000000
+|-TreeDecl name='EngageTarget'
+| |-ParamDecl name='pose' ref
+| | `-TypeExpr
+| |   `-PrimaryType name='Pose'
+| |-ParamDecl name='ammo' ref
+| | `-TypeExpr
+| |   `-PrimaryType name='int32'
+| |-ParamDecl name='ok' out
+| | `-TypeExpr
+| |   `-PrimaryType name='bool'
+| `-NodeStmt name='Sequence' [children]
+|   |-BlackboardDeclStmt name='local_ok'
+|   | |-TypeExpr
+|   | | `-PrimaryType name='bool'
+|   | `-BoolLiteralExpr true
+|   |-NodeStmt name='ComputeGoal' [props]
+|   | |-Argument name='pose'
+|   | | `-VarRefExpr name='pose'
+|   | `-Argument name='goal' out
+|   |   `-VarRefExpr name='Goal'
+|   |-NodeStmt name='MoveTo' [props]
+|   | |-Argument name='goal'
+|   | | `-VarRefExpr name='Goal'
+|   | `-Argument name='ok' out
+|   |   `-VarRefExpr name='local_ok'
+|   |-NodeStmt name='Log' [props]
+|   | |-Precondition @failure_if
+|   | | `-BinaryExpr op='=='
+|   | |   |-VarRefExpr name='local_ok'
+|   | |   `-BoolLiteralExpr false
+|   | `-Argument name='msg'
+|   |   `-StringLiteralExpr "MoveTo failed"
+|   |-NodeStmt name='Fallback' [children]
+|   | |-NodeStmt name='AlwaysSuccess' [props]
+|   | | `-Precondition @success_if
+|   | |   `-BinaryExpr op='>'
+|   | |     |-VarRefExpr name='ammo'
+|   | |     `-IntLiteralExpr 0
+|   | `-NodeStmt name='Reload' [props]
+|   |   `-Argument name='ok' out
+|   |     `-VarRefExpr name='local_ok'
+|   |-NodeStmt name='Repeat' [props] [children]
+|   | |-Argument name='num_cycles'
+|   | | `-IntLiteralExpr 3
+|   | `-NodeStmt name='Shoot' [props]
+|   |   |-Precondition @guard
+|   |   | `-VarRefExpr name='local_ok'
+|   |   |-Argument name='burst'
+|   |   | `-IntLiteralExpr 1
+|   |   `-Argument name='ok' out
+|   |     `-VarRefExpr name='local_ok'
+|   `-AssignmentStmt target='ok' =
+|     `-VarRefExpr name='local_ok'
+`-TreeDecl name='Main'
+  `-NodeStmt name='Sequence' [children]
+    |-NodeStmt name='GetTimeMs' [props]
+    | `-Argument name='now' out [inline]
+    |   `-InlineBlackboardDecl name='t0'
+    |-NodeStmt name='Repeat' [props] [children]
+    | |-Argument name='num_cycles'
+    | | `-VarRefExpr name='MAX_RETRIES'
+    | |-BlackboardDeclStmt name='found_now'
+    | | |-TypeExpr
+    | | | `-PrimaryType name='bool'
+    | | `-BoolLiteralExpr false
+    | |-NodeStmt name='FindTarget' [props]
+    | | |-Argument name='radius'
+    | | | `-VarRefExpr name='SEARCH_RADIUS'
+    | | |-Argument name='found' out
+    | | | `-VarRefExpr name='found_now'
+    | | `-Argument name='pose' out [inline]
+    | |   `-InlineBlackboardDecl name='p'
+    | |-AssignmentStmt target='HasTarget' =
+    | | `-VarRefExpr name='found_now'
+    | |-AssignmentStmt target='TargetPose' =
+    | | |-Precondition @failure_if
+    | | | `-BinaryExpr op='=='
+    | | |   |-VarRefExpr name='found_now'
+    | | |   `-BoolLiteralExpr false
+    | | `-VarRefExpr name='p'
+    | `-NodeStmt name='Log' [props]
+    |   |-Precondition @failure_if
+    |   | `-UnaryExpr op='!'
+    |   |   `-VarRefExpr name='found_now'
+    |   `-Argument name='msg'
+    |     `-StringLiteralExpr "No target yet"
+    |-NodeStmt name='Sequence' [children]
+    | |-Precondition @guard
+    | | `-BinaryExpr op='!='
+    | |   |-VarRefExpr name='TargetPose'
+    | |   `-NullLiteralExpr
+    | |-NodeStmt name='EngageTarget' [props]
+    | | |-Argument name='pose' ref
+    | | | `-VarRefExpr name='TargetPose'
+    | | |-Argument name='ammo' ref
+    | | | `-VarRefExpr name='Ammo'
+    | | `-Argument name='ok' out [inline]
+    | |   `-InlineBlackboardDecl name='ok'
+    | |-NodeStmt name='Log' [props]
+    | | |-Precondition @failure_if
+    | | | `-BinaryExpr op='=='
+    | | |   |-VarRefExpr name='ok'
+    | | |   `-BoolLiteralExpr false
+    | | `-Argument name='msg'
+    | |   `-StringLiteralExpr "EngageTarget returned failure"
+    | `-AssignmentStmt target='LastError' =
+    |   |-Precondition @failure_if
+    |   | `-BinaryExpr op='=='
+    |   |   |-VarRefExpr name='ok'
+    |   |   `-BoolLiteralExpr false
+    |   `-StringLiteralExpr "<none> & ok"
+    `-NodeStmt name='AlwaysSuccess' [props]
+

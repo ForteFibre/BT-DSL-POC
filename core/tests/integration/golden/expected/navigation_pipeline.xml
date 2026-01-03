@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="Main">
+    <BehaviorTree ID="Main">
+        <Sequence>
+            <Script code=" success#1 := false "/>
+            <ReadPose current="@{Start}"/>
+            <SetFixedGoal goal="@{Goal}"/>
+            <RetryUntilSuccessful num_attempts="2">
+                <Sequence>
+                    <SubTree ID="NavigateOnce" start="@{Start}" goal="@{Goal}" ok="{success#1}"/>
+                    <FormatStatus ok="{success#1}" txt="goal=&lt;x&gt;&amp;y" out_txt="@{StatusText}"/>
+                    <Print txt="@{StatusText}"/>
+                    <Script code=" @{HasPlan} = true " _successIf="{success#1}"/>
+                </Sequence>
+            </RetryUntilSuccessful>
+            <Timeout msec="2000">
+                <AlwaysSuccess/>
+            </Timeout>
+            <AlwaysSuccess/>
+        </Sequence>
+    </BehaviorTree>
+    <BehaviorTree ID="NavigateOnce">
+        <Sequence>
+            <Script code=" ok1#1 := false "/>
+            <Script code=" ok2#2 := false "/>
+            <Script code=" iter#3 := 0 "/>
+            <ComputePath start="{start}" goal="{goal}" ok="{ok1#1}" plan_id="@{PlanId}"/>
+            <Print txt="ComputePath failed" _failureIf="!{ok1#1}"/>
+            <RunOnce then_skip="true">
+                <Sequence>
+                    <Sequence _while="{ok1#1}">
+                        <ReadPose current="@{Current}"/>
+                        <Sequence>
+                            <Script code=" _default#4 := 0.25 "/>
+                            <FollowPath plan_id="@{PlanId}" ok="{ok2#2}" tolerance="{_default#4}" _while="({iter#3} &lt; 3)"/>
+                        </Sequence>
+                        <Script code=" iter#3 = (iter#3 + 1) "/>
+                    </Sequence>
+                    <AlwaysSuccess _failureIf="!({ok1#1})"/>
+                </Sequence>
+            </RunOnce>
+            <Script code=" ok = (ok1#1 &amp;&amp; ok2#2) "/>
+        </Sequence>
+    </BehaviorTree>
+    <TreeNodesModel>
+        <Action ID="AlwaysSuccess"/>
+        <Action ID="ComputePath">
+            <input_port name="goal" type="Vector3"/>
+            <input_port name="start" type="Vector3"/>
+            <output_port name="ok" type="bool"/>
+            <output_port name="plan_id" type="int32"/>
+        </Action>
+        <Action ID="FollowPath">
+            <input_port name="plan_id" type="int32"/>
+            <input_port name="tolerance" type="float"/>
+            <output_port name="ok" type="bool"/>
+        </Action>
+        <Action ID="FormatStatus">
+            <input_port name="ok" type="bool"/>
+            <input_port name="txt" type="string"/>
+            <output_port name="out_txt" type="string"/>
+        </Action>
+        <Action ID="Print">
+            <input_port name="txt" type="string"/>
+        </Action>
+        <Action ID="ReadPose">
+            <output_port name="current" type="Vector3"/>
+        </Action>
+        <Action ID="SetFixedGoal">
+            <output_port name="goal" type="Vector3"/>
+        </Action>
+        <Condition ID="BlackboardExists">
+            <input_port name="key" type="string"/>
+        </Condition>
+        <Control ID="Sequence"/>
+        <Decorator ID="RetryUntilSuccessful">
+            <input_port name="num_attempts" type="int"/>
+        </Decorator>
+        <Decorator ID="RunOnce">
+            <input_port name="then_skip" type="bool"/>
+        </Decorator>
+        <Decorator ID="Timeout">
+            <input_port name="msec" type="int"/>
+        </Decorator>
+        <SubTree ID="NavigateOnce">
+            <input_port name="goal" type="Vector3"/>
+            <input_port name="start" type="Vector3"/>
+            <output_port name="ok" type="bool"/>
+        </SubTree>
+    </TreeNodesModel>
+</root>
