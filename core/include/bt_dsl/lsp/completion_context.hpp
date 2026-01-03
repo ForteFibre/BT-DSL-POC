@@ -13,7 +13,7 @@ enum class CompletionContextKind {
   TopLevelKeywords,
   TreeBody,
   NodeName,
-  DecoratorName,
+  PreconditionKind,
   ArgStart,
   ArgName,
   ArgValue,
@@ -29,17 +29,11 @@ struct CompletionContext
   // Best-effort enrichment:
   std::optional<std::string> tree_name;
 
-  // Name of the node_stmt where the cursor is (if any).
-  std::optional<std::string> node_stmt_name;
-
-  // When inside a property_block, the callable (node/decorator) that owns it.
+  // When inside a property_block, the callable (node) that owns it.
   std::optional<std::string> callable_name;
-  bool callable_is_decorator = false;
 };
 
 // Classify completion context at a byte offset using Tree-sitter CST + Query.
-//
-// This function intentionally does NOT use text/brace/AST fallbacks.
 std::optional<CompletionContext> classify_completion_context(
   std::string_view text, uint32_t byte_offset);
 

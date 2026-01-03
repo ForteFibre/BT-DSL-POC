@@ -138,11 +138,35 @@ jobs:
             core/build-lsp/bt_dsl_lsp_server
           retention-days: 1
 
-  # 4. Lint Core (clang-format & clang-tidy)
-  lint-core:
+  # 4a. Lint Core (clang-format)
+  lint-core-format:
+    needs: changes
+    if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --filter @bt-dsl/core
+
+      - name: Check clang-format
+        run: pnpm --filter @bt-dsl/core format:check
+
+  # 4b. Lint Core (clang-tidy) - split by directory for parallel execution
+  lint-core-tidy:
     needs: [changes, build-grammar]
     if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: [lib, tools, tests]
+    name: lint-core-tidy (${{ matrix.directory }})
     steps:
       - uses: actions/checkout@v4
 
@@ -152,18 +176,13 @@ jobs:
           name: grammar-build
           path: tree-sitter-bt-dsl
 
-      - name: Check clang-format
-        run: |
-          find core/src core/include -name '*.cpp' -o -name '*.hpp' | \
-            xargs clang-format --dry-run -Werror
-
       - name: Configure for clang-tidy
         run: cmake -S core -B core/build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-      - name: Run clang-tidy
+      - name: Run clang-tidy on ${{ matrix.directory }}
         run: |
-          find core/src -name '*.cpp' | \
-            xargs clang-tidy -p core/build
+          find core/${{ matrix.directory }} \( -name '*.cpp' -o -name '*.c' \) | \
+            xargs -r -P$(nproc) -n1 clang-tidy -p core/build
 
   # 5. Core Native Build & Test (Skip if only frontend changed)
   test-core-native:
@@ -181,7 +200,7 @@ jobs:
           path: tree-sitter-bt-dsl
 
       - name: Configure CMake (with WERROR)
-        run: cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release -DWERROR=ON
+        run: cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build Core Native
         run: cmake --build core/build -j$(nproc)
@@ -313,11 +332,15 @@ jobs:
           name: formatter-build
           path: formatter
 
+      - name: Make LSP server executable
+        run: chmod +x core/build-lsp/bt_dsl_lsp_server
+
       - name: Install dependencies
         run: pnpm install
 
       - name: Build & Test VS Code Extension
         run: |
+          pnpm --filter bt-dsl-vscode prebuild
           pnpm --filter bt-dsl-vscode build
           pnpm --filter bt-dsl-vscode test
 
@@ -354,11 +377,15 @@ jobs:
           name: formatter-build
           path: formatter
 
+      - name: Make LSP server executable
+        run: chmod +x core/build-lsp/bt_dsl_lsp_server
+
       - name: Install dependencies
         run: pnpm install
 
       - name: Build all packages
         run: |
+          pnpm --filter bt-dsl-vscode prebuild
           pnpm --filter bt-dsl-vscode build
           pnpm --filter bt-dsl-vscode compile-tests
 

@@ -7,21 +7,28 @@
 (param_decl
   name: (identifier) @definition.parameter)
 
-; Local variables are definitions in tree scope
-(local_var_decl
+; Local blackboard vars / inline decls
+(blackboard_decl
   name: (identifier) @definition.var)
 
-; Global variables are definitions at program scope
-(global_var_decl
+(inline_blackboard_decl
   name: (identifier) @definition.var)
 
-; Blackboard references are references
-(blackboard_ref
-  name: (identifier) @reference)
+; Local consts
+(local_const_decl
+  name: (identifier) @definition.constant)
+
+; Global vars / consts
+(global_blackboard_decl
+  name: (identifier) @definition.var)
+
+(global_const_decl
+  name: (identifier) @definition.constant)
 
 ; Assignment targets are references
-(assignment_expr
-  target: (identifier) @reference)
+(assignment_stmt
+  target: (lvalue
+    base: (identifier) @reference))
 
 ; Variable references in expressions
 (primary_expr

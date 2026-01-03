@@ -1,0 +1,187 @@
+Program [1 docs]
+|-ImportDecl path='std/nodes.bt'
+|-ExternTypeDecl name='Vector3'
+|-TypeAliasDecl name='Millis'
+| `-TypeExpr
+|   `-PrimaryType name='int32'
+|-ExternDecl action name='ComputePath'
+| |-ExternPort name='start' in
+| | `-TypeExpr
+| |   `-PrimaryType name='Vector3'
+| |-ExternPort name='goal' in
+| | `-TypeExpr
+| |   `-PrimaryType name='Vector3'
+| |-ExternPort name='ok' out
+| | `-TypeExpr
+| |   `-PrimaryType name='bool'
+| `-ExternPort name='plan_id' out
+|   `-TypeExpr
+|     `-PrimaryType name='int32'
+|-ExternDecl action name='FollowPath'
+| |-ExternPort name='plan_id' in
+| | `-TypeExpr
+| |   `-PrimaryType name='int32'
+| |-ExternPort name='tolerance' in
+| | |-TypeExpr
+| | | `-PrimaryType name='float'
+| | `-VarRefExpr name='DEFAULT_TOLERANCE'
+| `-ExternPort name='ok' out
+|   `-TypeExpr
+|     `-PrimaryType name='bool'
+|-ExternDecl action name='ReadPose'
+| `-ExternPort name='current' out
+|   `-TypeExpr
+|     `-PrimaryType name='Vector3'
+|-ExternDecl action name='SetFixedGoal'
+| `-ExternPort name='goal' out
+|   `-TypeExpr
+|     `-PrimaryType name='Vector3'
+|-ExternDecl action name='FormatStatus'
+| |-ExternPort name='ok' in
+| | `-TypeExpr
+| |   `-PrimaryType name='bool'
+| |-ExternPort name='txt' in
+| | `-TypeExpr
+| |   `-PrimaryType name='string'
+| `-ExternPort name='out_txt' out
+|   `-TypeExpr
+|     `-PrimaryType name='string'
+|-ExternDecl action name='Print'
+| `-ExternPort name='txt' in
+|   `-TypeExpr
+|     `-PrimaryType name='string'
+|-GlobalVarDecl name='Start'
+| `-TypeExpr
+|   `-PrimaryType name='Vector3'
+|-GlobalVarDecl name='Goal'
+| `-TypeExpr
+|   `-PrimaryType name='Vector3'
+|-GlobalVarDecl name='Current'
+| `-TypeExpr
+|   `-PrimaryType name='Vector3'
+|-GlobalVarDecl name='HasPlan'
+| |-TypeExpr
+| | `-PrimaryType name='bool'
+| `-BoolLiteralExpr false
+|-GlobalVarDecl name='PlanId'
+| |-TypeExpr
+| | `-PrimaryType name='int32'
+| `-IntLiteralExpr 0
+|-GlobalVarDecl name='StatusText'
+| |-TypeExpr
+| | `-PrimaryType name='string'
+| `-StringLiteralExpr ""
+|-GlobalConstDecl name='DEFAULT_TOLERANCE'
+| |-TypeExpr
+| | `-PrimaryType name='float'
+| `-FloatLiteralExpr 0.250000
+|-GlobalConstDecl name='DEFAULT_TIMEOUT'
+| |-TypeExpr
+| | `-PrimaryType name='Millis'
+| `-BinaryExpr op='+'
+|   |-IntLiteralExpr 1200
+|   `-IntLiteralExpr 800
+|-TreeDecl name='NavigateOnce'
+| |-ParamDecl name='start' in
+| | `-TypeExpr
+| |   `-PrimaryType name='Vector3'
+| |-ParamDecl name='goal' in
+| | `-TypeExpr
+| |   `-PrimaryType name='Vector3'
+| |-ParamDecl name='ok' out
+| | `-TypeExpr
+| |   `-PrimaryType name='bool'
+| `-NodeStmt name='Sequence' [children]
+|   |-BlackboardDeclStmt name='ok1'
+|   | |-TypeExpr
+|   | | `-PrimaryType name='bool'
+|   | `-BoolLiteralExpr false
+|   |-BlackboardDeclStmt name='ok2'
+|   | |-TypeExpr
+|   | | `-PrimaryType name='bool'
+|   | `-BoolLiteralExpr false
+|   |-BlackboardDeclStmt name='iter'
+|   | |-TypeExpr
+|   | | `-PrimaryType name='int32'
+|   | `-IntLiteralExpr 0
+|   |-NodeStmt name='ComputePath' [props]
+|   | |-Argument name='start'
+|   | | `-VarRefExpr name='start'
+|   | |-Argument name='goal'
+|   | | `-VarRefExpr name='goal'
+|   | |-Argument name='ok' out
+|   | | `-VarRefExpr name='ok1'
+|   | `-Argument name='plan_id' out
+|   |   `-VarRefExpr name='PlanId'
+|   |-NodeStmt name='Print' [props]
+|   | |-Precondition @failure_if
+|   | | `-UnaryExpr op='!'
+|   | |   `-VarRefExpr name='ok1'
+|   | `-Argument name='txt'
+|   |   `-StringLiteralExpr "ComputePath failed"
+|   |-NodeStmt name='RunOnce' [props] [children]
+|   | |-Argument name='then_skip'
+|   | | `-BoolLiteralExpr true
+|   | `-NodeStmt name='Sequence' [children]
+|   |   |-Precondition @guard
+|   |   | `-VarRefExpr name='ok1'
+|   |   |-NodeStmt name='ReadPose' [props]
+|   |   | `-Argument name='current' out
+|   |   |   `-VarRefExpr name='Current'
+|   |   |-NodeStmt name='FollowPath' [props]
+|   |   | |-Precondition @run_while
+|   |   | | `-BinaryExpr op='<'
+|   |   | |   |-VarRefExpr name='iter'
+|   |   | |   `-IntLiteralExpr 3
+|   |   | |-Argument name='plan_id'
+|   |   | | `-VarRefExpr name='PlanId'
+|   |   | `-Argument name='ok' out
+|   |   |   `-VarRefExpr name='ok2'
+|   |   `-AssignmentStmt target='iter' +=
+|   |     `-IntLiteralExpr 1
+|   `-AssignmentStmt target='ok' =
+|     `-BinaryExpr op='&&'
+|       |-VarRefExpr name='ok1'
+|       `-VarRefExpr name='ok2'
+`-TreeDecl name='Main'
+  `-NodeStmt name='Sequence' [children]
+    |-BlackboardDeclStmt name='success'
+    | |-TypeExpr
+    | | `-PrimaryType name='bool'
+    | `-BoolLiteralExpr false
+    |-NodeStmt name='ReadPose' [props]
+    | `-Argument name='current' out
+    |   `-VarRefExpr name='Start'
+    |-NodeStmt name='SetFixedGoal' [props]
+    | `-Argument name='goal' out
+    |   `-VarRefExpr name='Goal'
+    |-NodeStmt name='RetryUntilSuccessful' [props] [children]
+    | |-Argument name='num_attempts'
+    | | `-IntLiteralExpr 2
+    | |-NodeStmt name='NavigateOnce' [props]
+    | | |-Argument name='start'
+    | | | `-VarRefExpr name='Start'
+    | | |-Argument name='goal'
+    | | | `-VarRefExpr name='Goal'
+    | | `-Argument name='ok' out
+    | |   `-VarRefExpr name='success'
+    | |-NodeStmt name='FormatStatus' [props]
+    | | |-Argument name='ok'
+    | | | `-VarRefExpr name='success'
+    | | |-Argument name='txt'
+    | | | `-StringLiteralExpr "goal=<x>&y"
+    | | `-Argument name='out_txt' out
+    | |   `-VarRefExpr name='StatusText'
+    | |-NodeStmt name='Print' [props]
+    | | `-Argument name='txt'
+    | |   `-VarRefExpr name='StatusText'
+    | `-AssignmentStmt target='HasPlan' =
+    |   |-Precondition @success_if
+    |   | `-VarRefExpr name='success'
+    |   `-BoolLiteralExpr true
+    |-NodeStmt name='Timeout' [props] [children]
+    | |-Argument name='msec'
+    | | `-VarRefExpr name='DEFAULT_TIMEOUT'
+    | `-NodeStmt name='AlwaysSuccess' [props]
+    `-NodeStmt name='AlwaysSuccess' [props]
+

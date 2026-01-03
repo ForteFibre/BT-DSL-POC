@@ -1,0 +1,1246 @@
+// bt_dsl/sema/type_checker.cpp - Bidirectional type checker implementation
+//
+#include "bt_dsl/sema/types/type_checker.hpp"
+
+#include <string>
+#include <unordered_set>
+#include <vector>
+
+#include "bt_dsl/ast/ast_context.hpp"
+#include "bt_dsl/basic/casting.hpp"
+#include "bt_dsl/sema/resolution/node_registry.hpp"
+#include "bt_dsl/sema/types/const_evaluator.hpp"
+#include "bt_dsl/sema/types/const_value.hpp"
+#include "bt_dsl/sema/types/type_utils.hpp"
+
+namespace bt_dsl
+{
+
+namespace
+{
+
+[[nodiscard]] const Symbol * base_lvalue_symbol(const Expr * expr) noexcept
+{
+  // For lvalue expressions, return the base variable symbol:
+  // - VarRef -> that symbol
+  // - IndexExpr -> recurse into base
+  // Otherwise null.
+  if (!expr) return nullptr;
+  if (const auto * vr = dyn_cast<VarRefExpr>(expr)) {
+    return vr->resolvedSymbol;
+  }
+  if (const auto * ix = dyn_cast<IndexExpr>(expr)) {
+    return base_lvalue_symbol(ix->base);
+  }
+  return nullptr;
+}
+
+[[nodiscard]] const ParamDecl * writable_param_from_symbol(const Symbol * sym) noexcept
+{
+  if (!sym) return nullptr;
+  if (!sym->is_parameter()) return nullptr;
+  if (!sym->is_writable()) return nullptr;
+  return dyn_cast<ParamDecl>(sym->astNode);
+}
+
+void collect_write_usages_in_stmt(const Stmt * stmt, std::unordered_set<const ParamDecl *> & out)
+{
+  if (!stmt) return;
+
+  if (const auto * assign = dyn_cast<AssignmentStmt>(stmt)) {
+    if (const ParamDecl * p = writable_param_from_symbol(assign->resolvedTarget)) {
+      out.insert(p);
+    }
+    return;
+  }
+
+  if (const auto * node = dyn_cast<NodeStmt>(stmt)) {
+    for (const auto * arg : node->args) {
+      if (!arg) continue;
+      if (arg->is_inline_decl()) continue;
+
+      const PortDirection arg_dir = arg->direction.value_or(PortDirection::In);
+      if (arg_dir != PortDirection::Mut && arg_dir != PortDirection::Out) {
+        continue;
+      }
+
+      if (const ParamDecl * p = writable_param_from_symbol(base_lvalue_symbol(arg->valueExpr))) {
+        out.insert(p);
+      }
+    }
+
+    for (const auto * child : node->children) {
+      collect_write_usages_in_stmt(child, out);
+    }
+    return;
+  }
+}
+
+void warn_unused_write_params(const TreeDecl * tree, DiagnosticBag * diags)
+{
+  if (!tree || !diags) return;
+
+  // Collect mut/out params (write-capable).
+  std::unordered_set<const ParamDecl *> writable;
+  writable.reserve(tree->params.size());
+  for (const auto * param : tree->params) {
+    if (!param) continue;
+    const PortDirection dir = param->direction.value_or(PortDirection::In);
+    if (dir == PortDirection::Mut || dir == PortDirection::Out) {
+      writable.insert(param);
+    }
+  }
+
+  if (writable.empty()) return;
+
+  // Collect actual write usages.
+  std::unordered_set<const ParamDecl *> used;
+  used.reserve(writable.size());
+  for (const auto * stmt : tree->body) {
+    collect_write_usages_in_stmt(stmt, used);
+  }
+
+  for (const auto * param : tree->params) {
+    if (!param) continue;
+    if (writable.count(param) && !used.count(param)) {
+      diags->warning(
+        param->get_range(), std::string("Parameter '") + std::string(param->name) +
+                              "' is declared as mut/out but never used for write access");
+    }
+  }
+}
+
+[[nodiscard]] bool is_lvalue_expr(const Expr * expr) noexcept
+{
+  if (!expr) return false;
+  // Spec 6.4.3 (and reference impl): only identifiers and index expressions are lvalues.
+  return expr->get_kind() == NodeKind::VarRef || expr->get_kind() == NodeKind::IndexExpr;
+}
+
+enum class DirDiagKind { Ok, Warning, Error };
+
+[[nodiscard]] DirDiagKind check_dir_matrix(PortDirection arg_dir, PortDirection port_dir) noexcept
+{
+  // Mirror core/ reference semantics matrix used by Analyzer::validate_arguments.
+  switch (arg_dir) {
+    case PortDirection::In:
+      return (port_dir == PortDirection::In) ? DirDiagKind::Ok : DirDiagKind::Error;
+    case PortDirection::Ref:
+      if (port_dir == PortDirection::Ref) return DirDiagKind::Ok;
+      if (port_dir == PortDirection::In) return DirDiagKind::Warning;
+      return DirDiagKind::Error;  // ref -> mut/out invalid
+    case PortDirection::Mut:
+      if (port_dir == PortDirection::Mut) return DirDiagKind::Ok;
+      if (port_dir == PortDirection::In || port_dir == PortDirection::Ref)
+        return DirDiagKind::Warning;
+      return DirDiagKind::Error;  // mut -> out invalid
+    case PortDirection::Out:
+      return (port_dir == PortDirection::Out) ? DirDiagKind::Ok : DirDiagKind::Error;
+  }
+  return DirDiagKind::Error;
+}
+
+[[nodiscard]] const ExternPort * find_extern_port(const ExternDecl * decl, std::string_view name)
+{
+  if (!decl) return nullptr;
+  for (const auto * p : decl->ports) {
+    if (p && p->name == name) return p;
+  }
+  return nullptr;
+}
+
+[[nodiscard]] const ParamDecl * find_param(const TreeDecl * decl, std::string_view name)
+{
+  if (!decl) return nullptr;
+  for (const auto * p : decl->params) {
+    if (p && p->name == name) return p;
+  }
+  return nullptr;
+}
+
+[[nodiscard]] bool port_requires_lvalue(PortDirection d) noexcept
+{
+  return d == PortDirection::Ref || d == PortDirection::Mut || d == PortDirection::Out;
+}
+
+[[nodiscard]] bool is_assignable_for_port_check(const Type * target, const Type * source) noexcept
+{
+  if (!target || !source) return false;
+
+  // Preserve error recovery behavior.
+  if (target->is_error() || source->is_error()) return true;
+
+  // The generic is_assignable() is intentionally permissive for placeholders.
+  // For port validation we want the reference-like behavior:
+  // - {integer} only matches integer/float
+  // - {float} only matches float
+  // - {null} only matches nullable
+  // - ? remains permissive
+  switch (source->kind) {
+    case TypeKind::IntegerLiteral:
+      return target->is_integer() || target->is_float();
+    case TypeKind::FloatLiteral:
+      return target->is_float();
+    case TypeKind::NullLiteral:
+      return target->is_nullable();
+    case TypeKind::Unknown:
+      return true;
+    default:
+      break;
+  }
+
+  // Null-safety is enforced in a later analysis pass (NullChecker).
+  // For port validation we allow passing a nullable value (T?) to a non-nullable port (T)
+  // and let the null-safety analysis reject unguarded uses.
+  if (!target->is_nullable() && source->is_nullable() && source->base_type) {
+    // Exact base-type match required here; widening is handled separately.
+    if (is_assignable(target, source->base_type)) return true;
+  }
+
+  return is_assignable(target, source);
+}
+
+}  // namespace
+
+// ============================================================================
+// Constructor
+// ============================================================================
+
+TypeChecker::TypeChecker(
+  TypeContext & types, const TypeTable & typeTable, const SymbolTable & values,
+  DiagnosticBag * diags)
+: types_(types), type_table_(typeTable), values_(values), diags_(diags)
+{
+}
+
+// ============================================================================
+// Entry Points
+// ============================================================================
+
+bool TypeChecker::check(Program & program)
+{
+  // Validate type alias definitions even if unused.
+  // Spec: circular type alias definitions are prohibited.
+  for (auto * alias : program.typeAliases) {
+    if (!alias || !alias->aliasedType) continue;
+    (void)resolve_type(alias->aliasedType);
+  }
+
+  // Check global variable declarations
+  for (auto * decl : program.globalVars) {
+    check_global_var_decl(decl);
+  }
+
+  // Check global const declarations (types should already be set by ConstEvaluator)
+  for (auto * decl : program.globalConsts) {
+    check_global_const_decl(decl);
+  }
+
+  // Check tree declarations
+  for (auto * tree : program.trees) {
+    check_tree_decl(tree);
+  }
+
+  return !has_errors_;
+}
+
+const Type * TypeChecker::check_expr(Expr * expr)
+{
+  return check_expr_with_expected(expr, nullptr);
+}
+
+const Type * TypeChecker::check_expr_with_expected(Expr * expr, const Type * expected)
+{
+  if (!expr) return types_.error_type();
+
+  const Type * result = nullptr;
+
+  switch (expr->get_kind()) {
+    case NodeKind::IntLiteral:
+      result = infer_int_literal(cast<IntLiteralExpr>(expr), expected);
+      break;
+    case NodeKind::FloatLiteral:
+      result = infer_float_literal(cast<FloatLiteralExpr>(expr), expected);
+      break;
+    case NodeKind::StringLiteral:
+      result = infer_string_literal(cast<StringLiteralExpr>(expr), expected);
+      break;
+    case NodeKind::BoolLiteral:
+      result = infer_bool_literal(cast<BoolLiteralExpr>(expr));
+      break;
+    case NodeKind::NullLiteral:
+      result = infer_null_literal(cast<NullLiteralExpr>(expr), expected);
+      break;
+    case NodeKind::VarRef:
+      result = infer_var_ref(cast<VarRefExpr>(expr));
+      break;
+    case NodeKind::BinaryExpr:
+      result = infer_binary_expr(cast<BinaryExpr>(expr), expected);
+      break;
+    case NodeKind::UnaryExpr:
+      result = infer_unary_expr(cast<UnaryExpr>(expr), expected);
+      break;
+    case NodeKind::CastExpr:
+      result = infer_cast_expr(cast<CastExpr>(expr));
+      break;
+    case NodeKind::IndexExpr:
+      result = infer_index_expr(cast<IndexExpr>(expr));
+      break;
+    case NodeKind::ArrayLiteralExpr:
+      result = infer_array_literal(cast<ArrayLiteralExpr>(expr), expected);
+      break;
+    case NodeKind::ArrayRepeatExpr:
+      result = infer_array_repeat(cast<ArrayRepeatExpr>(expr), expected);
+      break;
+    case NodeKind::VecMacroExpr:
+      result = infer_vec_macro(cast<VecMacroExpr>(expr), expected);
+      break;
+    case NodeKind::MissingExpr:
+      result = types_.error_type();
+      break;
+    default:
+      result = types_.error_type();
+  }
+
+  // Set the resolved type on the expression
+  // Note: expr is already non-const, no cast needed
+  expr->resolvedType = result;
+  return result;
+}
+
+// ============================================================================
+// Expression Type Inference
+// ============================================================================
+
+const Type * TypeChecker::infer_int_literal(IntLiteralExpr * /*node*/, const Type * expected)
+{
+  // If we have an expected type, try to resolve to it
+  if (expected && (expected->is_integer() || expected->is_float())) {
+    // Check if the value fits in the expected type
+    // For now, we trust the expected type
+    return expected;
+  }
+  // Return placeholder type - will be defaulted to int32 later
+  return types_.integer_literal_type();
+}
+
+const Type * TypeChecker::infer_float_literal(FloatLiteralExpr * /*node*/, const Type * expected)
+{
+  if (expected && expected->is_float()) {
+    return expected;
+  }
+  // Return placeholder type - will be defaulted to float64 later
+  return types_.float_literal_type();
+}
+
+const Type * TypeChecker::infer_string_literal(StringLiteralExpr * node, const Type * expected)
+{
+  // String literals can be contextually typed to bounded strings.
+  // Reference: docs/reference/type-system/type-definitions.md §3.1.1.4
+  // Reference: docs/reference/type-system/inference-and-resolution.md
+  if (expected && expected->kind == TypeKind::BoundedString) {
+    const auto len_bytes = static_cast<uint64_t>(node->value.size());
+    if (len_bytes > expected->size) {
+      report_error(node->get_range(), "string literal exceeds bounded string size");
+      return types_.error_type();
+    }
+
+    return expected;
+  }
+  return types_.string_type();
+}
+
+const Type * TypeChecker::infer_bool_literal(BoolLiteralExpr * /*node*/)
+{
+  return types_.bool_type();
+}
+
+const Type * TypeChecker::infer_null_literal(NullLiteralExpr * node, const Type * expected)
+{
+  if (expected && expected->is_nullable()) {
+    return expected;
+  }
+
+  // Null without a nullable context is an error.
+  // (E.g. `const X = null;` MUST FAIL per reference tests.)
+  report_error(node->get_range(), "cannot infer type of null literal without a nullable context");
+  return types_.error_type();
+}
+
+const Type * TypeChecker::infer_var_ref(VarRefExpr * node)
+{
+  if (!node->resolvedSymbol) {
+    // NameResolver didn't find this - already an error
+    return types_.error_type();
+  }
+  return get_symbol_type(node->resolvedSymbol);
+}
+
+const Type * TypeChecker::infer_binary_expr(BinaryExpr * node, const Type * /*expected*/)
+{
+  // Equality with null literal needs contextual typing: infer null from the other operand.
+  // Without this, expressions like `x != null` would fail type checking even when x is nullable.
+  if (node->op == BinaryOp::Eq || node->op == BinaryOp::Ne) {
+    const bool lhs_is_null = node->lhs && node->lhs->get_kind() == NodeKind::NullLiteral;
+    const bool rhs_is_null = node->rhs && node->rhs->get_kind() == NodeKind::NullLiteral;
+    if (lhs_is_null ^ rhs_is_null) {
+      Expr * non_null_expr = lhs_is_null ? node->rhs : node->lhs;
+      Expr * null_expr = lhs_is_null ? node->lhs : node->rhs;
+
+      const Type * non_null_t = check_expr(non_null_expr);
+      if (!non_null_t || non_null_t->is_error()) {
+        return types_.error_type();
+      }
+
+      if (!non_null_t->is_nullable() && !non_null_t->is_placeholder()) {
+        report_error(null_expr->get_range(), "null can only be compared with nullable types");
+        null_expr->resolvedType = types_.null_literal_type();
+      } else {
+        (void)check_expr_with_expected(null_expr, non_null_t);
+      }
+      return types_.bool_type();
+    }
+  }
+
+  // First, infer types of operands
+  const Type * lhs_type = check_expr(node->lhs);
+  const Type * rhs_type = check_expr(node->rhs);
+
+  switch (node->op) {
+    // Arithmetic operations
+    case BinaryOp::Add:
+    case BinaryOp::Sub:
+    case BinaryOp::Mul:
+    case BinaryOp::Div: {
+      // String concatenation special case
+      if (node->op == BinaryOp::Add && lhs_type->is_string() && rhs_type->is_string()) {
+        return types_.string_type();
+      }
+      const Type * common = common_numeric_type(types_, lhs_type, rhs_type);
+      if (!common) {
+        report_error(node->get_range(), "incompatible operand types for arithmetic operation");
+        return types_.error_type();
+      }
+      return common;
+    }
+
+    case BinaryOp::Mod: {
+      // Modulo requires integer operands
+      if (!lhs_type->is_integer() && lhs_type->kind != TypeKind::IntegerLiteral) {
+        report_error(node->lhs->get_range(), "modulo requires integer operands");
+        return types_.error_type();
+      }
+      if (!rhs_type->is_integer() && rhs_type->kind != TypeKind::IntegerLiteral) {
+        report_error(node->rhs->get_range(), "modulo requires integer operands");
+        return types_.error_type();
+      }
+      return common_numeric_type(types_, lhs_type, rhs_type);
+    }
+
+    // Comparison operations - result is always bool
+    case BinaryOp::Lt:
+    case BinaryOp::Le:
+    case BinaryOp::Gt:
+    case BinaryOp::Ge: {
+      if (!lhs_type->is_numeric() && !lhs_type->is_placeholder()) {
+        report_error(node->lhs->get_range(), "comparison requires numeric operands");
+        return types_.error_type();
+      }
+      if (!rhs_type->is_numeric() && !rhs_type->is_placeholder()) {
+        report_error(node->rhs->get_range(), "comparison requires numeric operands");
+        return types_.error_type();
+      }
+      return types_.bool_type();
+    }
+
+    // Equality operations
+    case BinaryOp::Eq:
+    case BinaryOp::Ne: {
+      if (!are_comparable(lhs_type, rhs_type)) {
+        report_error(node->get_range(), "operands are not comparable");
+        return types_.error_type();
+      }
+      return types_.bool_type();
+    }
+
+    // Logical operations
+    case BinaryOp::And:
+    case BinaryOp::Or: {
+      if (lhs_type->kind != TypeKind::Bool) {
+        report_error(node->lhs->get_range(), "logical operation requires bool operands");
+        return types_.error_type();
+      }
+      if (rhs_type->kind != TypeKind::Bool) {
+        report_error(node->rhs->get_range(), "logical operation requires bool operands");
+        return types_.error_type();
+      }
+      return types_.bool_type();
+    }
+
+    // Bitwise operations
+    case BinaryOp::BitAnd:
+    case BinaryOp::BitXor:
+    case BinaryOp::BitOr: {
+      if (!lhs_type->is_integer() && lhs_type->kind != TypeKind::IntegerLiteral) {
+        report_error(node->lhs->get_range(), "bitwise operation requires integer operands");
+        return types_.error_type();
+      }
+      if (!rhs_type->is_integer() && rhs_type->kind != TypeKind::IntegerLiteral) {
+        report_error(node->rhs->get_range(), "bitwise operation requires integer operands");
+        return types_.error_type();
+      }
+      return common_numeric_type(types_, lhs_type, rhs_type);
+    }
+
+    default:
+      return types_.error_type();
+  }
+}
+
+const Type * TypeChecker::infer_unary_expr(UnaryExpr * node, const Type * expected)
+{
+  const Type * operand_type = check_expr_with_expected(node->operand, expected);
+
+  switch (node->op) {
+    case UnaryOp::Neg: {
+      // Negation applies to numeric types
+      if (!operand_type->is_numeric() && !operand_type->is_placeholder()) {
+        report_error(node->operand->get_range(), "negation requires numeric operand");
+        return types_.error_type();
+      }
+      return operand_type;
+    }
+
+    case UnaryOp::Not: {
+      // Logical not requires bool
+      if (operand_type->kind != TypeKind::Bool) {
+        report_error(node->operand->get_range(), "logical not requires bool operand");
+        return types_.error_type();
+      }
+      return types_.bool_type();
+    }
+
+    default:
+      return types_.error_type();
+  }
+}
+
+const Type * TypeChecker::infer_cast_expr(CastExpr * node)
+{
+  // Type check the source expression
+  check_expr(node->expr);
+
+  // Resolve the target type
+  const Type * target_type = resolve_type(node->targetType);
+  if (!target_type || target_type->is_error()) {
+    return types_.error_type();
+  }
+
+  // For now, allow all casts - validation of cast compatibility
+  // would go here if needed
+  return target_type;
+}
+
+const Type * TypeChecker::infer_index_expr(IndexExpr * node)
+{
+  const Type * base_type = check_expr(node->base);
+  const Type * index_type = check_expr(node->index);
+
+  // Index must be integer
+  if (!index_type->is_integer() && index_type->kind != TypeKind::IntegerLiteral) {
+    report_error(node->index->get_range(), "array index must be integer type");
+  }
+
+  // Base must be array type
+  if (!base_type->is_array()) {
+    if (!base_type->is_error()) {
+      report_error(node->base->get_range(), "subscripted value is not an array");
+    }
+    return types_.error_type();
+  }
+
+  // Return element type
+  return base_type->element_type;
+}
+
+const Type * TypeChecker::infer_array_literal(ArrayLiteralExpr * node, const Type * expected)
+{
+  if (node->elements.empty()) {
+    // Empty array - need expected type to determine element type
+    if (expected && expected->is_array()) {
+      return expected;
+    }
+    report_error(node->get_range(), "cannot infer type of empty array literal");
+    return types_.error_type();
+  }
+
+  // Determine expected element type from context
+  const Type * expected_elem = nullptr;
+  if (expected && expected->is_array()) {
+    expected_elem = expected->element_type;
+  }
+
+  // Type check all elements
+  const Type * elem_type = nullptr;
+  for (auto * elem : node->elements) {
+    const Type * t = check_expr_with_expected(elem, expected_elem);
+    if (!elem_type) {
+      elem_type = t;
+    } else {
+      // Ensure all elements are compatible
+      const Type * common = common_numeric_type(types_, elem_type, t);
+      if (common) {
+        elem_type = common;
+      } else if (!is_assignable(elem_type, t) && !is_assignable(t, elem_type)) {
+        report_error(elem->get_range(), "array element type mismatch");
+        return types_.error_type();
+      }
+    }
+  }
+
+  // Create static array type [T; N]
+  return types_.get_static_array_type(apply_defaults(elem_type), node->elements.size());
+}
+
+const Type * TypeChecker::infer_array_repeat(ArrayRepeatExpr * node, const Type * expected)
+{
+  // Determine expected element type from context
+  const Type * expected_elem = nullptr;
+  if (expected && expected->is_array()) {
+    expected_elem = expected->element_type;
+  }
+
+  const Type * value_type = check_expr_with_expected(node->value, expected_elem);
+
+  // Spec: [e; N] requires N be a const_expr (non-negative integer).
+  // We intentionally re-use ConstEvaluator here since expression nodes do not
+  // carry evaluated const values.
+  AstContext tmp_ast;
+  ConstEvaluator eval(tmp_ast, types_, values_, nullptr);
+  std::optional<uint64_t> n = eval.evaluate_array_size(node->count, node->count->get_range());
+
+  if (n.has_value()) {
+    return types_.get_static_array_type(apply_defaults(value_type), *n);
+  }
+
+  report_error(
+    node->count->get_range(), "array repeat count must be a non-negative integer constant");
+
+  // Error recovery: keep going with a placeholder size to avoid cascaded errors.
+  return types_.get_static_array_type(apply_defaults(value_type), 0);
+}
+
+const Type * TypeChecker::infer_vec_macro(VecMacroExpr * node, const Type * expected)
+{
+  // Determine expected element type from context
+  const Type * expected_elem = nullptr;
+  if (expected && expected->kind == TypeKind::DynamicArray) {
+    expected_elem = expected->element_type;
+  }
+
+  // Check the inner array expression (ignore expectedElem for inner, as it will be array)
+  const Type * inner_type = check_expr_with_expected(node->inner, nullptr);
+  (void)expected_elem;  // Suppress unused warning
+
+  // Result is a dynamic array
+  if (inner_type->is_array() && inner_type->element_type) {
+    return types_.get_dynamic_array_type(apply_defaults(inner_type->element_type));
+  }
+
+  report_error(node->get_range(), "vec! requires an array expression");
+  return types_.error_type();
+}
+
+// ============================================================================
+// Statement/Declaration Processing
+// ============================================================================
+
+void TypeChecker::check_stmt(Stmt * stmt)
+{
+  if (!stmt) return;
+
+  switch (stmt->get_kind()) {
+    case NodeKind::NodeStmt:
+      check_node_stmt(cast<NodeStmt>(stmt));
+      break;
+    case NodeKind::AssignmentStmt:
+      check_assignment_stmt(cast<AssignmentStmt>(stmt));
+      break;
+    case NodeKind::BlackboardDeclStmt:
+      check_blackboard_decl_stmt(cast<BlackboardDeclStmt>(stmt));
+      break;
+    case NodeKind::ConstDeclStmt:
+      check_const_decl_stmt(cast<ConstDeclStmt>(stmt));
+      break;
+    default:
+      break;
+  }
+}
+
+void TypeChecker::check_node_stmt(NodeStmt * node)
+{
+  // Check preconditions
+  for (auto * pre : node->preconditions) {
+    const Type * cond_type = check_expr_with_expected(pre->condition, types_.bool_type());
+    if (cond_type->kind != TypeKind::Bool && !cond_type->is_error()) {
+      report_error(pre->condition->get_range(), "precondition must be boolean");
+    }
+  }
+
+  // Check arguments
+  for (auto * arg : node->args) {
+    if (!arg) continue;
+
+    // Look up the port/param signature from the resolved node definition.
+    const Type * expected_type = nullptr;
+    bool has_signature = false;
+    PortDirection port_dir = PortDirection::In;
+
+    if (node->resolvedNode && node->resolvedNode->decl) {
+      const AstNode * decl = node->resolvedNode->decl;
+      if (const auto * ext = dyn_cast<ExternDecl>(decl)) {
+        if (const ExternPort * p = find_extern_port(ext, arg->name)) {
+          has_signature = true;
+          port_dir = p->direction.value_or(PortDirection::In);
+          expected_type = resolve_type(p->type);
+        }
+      } else if (const auto * tree = dyn_cast<TreeDecl>(decl)) {
+        if (const ParamDecl * p = find_param(tree, arg->name)) {
+          has_signature = true;
+          port_dir = p->direction.value_or(PortDirection::In);
+          expected_type = resolve_type(p->type);
+        }
+      }
+    }
+
+    // If we have a signature but the port name is unknown, report it.
+    if (node->resolvedNode && node->resolvedNode->decl && !has_signature) {
+      report_error(
+        arg->get_range(), std::string("Unknown port '") + std::string(arg->name) + "' for node '" +
+                            std::string(node->nodeName) + "'");
+      // Still type-check the expression for better error recovery.
+      if (arg->valueExpr) check_expr(arg->valueExpr);
+      continue;
+    }
+
+    const PortDirection arg_dir = arg->direction.value_or(PortDirection::In);
+
+    // Inline out-var decls: they don't have a valueExpr.
+    if (arg->is_inline_decl()) {
+      // Keep behavior close to reference: inline decl is only for out ports.
+      if (has_signature && port_dir != PortDirection::Out) {
+        report_error(
+          arg->inlineDecl->get_range(),
+          std::string("Inline declaration is only allowed for 'out' ports (port '") +
+            std::string(arg->name) + "' is not out)");
+      }
+      // Direction marker is implicitly out for inline decl.
+      if (arg_dir != PortDirection::Out) {
+        report_error(arg->inlineDecl->get_range(), "Inline declaration requires 'out' direction");
+      }
+      continue;
+    }
+
+    if (!arg->valueExpr) continue;
+
+    // Spec 6.4.3: explicit ref/mut/out argument markers require an lvalue.
+    if (arg_dir != PortDirection::In && !is_lvalue_expr(arg->valueExpr)) {
+      report_error(
+        arg->get_range(), std::string("Direction '") + std::string(to_string(arg_dir)) +
+                            "' requires an lvalue argument");
+    }
+
+    // Spec 6.4.3: ref/mut/out ports require an lvalue argument.
+    if (has_signature && port_requires_lvalue(port_dir) && !is_lvalue_expr(arg->valueExpr)) {
+      report_error(
+        arg->get_range(),
+        std::string("Port '") + std::string(arg->name) + "' requires an lvalue argument");
+      // Don't attempt type/direction checks further; expression isn't a legal argument here.
+      continue;
+    }
+
+    // Spec 6.4.4: additional restrictions when the argument refers to a tree parameter.
+    // - in/ref params cannot be written (mut/out)
+    // - out params cannot be read as ref
+    if (const Symbol * base_sym = base_lvalue_symbol(arg->valueExpr)) {
+      if (base_sym->is_parameter()) {
+        const PortDirection param_dir = base_sym->direction.value_or(PortDirection::In);
+        if (
+          (arg_dir == PortDirection::Mut || arg_dir == PortDirection::Out) &&
+          (param_dir == PortDirection::In || param_dir == PortDirection::Ref)) {
+          report_error(
+            arg->get_range(), std::string("Tree parameter '") + std::string(base_sym->name) +
+                                "' cannot be passed with '" + std::string(to_string(arg_dir)) +
+                                "' direction");
+        }
+        if (arg_dir == PortDirection::Ref && param_dir == PortDirection::Out) {
+          report_error(
+            arg->get_range(), std::string("Tree parameter '") + std::string(base_sym->name) +
+                                "' declared as 'out' cannot be passed with 'ref' direction");
+        }
+      }
+    }
+
+    // Spec 6.4.2: direction consistency (reference matrix).
+    if (has_signature) {
+      const DirDiagKind m = check_dir_matrix(arg_dir, port_dir);
+      if (m == DirDiagKind::Error) {
+        report_error(
+          arg->get_range(), std::string("Direction mismatch: port '") + std::string(arg->name) +
+                              "' is '" + std::string(to_string(port_dir)) + "' but argument is '" +
+                              std::string(to_string(arg_dir)) + "'.");
+      } else if (m == DirDiagKind::Warning) {
+        if (diags_) {
+          diags_->warning(
+            arg->get_range(), std::string("Direction is more permissive than required: port '") +
+                                std::string(arg->name) + "' is '" +
+                                std::string(to_string(port_dir)) + "' but argument is '" +
+                                std::string(to_string(arg_dir)) + "'.");
+        }
+      }
+    }
+
+    // Spec 6.4.1: use the port signature type as expected type where meaningful.
+    // - In ports: expression is checked against port type (top-down typing for literals)
+    // - Out ports: lvalue target must be able to accept port type
+    // - Ref/Mut: require exact type match
+    if (has_signature && expected_type && !expected_type->is_error()) {
+      if (port_dir == PortDirection::In) {
+        const Type * expr_type = check_expr_with_expected(arg->valueExpr, expected_type);
+        if (!is_assignable_for_port_check(expected_type, expr_type)) {
+          report_error(
+            arg->get_range(), std::string("Type mismatch: port '") + std::string(arg->name) +
+                                "' expects a value assignable to the declared port type");
+        }
+      } else {
+        const Type * lv_type = check_expr(arg->valueExpr);
+        if (!lv_type->is_error()) {
+          bool ok = true;
+          switch (port_dir) {
+            case PortDirection::Out:
+              ok = is_assignable_for_port_check(lv_type, expected_type);
+              break;
+            case PortDirection::Ref:
+            case PortDirection::Mut:
+              ok = (lv_type == expected_type);
+
+              // Allow T? lvalue to bind to ref/mut T (null-safety enforced later).
+              if (
+                !ok && !expected_type->is_nullable() && lv_type->is_nullable() &&
+                lv_type->base_type == expected_type) {
+                ok = true;
+              }
+              break;
+            case PortDirection::In:
+              ok = true;
+              break;
+          }
+          if (!ok) {
+            report_error(
+              arg->get_range(), std::string("Type mismatch: argument for port '") +
+                                  std::string(arg->name) +
+                                  "' is incompatible with the declared port type");
+          }
+        }
+      }
+    } else {
+      // No signature/type: still type-check the expression.
+      check_expr(arg->valueExpr);
+    }
+  }
+
+  // Recursively check children
+  for (auto * child : node->children) {
+    check_stmt(child);
+  }
+}
+
+void TypeChecker::check_assignment_stmt(AssignmentStmt * node)
+{
+  // Check preconditions
+  for (auto * pre : node->preconditions) {
+    const Type * cond_type = check_expr_with_expected(pre->condition, types_.bool_type());
+    if (cond_type->kind != TypeKind::Bool && !cond_type->is_error()) {
+      report_error(pre->condition->get_range(), "precondition must be boolean");
+    }
+  }
+
+  // Get target type
+  const Type * target_type = nullptr;
+  if (node->resolvedTarget) {
+    target_type = get_symbol_type(node->resolvedTarget);
+  }
+
+  // Check index expressions if any
+  for (auto * idx : node->indices) {
+    const Type * idx_type = check_expr(idx);
+    if (!idx_type->is_integer() && idx_type->kind != TypeKind::IntegerLiteral) {
+      report_error(idx->get_range(), "array index must be integer");
+    }
+    // Update target type to element type
+    if (target_type && target_type->is_array()) {
+      target_type = target_type->element_type;
+    }
+  }
+
+  // Check value expression with expected type
+  const Type * value_type = check_expr_with_expected(node->value, target_type);
+
+  // Verify assignment compatibility
+  if (target_type && !is_assignable(target_type, value_type)) {
+    report_error(node->value->get_range(), "type mismatch in assignment");
+  }
+}
+
+void TypeChecker::check_blackboard_decl_stmt(BlackboardDeclStmt * node)
+{
+  // Get declared type if any
+  const Type * declared_type = nullptr;
+  if (node->type) {
+    declared_type = resolve_type(node->type);
+  }
+
+  // Check initializer
+  if (node->initialValue) {
+    const Type * init_type = check_expr_with_expected(node->initialValue, declared_type);
+
+    if (declared_type && !is_assignable(declared_type, init_type)) {
+      report_error(node->initialValue->get_range(), "initializer type mismatch");
+    }
+  }
+}
+
+void TypeChecker::check_const_decl_stmt(ConstDeclStmt * node)
+{
+  // Get declared type if any
+  const Type * declared_type = nullptr;
+  if (node->type) {
+    declared_type = resolve_type(node->type);
+  }
+
+  // Check value expression
+  const Type * value_type = check_expr_with_expected(node->value, declared_type);
+
+  // Apply defaults to placeholder types
+  if (value_type->is_placeholder()) {
+    value_type = apply_defaults(value_type);
+  }
+
+  if (declared_type && !is_assignable(declared_type, value_type)) {
+    report_error(node->value->get_range(), "const initializer type mismatch");
+  }
+}
+
+void TypeChecker::check_tree_decl(TreeDecl * decl)
+{
+  // Check each statement in the tree body
+  for (auto * stmt : decl->body) {
+    check_stmt(stmt);
+  }
+
+  // Spec 6.3.2: warn on mut/out tree parameters never used for writing.
+  warn_unused_write_params(decl, diags_);
+}
+
+void TypeChecker::check_global_var_decl(GlobalVarDecl * decl)
+{
+  // Reference: docs/reference/type-system/inference-and-resolution.md
+  // Global vars must have either a type annotation or an initializer.
+  if (!decl->type && !decl->initialValue) {
+    report_error(decl->get_range(), "global variable must have a type annotation or initializer");
+    return;
+  }
+
+  const Type * declared_type = nullptr;
+  if (decl->type) {
+    declared_type = resolve_type(decl->type);
+  }
+
+  if (decl->initialValue) {
+    const Type * init_type = check_expr_with_expected(decl->initialValue, declared_type);
+
+    if (declared_type && !is_assignable(declared_type, init_type)) {
+      report_error(decl->initialValue->get_range(), "initializer type mismatch");
+    }
+  }
+}
+
+void TypeChecker::check_global_const_decl(GlobalConstDecl * decl)
+{
+  const Type * declared_type = nullptr;
+  if (decl->type) {
+    declared_type = resolve_type(decl->type);
+  }
+
+  const Type * value_type = check_expr_with_expected(decl->value, declared_type);
+
+  // Apply defaults
+  if (value_type->is_placeholder()) {
+    value_type = apply_defaults(value_type);
+  }
+
+  if (declared_type && !is_assignable(declared_type, value_type)) {
+    report_error(decl->value->get_range(), "const initializer type mismatch");
+  }
+}
+
+// ============================================================================
+// Helper Methods
+// ============================================================================
+
+const Type * TypeChecker::resolve_type(const TypeNode * node)
+{
+  if (!node) return types_.error_type();
+
+  auto parse_uint_literal = [](std::string_view s) -> std::optional<uint64_t> {
+    if (s.empty()) return std::nullopt;
+    uint64_t out = 0;
+    for (const char c : s) {
+      if (c < '0' || c > '9') return std::nullopt;
+      out = (out * 10) + static_cast<uint64_t>(c - '0');
+    }
+    return out;
+  };
+
+  auto resolve_const_usize = [&](
+                               std::string_view token, SourceRange range,
+                               std::string_view what) -> std::optional<uint64_t> {
+    if (auto lit = parse_uint_literal(token)) {
+      return lit;
+    }
+
+    // Ident form: must reference a const integer evaluatable at compile time.
+    const Scope * global = values_.get_global_scope();
+    const Symbol * sym = global ? global->lookup(token) : nullptr;
+    if (!sym) {
+      report_error(
+        range, std::string("Unknown identifier '") + std::string(token) + "' used as " +
+                 std::string(what));
+      return std::nullopt;
+    }
+    if (!sym->is_const()) {
+      report_error(
+        range, std::string("Identifier '") + std::string(token) + "' used as " + std::string(what) +
+                 " must be a const");
+      return std::nullopt;
+    }
+
+    const ConstValue * cv = nullptr;
+    if (sym->astNode) {
+      if (const auto * gcd = dyn_cast<GlobalConstDecl>(sym->astNode)) {
+        cv = gcd->evaluatedValue;
+      } else if (const auto * lcd = dyn_cast<ConstDeclStmt>(sym->astNode)) {
+        cv = lcd->evaluatedValue;
+      }
+    }
+    if (!cv || cv->is_error()) {
+      report_error(
+        range, std::string("Identifier '") + std::string(token) + "' used as " + std::string(what) +
+                 " is not a constant integer");
+      return std::nullopt;
+    }
+    if (!cv->is_integer()) {
+      report_error(
+        range, std::string("Identifier '") + std::string(token) + "' used as " + std::string(what) +
+                 " must be an integer constant");
+      return std::nullopt;
+    }
+    const int64_t v = cv->as_integer();
+    if (v < 0) {
+      report_error(range, std::string(what) + " must be a non-negative integer");
+      return std::nullopt;
+    }
+    return static_cast<uint64_t>(v);
+  };
+
+  std::vector<const TypeAliasDecl *> alias_stack;
+
+  std::function<const Type *(const TypeNode *)> go = [&](const TypeNode * n) -> const Type * {
+    if (!n) return types_.error_type();
+
+    switch (n->get_kind()) {
+      case NodeKind::InferType:
+        // Caller handles inference placeholders.
+        return nullptr;
+
+      case NodeKind::PrimaryType: {
+        const auto * primary = static_cast<const PrimaryType *>(n);
+
+        // Builtins (and builtin aliases) first.
+        if (const Type * builtin = types_.lookup_builtin(primary->name)) {
+          // Handle bounded string: string<N>
+          if (primary->size.has_value() && builtin->kind == TypeKind::String) {
+            const auto max_bytes =
+              resolve_const_usize(*primary->size, primary->get_range(), "bounded string size");
+            if (!max_bytes.has_value()) return types_.error_type();
+            return types_.get_bounded_string_type(*max_bytes);
+          }
+          return builtin;
+        }
+
+        // User-defined / extern / alias types.
+        if (const TypeSymbol * sym = type_table_.lookup(primary->name)) {
+          if (sym->is_extern_type()) {
+            return types_.get_extern_type(sym->name, sym->decl);
+          }
+          if (sym->is_type_alias()) {
+            const auto * alias_decl = dyn_cast<TypeAliasDecl>(sym->decl);
+            if (!alias_decl || !alias_decl->aliasedType) {
+              return types_.error_type();
+            }
+
+            for (const auto * in_stack : alias_stack) {
+              if (in_stack == alias_decl) {
+                report_error(primary->get_range(), "circular type alias is not allowed");
+                return types_.error_type();
+              }
+            }
+
+            alias_stack.push_back(alias_decl);
+            const Type * resolved = go(alias_decl->aliasedType);
+            alias_stack.pop_back();
+            return resolved ? resolved : types_.error_type();
+          }
+        }
+
+        report_error(
+          primary->get_range(), std::string("Unknown type '") + std::string(primary->name) + "'");
+        return types_.error_type();
+      }
+
+      case NodeKind::StaticArrayType: {
+        const auto * arr = static_cast<const StaticArrayType *>(n);
+        const Type * elem_type = go(arr->elementType);
+        if (!elem_type || elem_type->is_error()) return types_.error_type();
+
+        const auto size = resolve_const_usize(arr->size, arr->get_range(), "array size");
+        if (!size.has_value()) return types_.error_type();
+
+        if (arr->isBounded) {
+          return types_.get_bounded_array_type(elem_type, *size);
+        }
+        return types_.get_static_array_type(elem_type, *size);
+      }
+
+      case NodeKind::DynamicArrayType: {
+        const auto * arr = static_cast<const DynamicArrayType *>(n);
+        const Type * elem_type = go(arr->elementType);
+        if (!elem_type || elem_type->is_error()) return types_.error_type();
+        return types_.get_dynamic_array_type(elem_type);
+      }
+
+      case NodeKind::TypeExpr: {
+        const auto * expr = static_cast<const TypeExpr *>(n);
+        const Type * base = go(expr->base);
+        if (!base) return nullptr;  // inference
+        if (base->is_error()) return base;
+        if (expr->nullable) return types_.get_nullable_type(base);
+        return base;
+      }
+
+      default:
+        return types_.error_type();
+    }
+  };
+
+  return go(node);
+}
+
+const Type * TypeChecker::get_symbol_type(const Symbol * sym)
+{
+  if (!sym) return types_.error_type();
+
+  // Prefer types from the declaring AST node when available (core SymbolTable
+  // currently does not populate Symbol::typeName for vars/params).
+  if (sym->astNode) {
+    if (const auto * p = dyn_cast<ParamDecl>(sym->astNode)) {
+      if (p->type) {
+        if (const Type * t = resolve_type(p->type)) {
+          return t;
+        }
+      }
+    }
+    if (const auto * v = dyn_cast<GlobalVarDecl>(sym->astNode)) {
+      if (v->type) {
+        if (const Type * t = resolve_type(v->type)) {
+          return t;
+        }
+      }
+    }
+    if (const auto * v = dyn_cast<BlackboardDeclStmt>(sym->astNode)) {
+      if (v->type) {
+        if (const Type * t = resolve_type(v->type)) {
+          return t;
+        }
+      }
+    }
+    if (const auto * c = dyn_cast<GlobalConstDecl>(sym->astNode)) {
+      if (c->type) {
+        if (const Type * t = resolve_type(c->type)) {
+          return t;
+        }
+      }
+    }
+    if (const auto * c = dyn_cast<ConstDeclStmt>(sym->astNode)) {
+      if (c->type) {
+        if (const Type * t = resolve_type(c->type)) {
+          return t;
+        }
+      }
+    }
+  }
+
+  // If symbol has explicit type name, look it up
+  if (sym->typeName.has_value()) {
+    if (const Type * builtin = types_.lookup_builtin(*sym->typeName)) {
+      return builtin;
+    }
+    // Could be extern type
+    if (const TypeSymbol * ts = type_table_.lookup(*sym->typeName)) {
+      if (ts->is_extern_type()) {
+        return types_.get_extern_type(ts->name, ts->decl);
+      }
+    }
+  }
+
+  // For const symbols, get type from evaluated value
+  if (sym->is_const() && sym->astNode) {
+    if (const auto * gcd = dyn_cast<GlobalConstDecl>(sym->astNode)) {
+      // Prefer type inferred by the TypeChecker for the initializer when available.
+      if (gcd->value && gcd->value->resolvedType) {
+        return gcd->value->resolvedType;
+      }
+      if (gcd->evaluatedValue && gcd->evaluatedValue->type) {
+        return gcd->evaluatedValue->type;
+      }
+    }
+    if (const auto * lcd = dyn_cast<ConstDeclStmt>(sym->astNode)) {
+      if (lcd->value && lcd->value->resolvedType) {
+        return lcd->value->resolvedType;
+      }
+      if (lcd->evaluatedValue && lcd->evaluatedValue->type) {
+        return lcd->evaluatedValue->type;
+      }
+    }
+  }
+
+  // Fallback: could not determine type
+  return types_.error_type();
+}
+
+const Type * TypeChecker::apply_defaults(const Type * type)
+{
+  return bt_dsl::apply_defaults(types_, type);
+}
+
+void TypeChecker::report_error(SourceRange range, std::string_view message)
+{
+  has_errors_ = true;
+  ++error_count_;
+
+  if (diags_) {
+    diags_->error(range, message);
+  }
+}
+
+}  // namespace bt_dsl

@@ -99,6 +99,13 @@ export default defineConfig({
         ],
       },
       {
+        text: 'ツール仕様',
+        items: [
+          { text: 'コンパイラ仕様', link: '/reference/compiler' },
+          { text: 'XMLマッピング仕様', link: '/reference/xml-mapping' },
+        ],
+      },
+      {
         text: 'ライブラリ',
         items: [{ text: '標準ノード', link: '/standard-library' }],
       },

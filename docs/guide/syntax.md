@@ -108,10 +108,12 @@ extern decorator Retry(n: int32);
 ## 4. グローバル変数・定数
 
 ```bt-dsl
+/// プレイヤーの体力
 var PlayerHealth: int;
 var TargetPosition: Vector3;
 var IsAlerted: bool;
 
+/// 最大リトライ回数
 const MAX_HEALTH = 100;
 const DEFAULT_SPEED: float = 1.5;
 ```
@@ -155,9 +157,12 @@ tree Example(
 
 ```bt-dsl
 tree Example() {
+  /// カウンタ
   var count: int = 0;       // 型と初期値
   var name = "test";        // 型推論（string）
   var flag: bool;           // 初期値なし（Uninit）
+
+  /// ローカル上限
   const LOCAL_MAX = 10;     // ローカル定数
 
   // var x                  ← エラー: 型か初期値が必要
@@ -176,9 +181,6 @@ AlwaysSuccess();
 
 // 名前付き引数
 MoveTo(goal: TargetPos, speed: 1.5);
-
-// 位置引数（ポートが1つの場合のみ）
-Log("Hello, World!");
 
 // Blackboard 参照に方向を指定
 GetPosition(pos: out CurrentPos);
@@ -242,11 +244,11 @@ ForceSuccess {
 ```bt-dsl
 // 条件が真なら実行せずに成功
 @success_if(cache_valid)
-FetchData(out data);
+FetchData(result: out data);
 
 // 条件が偽なら実行しない（Failure）
 @guard(target != null)
-MoveTo(target);
+MoveTo(goal: target);
 
 // 条件が偽になったら Running 中でも中断
 @run_while(is_active)

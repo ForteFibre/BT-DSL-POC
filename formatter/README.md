@@ -22,8 +22,10 @@ npm run build
 import { formatBtDslText } from 'bt-dsl-formatter';
 
 const source = `
-Tree Main() {
-  Sequence{AlwaysSuccess()}
+tree Main() {
+  Sequence {
+    AlwaysSuccess();
+  }
 }
 `;
 
@@ -35,9 +37,9 @@ const formatted = await formatBtDslText(source, {
 });
 
 console.log(formatted);
-// Tree Main() {
+// tree Main() {
 //   Sequence {
-//     AlwaysSuccess()
+//     AlwaysSuccess();
 //   }
 // }
 ```
@@ -75,11 +77,11 @@ import "StandardNodes.bt"
 // Comment before var
 var X:int
 
-Tree Main(){
+tree Main(){
   // Comment in tree
   Sequence{
     // Comment in children
-    AlwaysSuccess()
+    AlwaysSuccess();
   }
 }
 ```
@@ -93,11 +95,11 @@ import "StandardNodes.bt"
 // Comment before var
 var X: int
 
-Tree Main() {
+tree Main() {
   // Comment in tree
   Sequence {
     // Comment in children
-    AlwaysSuccess()
+    AlwaysSuccess();
   }
 }
 ```

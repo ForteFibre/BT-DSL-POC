@@ -8,45 +8,54 @@
 ; ---------------------------------------------------------------------------
 
 (tree_def
-  "Tree"
+  "tree"
   name: (identifier) @bt.tree.name
-  "{" @bt.tree.lbrace
-  "}" @bt.tree.rbrace)
+  (tree_body
+    "{" @bt.tree.lbrace
+    "}" @bt.tree.rbrace))
 
 (import_stmt
   "import"
   path: (string) @bt.import.path)
 
 ; ---------------------------------------------------------------------------
-; Node / decorator names
+; Node / precondition names
 ; ---------------------------------------------------------------------------
 
-(decorator
-  "@" @bt.decorator.at
-  name: (identifier) @bt.decorator.name)
+; '@' token (common during incomplete typing, may not yet be part of a precondition node)
+"@" @bt.precondition.at
 
-(node_stmt
+; Precondition '@' token (useful while the kind is not formed yet)
+(precondition
+  "@" @bt.precondition.at)
+
+(precondition
+  "@" @bt.precondition.at
+  kind: (precond_kind) @bt.precondition.kind)
+
+(leaf_node_call
+  name: (identifier) @bt.node.name)
+
+(compound_node_call
   name: (identifier) @bt.node.name)
 
 ; When cursor is inside a property_block, we also want to know which callable
-; (node_stmt vs decorator) owns it.
+; (leaf_node_call vs compound_node_call) owns it.
 
-(node_stmt
+(leaf_node_call
   name: (identifier) @bt.call.node.name
-  (property_block "(" @bt.call.args.lparen ")" @bt.call.args.rparen))
+  args: (property_block) @bt.call.args)
 
-(decorator
-  "@"
-  name: (identifier) @bt.call.decorator.name
-  (property_block "(" @bt.call.args.lparen ")" @bt.call.args.rparen))
+(compound_node_call
+  name: (identifier) @bt.call.node.name
+  body: (node_body_with_children
+    (property_block) @bt.call.args))
 
 ; ---------------------------------------------------------------------------
 ; Arguments
 ; ---------------------------------------------------------------------------
 
-(property_block
-  "(" @bt.args.lparen
-  ")" @bt.args.rparen)
+(property_block) @bt.args
 
 (argument
   name: (identifier) @bt.arg.name
@@ -59,11 +68,11 @@
   ":" @bt.arg.colon)
 
 ; Blackboard refs / directions
-(blackboard_ref
-  (port_direction) @bt.port.direction
-  name: (identifier) @bt.bb.name)
 
-(blackboard_ref
+(argument_expr
+  (port_direction) @bt.port.direction)
+
+(inline_blackboard_decl
   name: (identifier) @bt.bb.name)
 
 ; Punctuation tokens (filtered by range in the classifier)

@@ -1,9 +1,11 @@
-declare Action TestAction(
+extern action TestAction(
   /// position
   in pos: int,
   out found: bool
-)
+);
 
-declare Decorator TestDeco(
+extern control Sequence();
+
+extern decorator TestDeco(
   in enabled: bool
-)
+);

@@ -15,21 +15,21 @@ import "StandardNodes.bt"
 var X: int
 
 // Comment before tree
-Tree Main() {
+tree Main() {
   Sequence {
-    AlwaysSuccess()
+    AlwaysSuccess();
   }
 }`,
   },
   {
     name: 'Inline comments in tree body',
-    input: `Tree Main() {
+    input: `tree Main() {
   // Comment before node
   Sequence {
     // Comment inside children
-    AlwaysSuccess()
+    AlwaysSuccess();
     // Another comment
-    AlwaysFailure()
+    AlwaysFailure();
   }
 }`,
   },
@@ -38,11 +38,11 @@ Tree Main() {
     input: `/* Block comment */
 var X: int
 
-Tree Main() {
+tree Main() {
   /* Multi-line
      block comment */
   Sequence {
-    AlwaysSuccess()
+    AlwaysSuccess();
   }
 }`,
   },
@@ -52,9 +52,9 @@ Tree Main() {
 
 // Regular comment
 /// Outer doc comment
-Tree Main() {
+tree Main() {
   Sequence {
-    AlwaysSuccess()
+    AlwaysSuccess();
   }
 }`,
   },

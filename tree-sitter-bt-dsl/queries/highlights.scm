@@ -1,59 +1,90 @@
-; Syntax highlighting for BT DSL
+; Syntax highlighting for BT DSL (new spec)
 
+; ---------------------------------------------------------------------------
 ; Keywords
-["import" "declare" "var" "Tree"] @keyword
+; ---------------------------------------------------------------------------
+["import" "extern" "type" "var" "const" "tree" "as"] @keyword
 
 ; Port directions
-["in" "out" "ref"] @keyword.modifier
+["in" "out" "ref" "mut"] @keyword.modifier
 
-; Node categories (validated in semantics)
-(declare_stmt category: (identifier) @type)
+; Attribute-like constructs
+(precondition "@" @punctuation.special)
+(precondition kind: (precond_kind) @attribute)
 
-; Tree and declare names
+(behavior_attr "#[" @punctuation.special)
+(behavior_attr "behavior" @attribute)
+(data_policy) @constant.builtin
+(flow_policy) @constant.builtin
+
+; ---------------------------------------------------------------------------
+; Definitions
+; ---------------------------------------------------------------------------
 (tree_def name: (identifier) @function.definition)
-(declare_stmt name: (identifier) @function.definition)
 
-; Node calls
-(node_stmt name: (identifier) @function.call)
+(extern_def name: (identifier) @function.definition)
 
-; Decorators
-(decorator "@" @punctuation.special)
-(decorator name: (identifier) @attribute)
+(extern_type_stmt name: (identifier) @type.definition)
+(type_alias_stmt name: (identifier) @type.definition)
 
-; Parameters and variables
+; ---------------------------------------------------------------------------
+; Calls
+; ---------------------------------------------------------------------------
+(leaf_node_call name: (identifier) @function.call)
+(compound_node_call name: (identifier) @function.call)
+
+; ---------------------------------------------------------------------------
+; Parameters / vars / consts
+; ---------------------------------------------------------------------------
 (param_decl name: (identifier) @variable.parameter)
-(local_var_decl name: (identifier) @variable)
-(global_var_decl name: (identifier) @variable)
+(global_blackboard_decl name: (identifier) @variable)
+(blackboard_decl name: (identifier) @variable)
+(inline_blackboard_decl name: (identifier) @variable)
 
-; Type annotations
-(declare_port type: (identifier) @type)
-(param_decl type: (identifier) @type)
-(local_var_decl type: (identifier) @type)
-(global_var_decl type: (identifier) @type)
+(global_const_decl name: (identifier) @constant)
+(local_const_decl name: (identifier) @constant)
 
-; Arguments
+; ---------------------------------------------------------------------------
+; Type names
+; ---------------------------------------------------------------------------
+(primary_type (identifier) @type)
+(extern_port type: (_) @type)
+(param_decl type: (_) @type)
+(global_blackboard_decl type: (_) @type)
+(global_const_decl type: (_) @type)
+(blackboard_decl type: (_) @type)
+(local_const_decl type: (_) @type)
+
+; Arguments (named keys)
 (argument name: (identifier) @property)
 
-; Blackboard references
-(blackboard_ref name: (identifier) @variable)
-
+; ---------------------------------------------------------------------------
 ; Literals
+; ---------------------------------------------------------------------------
 (string) @string
 (integer) @number
 (float) @number.float
 (boolean) @constant.builtin
+(null) @constant.builtin
 
+; ---------------------------------------------------------------------------
 ; Operators
+; ---------------------------------------------------------------------------
 ["=" "+=" "-=" "*=" "/="] @operator
 ["+" "-" "*" "/" "%"] @operator
 ["==" "!=" "<" "<=" ">" ">="] @operator
 ["&&" "||" "&" "|" "!"] @operator
+"as" @operator
 
+; ---------------------------------------------------------------------------
 ; Punctuation
-["(" ")" "{" "}" ","] @punctuation.bracket
-":" @punctuation.delimiter
+; ---------------------------------------------------------------------------
+["(" ")" "{" "}" "[" "]" ","] @punctuation.bracket
+[":" ";" "=" "<" ">"] @punctuation.delimiter
 
+; ---------------------------------------------------------------------------
 ; Comments
+; ---------------------------------------------------------------------------
 (line_comment) @comment
 (block_comment) @comment
 (outer_doc) @comment.documentation

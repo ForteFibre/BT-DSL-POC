@@ -15,7 +15,8 @@
     "dev": "tsc --watch",
     "lint": "pnpm -w exec eslint formatter/src formatter/test --max-warnings 0",
     "lint:fix": "pnpm -w exec eslint formatter/src formatter/test --max-warnings 0 --fix",
-    "test": "node dist/test/test-format.js && node dist/test/test-standard-nodes.js && node dist/test/test-params.js && node dist/test/test-comment-preservation.js"
+    "pretest": "pnpm build",
+    "test": "node dist/test/test-format.js && node dist/test/test-standard-nodes.js && node dist/test/test-params.js && node dist/test/test-comment-preservation.js && node dist/test/test-extern-parens.js"
   },
   "keywords": [
     "prettier",

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="Main">
+    <BehaviorTree ID="Main">
+        <Sequence>
+            <Print txt="begin"/>
+            <SubTree ID="_SubTree_2_Entry1"/>
+            <SubTree ID="_SubTree_1_Entry2"/>
+            <Print txt="end"/>
+        </Sequence>
+    </BehaviorTree>
+    <BehaviorTree ID="_SubTree_1_Entry2">
+        <Sequence>
+            <Print txt="pkg2:entry"/>
+            <SubTree ID="_SubTree_1_Sub"/>
+        </Sequence>
+    </BehaviorTree>
+    <BehaviorTree ID="_SubTree_1_Sub">
+        <Sequence>
+            <Print txt="pkg2:sub"/>
+            <AlwaysSuccess/>
+        </Sequence>
+    </BehaviorTree>
+    <BehaviorTree ID="_SubTree_2_Entry1">
+        <Sequence>
+            <Print txt="pkg1:entry"/>
+            <SubTree ID="_SubTree_2_Sub"/>
+        </Sequence>
+    </BehaviorTree>
+    <BehaviorTree ID="_SubTree_2_Sub">
+        <Sequence>
+            <Print txt="pkg1:sub"/>
+            <AlwaysSuccess/>
+        </Sequence>
+    </BehaviorTree>
+    <TreeNodesModel>
+        <Action ID="AlwaysSuccess"/>
+        <Action ID="Print">
+            <input_port name="txt" type="string"/>
+        </Action>
+        <Action ID="Print">
+            <input_port name="txt" type="string"/>
+        </Action>
+        <Action ID="Print">
+            <input_port name="txt" type="string"/>
+        </Action>
+        <Condition ID="BlackboardExists">
+            <input_port name="key" type="string"/>
+        </Condition>
+        <Control ID="Sequence"/>
+    </TreeNodesModel>
+</root>

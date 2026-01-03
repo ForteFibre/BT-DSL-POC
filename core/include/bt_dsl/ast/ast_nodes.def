@@ -1,0 +1,121 @@
+// bt_dsl/ast/ast_nodes.def - AST node definitions for X-Macro expansion
+//
+// This file defines all AST node types using the X-Macro pattern.
+// It is included multiple times with different macro definitions to generate:
+// - NodeKind enum values
+// - Visitor dispatch cases
+// - Default visit methods
+//
+// Usage: Define the appropriate macros before including this file.
+// Each macro takes (ClassName, EnumName, SnakeName) as arguments.
+//
+// Categories:
+// - AST_NODE_EXPR: Expression nodes (base: Expr)
+// - AST_NODE_TYPE: Type nodes (base: TypeNode)
+// - AST_NODE_STMT: Statement nodes (base: Stmt)
+// - AST_NODE_DECL: Declaration nodes (base: Decl)
+// - AST_NODE_SUPPORT: Supporting nodes (base: AstNode)
+// - AST_NODE_TOP: Top-level nodes (base: AstNode)
+
+// ============================================================================
+// Expressions (range: IntLiteral..VecMacroExpr)
+// ============================================================================
+
+#ifndef AST_NODE_EXPR
+#define AST_NODE_EXPR(Class, Kind, Snake)
+#endif
+
+AST_NODE_EXPR(IntLiteralExpr, IntLiteral, int_literal_expr)
+AST_NODE_EXPR(FloatLiteralExpr, FloatLiteral, float_literal_expr)
+AST_NODE_EXPR(StringLiteralExpr, StringLiteral, string_literal_expr)
+AST_NODE_EXPR(BoolLiteralExpr, BoolLiteral, bool_literal_expr)
+AST_NODE_EXPR(NullLiteralExpr, NullLiteral, null_literal_expr)
+AST_NODE_EXPR(VarRefExpr, VarRef, var_ref_expr)
+AST_NODE_EXPR(MissingExpr, MissingExpr, missing_expr)
+AST_NODE_EXPR(BinaryExpr, BinaryExpr, binary_expr)
+AST_NODE_EXPR(UnaryExpr, UnaryExpr, unary_expr)
+AST_NODE_EXPR(CastExpr, CastExpr, cast_expr)
+AST_NODE_EXPR(IndexExpr, IndexExpr, index_expr)
+AST_NODE_EXPR(ArrayLiteralExpr, ArrayLiteralExpr, array_literal_expr)
+AST_NODE_EXPR(ArrayRepeatExpr, ArrayRepeatExpr, array_repeat_expr)
+AST_NODE_EXPR(VecMacroExpr, VecMacroExpr, vec_macro_expr)
+
+#undef AST_NODE_EXPR
+
+// ============================================================================
+// Types (range: InferType..TypeExpr)
+// ============================================================================
+
+#ifndef AST_NODE_TYPE
+#define AST_NODE_TYPE(Class, Kind, Snake)
+#endif
+
+AST_NODE_TYPE(InferType, InferType, infer_type)
+AST_NODE_TYPE(PrimaryType, PrimaryType, primary_type)
+AST_NODE_TYPE(StaticArrayType, StaticArrayType, static_array_type)
+AST_NODE_TYPE(DynamicArrayType, DynamicArrayType, dynamic_array_type)
+AST_NODE_TYPE(TypeExpr, TypeExpr, type_expr)
+
+#undef AST_NODE_TYPE
+
+// ============================================================================
+// Statements (range: NodeStmt..ConstDeclStmt)
+// ============================================================================
+
+#ifndef AST_NODE_STMT
+#define AST_NODE_STMT(Class, Kind, Snake)
+#endif
+
+AST_NODE_STMT(NodeStmt, NodeStmt, node_stmt)
+AST_NODE_STMT(AssignmentStmt, AssignmentStmt, assignment_stmt)
+AST_NODE_STMT(BlackboardDeclStmt, BlackboardDeclStmt, blackboard_decl_stmt)
+AST_NODE_STMT(ConstDeclStmt, ConstDeclStmt, const_decl_stmt)
+
+#undef AST_NODE_STMT
+
+// ============================================================================
+// Declarations (range: ImportDecl..TreeDecl)
+// ============================================================================
+
+#ifndef AST_NODE_DECL
+#define AST_NODE_DECL(Class, Kind, Snake)
+#endif
+
+AST_NODE_DECL(ImportDecl, ImportDecl, import_decl)
+AST_NODE_DECL(ExternDecl, ExternDecl, extern_decl)
+AST_NODE_DECL(ExternTypeDecl, ExternTypeDecl, extern_type_decl)
+AST_NODE_DECL(TypeAliasDecl, TypeAliasDecl, type_alias_decl)
+AST_NODE_DECL(GlobalVarDecl, GlobalVarDecl, global_var_decl)
+AST_NODE_DECL(GlobalConstDecl, GlobalConstDecl, global_const_decl)
+AST_NODE_DECL(TreeDecl, TreeDecl, tree_decl)
+
+#undef AST_NODE_DECL
+
+// ============================================================================
+// Supporting Nodes
+// ============================================================================
+
+#ifndef AST_NODE_SUPPORT
+#define AST_NODE_SUPPORT(Class, Kind, Snake)
+#endif
+
+AST_NODE_SUPPORT(Argument, Argument, argument)
+AST_NODE_SUPPORT(Precondition, Precondition, precondition)
+AST_NODE_SUPPORT(ParamDecl, ParamDecl, param_decl)
+AST_NODE_SUPPORT(ExternPort, ExternPort, extern_port)
+AST_NODE_SUPPORT(BehaviorAttr, BehaviorAttr, behavior_attr)
+AST_NODE_SUPPORT(InlineBlackboardDecl, InlineBlackboardDecl, inline_blackboard_decl)
+
+#undef AST_NODE_SUPPORT
+
+// ============================================================================
+// Top-level
+// ============================================================================
+
+#ifndef AST_NODE_TOP
+#define AST_NODE_TOP(Class, Kind, Snake)
+#endif
+
+AST_NODE_TOP(Program, Program, program)
+
+#undef AST_NODE_TOP

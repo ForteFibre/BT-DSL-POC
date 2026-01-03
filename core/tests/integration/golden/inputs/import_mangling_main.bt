@@ -1,0 +1,28 @@
+//! Import mangling example (integration-golden)
+//
+// Goal:
+// - Ensure package-style imports work in the compiler driver
+// - Ensure single-output XML mangles tree IDs from multiple imported modules
+//   that happen to have the same tree name (Sub)
+//
+// IMPORTANT:
+//   Both pkg1 and pkg2 define a public tree named `Sub`.
+//   This is allowed as long as this module does not refer to `Sub` directly
+//   (to avoid ambiguous name resolution). Instead we call Entry1/Entry2.
+
+import "std/nodes.bt";
+import "pkg1/dep.bt";
+import "pkg2/dep.bt";
+
+extern action Print(in txt: string);
+
+tree Main() {
+  Sequence {
+    Print(txt: "begin");
+
+    Entry1();
+    Entry2();
+
+    Print(txt: "end");
+  }
+}

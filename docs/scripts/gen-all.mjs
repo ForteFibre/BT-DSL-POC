@@ -19,7 +19,7 @@ await mkdir(publicRailroadDir, { recursive: true });
 
 // 1) Standard library reference
 {
-  const stdlibPath = path.join(repoRoot, 'core', 'stdlib', 'StandardNodes.bt');
+  const stdlibPath = path.join(repoRoot, 'core', 'std', 'nodes.bt');
   const outMd = await generateStdlibMarkdown(stdlibPath);
   await writeFile(path.join(generatedDir, 'standard-library.generated.md'), outMd, 'utf8');
 }

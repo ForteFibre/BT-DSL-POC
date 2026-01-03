@@ -97,7 +97,7 @@ ForceSuccess {
 ```bt-dsl
 // null チェックで型絞り込み
 @guard(target != null)
-MoveTo(target);
+MoveTo(goal: target);
 
 // 条件が真ならスキップ
 @success_if(already_done)

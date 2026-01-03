@@ -1,0 +1,90 @@
+//! Navigation Pipeline Example (integration-golden)
+//
+// Focus:
+// - const evaluation for default args
+// - string escaping
+// - preconditions (@guard/@run_while/@success_if)
+// - assignment desugaring to Script / AlwaysSuccess patterns
+
+import "std/nodes.bt";
+
+extern type Vector3;
+
+type Millis = int32;
+
+const DEFAULT_TOLERANCE: float = 0.25;
+const DEFAULT_TIMEOUT: Millis = 1200 + 800; // requires const folding
+
+var Start: Vector3;
+var Goal: Vector3;
+var Current: Vector3;
+var HasPlan: bool = false;
+var PlanId: int32 = 0;
+var StatusText: string = "";
+
+extern action ComputePath(in start: Vector3, in goal: Vector3, out ok: bool, out plan_id: int32);
+extern action FollowPath(in plan_id: int32, in tolerance: float = DEFAULT_TOLERANCE, out ok: bool);
+extern action ReadPose(out current: Vector3);
+extern action SetFixedGoal(out goal: Vector3);
+extern action FormatStatus(in ok: bool, in txt: string, out out_txt: string);
+extern action Print(in txt: string);
+
+// This subtree uses defaults, scripts, and a run_while loop.
+tree NavigateOnce(in start: Vector3, in goal: Vector3, out ok: bool) {
+  Sequence {
+    var ok1: bool = false;
+    var ok2: bool = false;
+    var iter: int32 = 0;
+
+    ComputePath(start: start, goal: goal, ok: out ok1, plan_id: out PlanId);
+
+    @failure_if(!ok1)
+    Print(txt: "ComputePath failed");
+
+    // Follow until we are close enough.
+    RunOnce(then_skip: true) {
+      @guard(ok1)
+      Sequence {
+        // Always update Current.
+        ReadPose(current: out Current);
+
+        // While iter is small, keep following.
+        @run_while(iter < 3)
+        FollowPath(plan_id: PlanId, ok: out ok2);
+
+        iter += 1;
+      }
+    }
+
+    ok = ok1 && ok2;
+  }
+}
+
+// Main tree orchestrates retries and status formatting.
+tree Main() {
+  Sequence {
+    var success: bool = false;
+
+    // Initialize start/goal to ensure they are always Init.
+    ReadPose(current: out Start);
+    SetFixedGoal(goal: out Goal);
+
+    RetryUntilSuccessful(num_attempts: 2) {
+      NavigateOnce(start: Start, goal: Goal, ok: out success);
+
+      // Format status message with special chars.
+      FormatStatus(ok: success, txt: "goal=<x>&y", out_txt: out StatusText);
+      Print(txt: StatusText);
+
+      @success_if(success)
+      HasPlan = true;
+    }
+
+    // default timeout constant must be evaluated even if not used directly.
+    Timeout(msec: DEFAULT_TIMEOUT) {
+      AlwaysSuccess();
+    }
+
+    AlwaysSuccess();
+  }
+}

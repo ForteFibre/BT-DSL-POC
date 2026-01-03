@@ -53,8 +53,8 @@ DataPolicy は「親が成功した」事実から、子の成功ルートに関
 
 ```bt-dsl
 Sequence {
-  TaskA(out x);
-  TaskB(out y);
+  TaskA(result: out x);
+  TaskB(result: out y);
 }
 // -> Sequence が Success で抜けたなら x, y は Init
 ```
@@ -70,8 +70,8 @@ Sequence {
 
 ```bt-dsl
 Fallback {
-  TaskA(out x);
-  TaskB(out x, out y);
+  TaskA(result: out x);
+  TaskB(result1: out x, result2: out y);
 }
 // -> Fallback が Success で抜けたなら x は Init
 // -> y は Uninit の可能性がある
@@ -79,8 +79,8 @@ Fallback {
 
 ```bt-dsl
 Fallback {
-  TaskA(out x);
-  TaskB(out y);
+  TaskA(result: out x);
+  TaskB(result: out y);
 }
 // -> x, y いずれも Init とはみなされない（共通の out がないため）
 ```
@@ -93,7 +93,7 @@ Fallback {
 
 ```bt-dsl
 ForceSuccess {
-  TaskA(out x);
+  TaskA(result: out x);
 }
 // -> ForceSuccess が Success でも x は Init と保証できない
 ```
@@ -108,8 +108,8 @@ FlowPolicy は「兄弟ノード間で、前のノードの書き込み結果を
 
 ```bt-dsl
 Sequence {
-  Calculate(out result);
-  Use(in result);          // OK: result は Init
+  Calculate(value: out result);
+  Use(value: in result);   // OK: result は Init
 }
 ```
 
@@ -119,8 +119,8 @@ Sequence {
 
 ```bt-dsl
 ParallelAll {
-  Calculate(out result);
-  Use(in result);          // Error: result は ParallelAll 開始時点では Uninit
+  Calculate(value: out result);
+  Use(value: in result);   // Error: result は ParallelAll 開始時点では Uninit
 }
 ```
 
@@ -157,7 +157,7 @@ extern action TryConnect(out error_code: int32);
 tree Main() {
   var code: int32 = 0;      // 事前に Init
   TryConnect(error_code: out code);
-  Log(code);                // OK: code は常に Init
+  Log(message: code);       // OK: code は常に Init
 }
 ```
 
@@ -178,7 +178,7 @@ Fallback {
   @guard(target != null)
   Sequence {
     // このブロック内では target: Pose として扱える
-    MoveTo(target);
+    MoveTo(goal: target);
   }
 }
 ```
@@ -225,7 +225,7 @@ tree Main() {
     FindTarget(result: out target);
 
     @guard(target != null)
-    Use(target);
+    Use(value: target);
   }
 }
 ```
@@ -296,12 +296,7 @@ tree Main() {
 | `mut`              | 許可                | 許可                      |
 | `out`              | **エラー**          | 許可                      |
 
-### 6.4.5 位置引数（positional argument）
-
-- 位置引数は **最大1個**まで。
-- 位置引数を使用する場合、対象ノードのポート数は **ちょうど1** でなければなりません。
-
-### 6.4.6 引数の省略規則
+### 6.4.5 引数の省略規則
 
 | ポート方向         | デフォルト値あり | デフォルト値なし |
 | :----------------- | :--------------- | :--------------- |
@@ -314,7 +309,7 @@ tree Main() {
 このとき、当該 `out` ポートによる書き込み保証は存在しないため、初期化安全性の解析（6.1）においても
 `Init` 伝播には寄与しません。
 
-### 6.4.7 デフォルト値の制約
+### 6.4.6 デフォルト値の制約
 
 - `ref` / `mut` / `out` ポートにはデフォルト値を指定できません。
 - デフォルト値は `const_expr`（コンパイル時評価可能）でなければなりません。

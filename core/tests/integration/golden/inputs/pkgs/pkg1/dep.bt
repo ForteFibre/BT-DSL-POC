@@ -1,0 +1,20 @@
+//! pkg1/dep.bt
+
+import "std/nodes.bt";
+
+extern action Print(in txt: string);
+
+tree Entry1() {
+  Sequence {
+    Print(txt: "pkg1:entry");
+    Sub();
+  }
+}
+
+// Same name as pkg2::Sub (on purpose)
+tree Sub() {
+  Sequence {
+    Print(txt: "pkg1:sub");
+    AlwaysSuccess();
+  }
+}

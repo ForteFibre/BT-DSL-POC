@@ -109,7 +109,9 @@ or_expr              = and_expr , { "||" , and_expr } ;
 
 and_expr             = bitwise_or_expr , { "&&" , bitwise_or_expr } ;
 
-bitwise_or_expr      = bitwise_and_expr , { "|" , bitwise_and_expr } ;
+bitwise_or_expr      = bitwise_xor_expr , { "|" , bitwise_xor_expr } ;
+
+bitwise_xor_expr     = bitwise_and_expr , { "^" , bitwise_and_expr } ;
 
 bitwise_and_expr     = equality_expr , { "&" , equality_expr } ;
 
@@ -161,9 +163,10 @@ index_suffix         = "[" , expression , "]" ;
 |        8 | `<` `<=` `>` `>=`   | 非結合   | 比較（連鎖禁止）   |
 |        7 | `==` `!=`           | 非結合   | 等価（連鎖禁止）   |
 |        6 | `&`                 | 左結合   | ビット AND         |
-|        5 | `\|`                | 左結合   | ビット OR          |
-|        4 | `&&`                | 左結合   | 論理 AND           |
-|        3 | `\|\|`              | 左結合   | 論理 OR            |
+|        5 | `^`                 | 左結合   | ビット XOR         |
+|        4 | `\|`                | 左結合   | ビット OR          |
+|        3 | `&&`                | 左結合   | 論理 AND           |
+|        2 | `\|\|`              | 左結合   | 論理 OR            |
 
 > [!NOTE]
 > 2.4.1 の EBNF と本表（2.4.2）は、通常は同一の優先順位/結合規則を表すことを意図します。
@@ -234,11 +237,11 @@ port_direction    = "in" | "out" | "ref" | "mut" ;
 ### 2.6.2 グローバル Blackboard・定数
 
 ```ebnf
-global_blackboard_decl = "var" , identifier ,
+global_blackboard_decl = { outer_doc } , "var" , identifier ,
                          [ ":" , type ] ,
                          [ "=" , expression ] , ";" ;
 
-global_const_decl = "const" , identifier , [ ":" , type ] , "=" , expression , ";" ;
+global_const_decl = { outer_doc } , "const" , identifier , [ ":" , type ] , "=" , expression , ";" ;
 ```
 
 ### 2.6.3 tree 定義
@@ -254,11 +257,11 @@ param_list      = param_decl , { "," , param_decl } ;
 
 param_decl      = [ port_direction ] , identifier , ":" , type , [ "=" , expression ] ;
 
-blackboard_decl   = "var" , identifier ,
+blackboard_decl   = { outer_doc } , "var" , identifier ,
                     [ ":" , type ] ,
                     [ "=" , expression ] ;
 
-local_const_decl = "const" , identifier , [ ":" , type ] , "=" , expression ;
+local_const_decl = { outer_doc } , "const" , identifier , [ ":" , type ] , "=" , expression ;
 ```
 
 ### 2.6.4 ノード呼び出し
@@ -274,8 +277,7 @@ property_block    = "(" , [ argument_list ] , ")" ;
 
 argument_list     = argument , { "," , argument } ;
 
-argument          = identifier , ":" , argument_expr    (* named argument *)
-                  | argument_expr ;                      (* positional argument *)
+argument          = identifier , ":" , argument_expr ;
 
 argument_expr     = [ port_direction ] , expression
                   | "out" , inline_blackboard_decl ;    (* out var x 構文 *)

@@ -51,8 +51,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  const stdlibPath = context.asAbsolutePath('stdlib/StandardNodes.bt');
-
   const serverOptions: ServerOptions = {
     command: serverPath,
     args: [],
@@ -63,9 +61,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       { scheme: 'file', language: 'bt-dsl' },
       { scheme: 'untitled', language: 'bt-dsl' },
     ],
-    initializationOptions: {
-      stdlibPath,
-    },
   };
 
   client = new LanguageClient('bt-dsl', 'BT DSL Language Server', serverOptions, clientOptions);

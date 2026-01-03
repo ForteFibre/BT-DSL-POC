@@ -5,6 +5,8 @@ node_modules/
 out/
 out-tsc/
 out-test/
+server/
+std/
 
 # VS Code extension packaging
 *.vsix
