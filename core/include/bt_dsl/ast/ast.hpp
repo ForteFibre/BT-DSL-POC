@@ -677,12 +677,4 @@ public:
   return node ? node->get_range() : SourceRange{};
 }
 
-/**
- * Get the SourceRange from any AST node.
- */
-[[nodiscard]] inline SourceRange get_source_range(const AstNode * node) noexcept
-{
-  return node ? node->get_range() : SourceRange{};
-}
-
 }  // namespace bt_dsl
