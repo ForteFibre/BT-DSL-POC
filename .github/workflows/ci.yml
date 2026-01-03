@@ -159,7 +159,7 @@ jobs:
 
   # 4b. Lint Core (clang-tidy) - split by directory for parallel execution
   lint-core-tidy:
-    needs: [changes, build-grammar]
+    needs: changes
     if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
     strategy:
@@ -186,7 +186,7 @@ jobs:
 
   # 5. Core Native Build & Test (Skip if only frontend changed)
   test-core-native:
-    needs: [changes, build-grammar]
+    needs: changes
     if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
     steps:
@@ -210,7 +210,7 @@ jobs:
 
   # 6. Core Sanitizer Tests
   test-core-sanitizers:
-    needs: [changes, build-grammar]
+    needs: changes
     if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
     steps:

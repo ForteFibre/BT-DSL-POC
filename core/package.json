@@ -4,7 +4,6 @@
   "description": "BT-DSL Core C++ Library and CLI",
   "private": true,
   "scripts": {
-    "prebuild": "test -d ../tree-sitter-bt-dsl/src || (echo 'Error: tree-sitter grammar not found. Run: pnpm build:grammar' && exit 1)",
     "build": "pnpm run build:native",
     "build:native": "node ./scripts/ensure-cmake-build-dir.mjs build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)",
     "build:lsp": "node ./scripts/ensure-cmake-build-dir.mjs build-lsp && cmake -S . -B build-lsp -DBUILD_LSP_SERVER=ON -DBUILD_CLI=OFF -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-lsp -j$(nproc)",

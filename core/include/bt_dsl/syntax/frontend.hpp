@@ -22,7 +22,7 @@ struct ParsedUnit
 };
 
 // Parse pipeline:
-// source -> tree-sitter parse (CST) -> AST build -> diagnostics
+// source -> lexer (token stream) -> recursive-descent parser (AST) -> diagnostics
 [[nodiscard]] std::unique_ptr<ParsedUnit> parse_source(std::string source_text);
 
 }  // namespace bt_dsl
