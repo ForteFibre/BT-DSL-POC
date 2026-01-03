@@ -102,7 +102,11 @@ function getAllNamedChildren(node: BtDslNode): BtDslNode[] {
 function collectTrailingComments(node: BtDslNode, text: string): PrettierDoc[] {
   const comments: PrettierDoc[] = [];
   for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'comment' || child.type === 'line_comment' || child.type === 'block_comment') {
+    if (
+      child.type === 'comment' ||
+      child.type === 'line_comment' ||
+      child.type === 'block_comment'
+    ) {
       comments.push(getText(child, text));
     }
   }
