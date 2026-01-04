@@ -335,3 +335,235 @@ TEST(RefTypeInference, BoundedArrayNotInferredFromLiteral)
   // Should be StaticArray, not BoundedArray
   EXPECT_EQ(type->kind, TypeKind::StaticArray);
 }
+
+// ============================================================================
+// Complex Inference Scenarios
+// ============================================================================
+
+TEST(RefTypeInference, NumericOverflowError)
+{
+  // MUST FAIL: Value 200 does not fit in int8
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse("var x: int8 = 200;"));
+  EXPECT_FALSE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, WildcardInArrayType)
+{
+  // [_; 3] -> element type inferred from init
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse("var x: [_; 3] = [1, 2, 3];"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, WildcardInVecType)
+{
+  // vec<_> -> element type inferred from init
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse("var x: vec<_> = vec![1, 2, 3];"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, LocalVarInferenceFromUsage)
+{
+  // Local variable inference from later assignment
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      var x;
+      x = 10;
+    }
+  )"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, LocalVarUnresolvedError)
+{
+  // MUST FAIL: Local var never used/inferred
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      var x;
+    }
+  )"));
+  EXPECT_FALSE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, FunctionArgInference)
+{
+  // Passing literal to function expects typed arg
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+     extern action Use(in x: int8);
+     tree Main() {
+       Use(x: 10); // 10 -> {integer} -> int8 constrained
+     }
+   )"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, FunctionArgOverflowError)
+{
+  // Passing too large literal to function
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+     extern action Use(in x: int8);
+     tree Main() {
+       Use(x: 200);
+     }
+   )"));
+  EXPECT_FALSE(ctx.run_sema());
+}
+
+// ============================================================================
+// Multi-Source Inference
+// ============================================================================
+
+TEST(RefTypeInference, MultipleConstraintConsistent)
+{
+  // x is constrained by multiple assignments
+  // var x; x = 10; x = 20; -> consistent (int32)
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      var x;
+      x = 10;
+      x = 20;
+    }
+  )"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, MultipleConstraintConflict)
+{
+  // x is constrained by conflicting assignments
+  // var x; x = 10; x = true; -> Error
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      var x;
+      x = 10;
+      x = true;
+    }
+  )"));
+  EXPECT_FALSE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, TransitiveInference)
+{
+  // var x; var y; x = y; y = 10; -> infer both as int32
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      var x;
+      var y;
+      x = y;
+      y = 10;
+    }
+  )"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, InferenceFromOutParam)
+{
+  // var x; Get(out x); -> x inferred from Get's out port type
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action Get(out v: int32);
+    tree Main() {
+      var x;
+      Get(v: out x);
+    }
+  )"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, InferenceFromBranches)
+{
+  // var x = null; if(...) { x = 10; } else { x = 20; }
+  // x should be int32?
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern control IfDoElse();
+    tree Main() {
+      var x: _? = null;
+      IfDoElse {
+         x = 10; 
+         x = 20; 
+      }
+    }
+  )"));
+  // Note: Using explicit blocks {} for assignment if syntax requires statement
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, InferenceFromBranchesConflict)
+{
+  // var x = null; if(...) { x = 10; } else { x = true; } -> Error
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern control IfDoElse();
+    tree Main() {
+      var x: _? = null;
+      IfDoElse {
+          x = 10; 
+          x = true; 
+      }
+    }
+  )"));
+  EXPECT_FALSE(ctx.run_sema());
+}
+
+// ============================================================================
+// 3.2.3 Constraint Resolution (Common Supertype)
+// ============================================================================
+
+TEST(RefTypeInference, InferCommonSupertypeInt)
+{
+  // var x; x = int8; x = int16; -> infer x as int16 (or int32)
+  // Should accept both assignments if x widens to common type.
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      const a: int8 = 10;
+      const b: int16 = 20;
+      var x;
+      x = a;
+      x = b;
+    }
+  )"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, InferCommonSupertypeFloat)
+{
+  // var x; x = float32; x = float64; -> infer x as float64
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      const a: float32 = 1.0;
+      const b: float64 = 2.0;
+      var x;
+      x = a;
+      x = b;
+    }
+  )"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeInference, InferMixedIntFloatError)
+{
+  // var x; x = int32; x = float32; -> Error (no implicit conversion)
+  // BT-DSL usually doesn't allow implicit int->float in all contexts, verifying strictness.
+  InferenceTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      const a: int32 = 10;
+      const b: float32 = 2.0;
+      var x;
+      x = a;
+      x = b;
+    }
+  )"));
+  EXPECT_FALSE(ctx.run_sema());
+}

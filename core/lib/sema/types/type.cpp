@@ -30,6 +30,7 @@ TypeContext::TypeContext()
   integer_literal_ = Type{TypeKind::IntegerLiteral};
   float_literal_ = Type{TypeKind::FloatLiteral};
   null_literal_ = Type{TypeKind::NullLiteral};
+  unknown_ = Type{TypeKind::Unknown};
 }
 
 const Type * TypeContext::get_bounded_string_type(uint64_t max_bytes)

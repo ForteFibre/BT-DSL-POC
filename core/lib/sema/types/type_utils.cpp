@@ -56,11 +56,23 @@ bool is_assignable(const Type * target, const Type * source)
     }
   }
 
+  // [T; N] → [U; N] if T assignable from U (exact size)
+  if (target->kind == TypeKind::StaticArray && source->kind == TypeKind::StaticArray) {
+    if (target->size == source->size) {
+      return is_assignable(target->element_type, source->element_type);
+    }
+  }
+
   // [T; <=N] → [T; <=M] where N <= M
   if (target->kind == TypeKind::BoundedArray && source->kind == TypeKind::BoundedArray) {
     if (is_assignable(target->element_type, source->element_type)) {
       return source->size <= target->size;
     }
+  }
+
+  // vec<T> → vec<U> if T assignable from U
+  if (target->kind == TypeKind::DynamicArray && source->kind == TypeKind::DynamicArray) {
+    return is_assignable(target->element_type, source->element_type);
   }
 
   // NOTE: Implicit conversions between static/bounded arrays and vec<T> are forbidden.
@@ -296,8 +308,8 @@ const Type * resolve_type_node(
 
   switch (node->get_kind()) {
     case NodeKind::InferType:
-      // Type inference placeholder - will be resolved later
-      return nullptr;  // Caller handles inference
+      // Type inference placeholder ("_")
+      return types.unknown_type();
 
     case NodeKind::PrimaryType: {
       const auto * primary = static_cast<const PrimaryType *>(node);
@@ -357,7 +369,7 @@ const Type * resolve_type_node(
     case NodeKind::TypeExpr: {
       const auto * expr = static_cast<const TypeExpr *>(node);
       const Type * base = resolve_type_node(types, typeTable, expr->base);
-      if (!base) return nullptr;  // Inference
+      if (!base) return types.error_type();
       if (base->is_error()) return base;
       if (expr->nullable) {
         return types.get_nullable_type(base);
