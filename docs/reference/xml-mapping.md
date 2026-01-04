@@ -48,7 +48,7 @@ BT-DSL は BehaviorTree.CPP (BT.CPP) の DSL フロントエンドとして設�
 
 **DSL:**
 
-```
+```bt-dsl
 extern type Float32;  // float32 相当のカスタム型
 extern type Int16;    // int16 相当のカスタム型
 ```
@@ -98,7 +98,7 @@ XML 上の `<BehaviorTree ID="...">` はフラットな名前空間を持ちま�
 
 **DSL:**
 
-```
+```bt-dsl
 extern action MoveTo(in target: Point, out result: bool);
 MoveTo(target: goal, result: out success);
 ```
@@ -115,7 +115,7 @@ MoveTo(target: goal, result: out success);
 
 **DSL:**
 
-```
+```bt-dsl
 tree Navigate(in goal: Point) { ... }
 
 // 呼び出し
@@ -134,7 +134,7 @@ Navigate(goal: destination);
 
 **DSL:**
 
-```
+```bt-dsl
 extern control Sequence();
 extern decorator Inverter();
 
@@ -163,7 +163,7 @@ Sequence {
 
 **DSL:**
 
-```
+```bt-dsl
 tree Main() {
     ActionA();
     ActionB();
@@ -239,7 +239,7 @@ DSL の事前条件構文は BT.CPP の Precondition 属性にマップされま
 
 **DSL:**
 
-```
+```bt-dsl
 @skip_if(battery < 20)
 Navigate(goal);
 ```
@@ -259,7 +259,7 @@ Navigate(goal);
 
 **DSL:**
 
-```
+```bt-dsl
 @guard(sensor_ok)
 DoWork();
 ```
@@ -291,7 +291,7 @@ DoWork();
 
 **DSL:**
 
-```
+```bt-dsl
 var x: int32 = 10;
 x = x + 5;
 x += 3;
@@ -334,7 +334,7 @@ BT.CPP Script は以下の演算子をサポートします：
 
 **DSL:**
 
-```
+```bt-dsl
 extern action Foo(in x: int32 = 10);
 Foo();  // x を省略
 ```
@@ -354,7 +354,7 @@ Foo();  // x を省略
 
 **DSL:**
 
-```
+```bt-dsl
 DoWork(result: out var x);
 ```
 
@@ -376,7 +376,7 @@ DoWork(result: out var x);
 
 **DSL:**
 
-```
+```bt-dsl
 MoveTo(target: start + offset);
 ```
 
@@ -402,7 +402,7 @@ DSL の nullable 型 (`T?`) における `null` 値は、**Blackboard エント�
 
 **DSL:**
 
-```
+```bt-dsl
 var maybeValue: int32?;  // 初期状態は null
 ```
 
@@ -415,7 +415,7 @@ var maybeValue: int32?;  // 初期状態は null
 
 **DSL:**
 
-```
+```bt-dsl
 var maybeValue: int32? = 10;
 maybeValue = null;  // null に戻す
 ```
@@ -433,7 +433,7 @@ nullable 型の存在チェックには、カスタム Condition ノード `Blac
 
 **DSL:**
 
-```
+```bt-dsl
 @guard(maybeValue != null)
 Process(value: maybeValue!);
 ```
@@ -493,7 +493,7 @@ null チェックと他の条件が `&&` で結合されている場合、短絡
 
 **DSL:**
 
-```
+```bt-dsl
 @skip_if(x != null && x > 10)
 DoWork();
 ```
@@ -536,7 +536,7 @@ DoWork();
 
 **DSL:**
 
-```
+```bt-dsl
 @skip_if(x == null || x < 0)
 DoWork();
 ```
@@ -578,7 +578,7 @@ DoWork();
 
 **DSL:**
 
-```
+```bt-dsl
 extern action MoveTo(in target: Point, out success: bool);
 extern condition IsBatteryOk();
 ```
