@@ -628,16 +628,13 @@ struct NullableShortCircuit
           node.attributes.push_back(
             btcpp::Attribute{std::move(attr_name), "{" + nullable_skip->helper_key + "}"});
         } else {
-          node.attributes.push_back(
-            btcpp::Attribute{
-              std::move(attr_name),
-              serialize_expression(pc->condition, ctx, ExprMode::Precondition)});
-        }
-      } else {
-        node.attributes.push_back(
-          btcpp::Attribute{
+          node.attributes.push_back(btcpp::Attribute{
             std::move(attr_name),
             serialize_expression(pc->condition, ctx, ExprMode::Precondition)});
+        }
+      } else {
+        node.attributes.push_back(btcpp::Attribute{
+          std::move(attr_name), serialize_expression(pc->condition, ctx, ExprMode::Precondition)});
       }
     }
   }
@@ -1322,9 +1319,8 @@ btcpp::Document AstToBtCppModelConverter::convert(const ModuleInfo & module)
             as->op == AssignOp::Assign && as->indices.empty() && is_null_literal_expr(as->value)) {
             btcpp::Node unset;
             unset.tag = "UnsetBlackboard";
-            unset.attributes.push_back(
-              btcpp::Attribute{
-                "key", ctx.var_ref(as->target, as->resolvedTarget, ExprMode::Script)});
+            unset.attributes.push_back(btcpp::Attribute{
+              "key", ctx.var_ref(as->target, as->resolvedTarget, ExprMode::Script)});
             roots.push_back(
               apply_preconditions_and_guard(std::move(unset), as->preconditions, ctx));
           } else {
@@ -1569,9 +1565,8 @@ btcpp::Document AstToBtCppModelConverter::convert_single_output(const ModuleInfo
             as->op == AssignOp::Assign && as->indices.empty() && is_null_literal_expr(as->value)) {
             btcpp::Node unset;
             unset.tag = "UnsetBlackboard";
-            unset.attributes.push_back(
-              btcpp::Attribute{
-                "key", ctx.var_ref(as->target, as->resolvedTarget, ExprMode::Script)});
+            unset.attributes.push_back(btcpp::Attribute{
+              "key", ctx.var_ref(as->target, as->resolvedTarget, ExprMode::Script)});
             roots.push_back(
               apply_preconditions_and_guard(std::move(unset), as->preconditions, ctx));
           } else {
