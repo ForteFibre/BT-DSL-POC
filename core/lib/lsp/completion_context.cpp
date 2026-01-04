@@ -62,6 +62,7 @@ std::optional<CompletionContext> classify_completion_context(
   std::optional<std::string_view> last_ident;
   int paren_depth = 0;
   bool saw_import_kw = false;
+  std::optional<std::string> paren_callable_name;  // Node name for which paren is open
 
   for (const auto & t : toks) {
     if (t.begin() > byte_offset) {
@@ -95,10 +96,17 @@ std::optional<CompletionContext> classify_completion_context(
 
     if (t.kind == bt_dsl::syntax::TokenKind::LParen) {
       ++paren_depth;
+      // Record the callable name when entering the first paren (e.g., NodeName(...))
+      if (paren_depth == 1 && last_ident) {
+        paren_callable_name = std::string(*last_ident);
+      }
       continue;
     }
     if (t.kind == bt_dsl::syntax::TokenKind::RParen) {
       paren_depth = std::max(0, paren_depth - 1);
+      if (paren_depth == 0) {
+        paren_callable_name.reset();
+      }
       continue;
     }
 
@@ -166,11 +174,16 @@ std::optional<CompletionContext> classify_completion_context(
       ctx.kind = CompletionContextKind::ArgName;
     }
 
-    if (!brace_stack.empty()) {
-      const OpenBrace & innermost = brace_stack.back();
-      if (innermost.tree_name) {
-        ctx.tree_name = innermost.tree_name.value();
+    // Search brace stack from innermost to outermost for tree_name
+    for (auto it = brace_stack.rbegin(); it != brace_stack.rend(); ++it) {
+      if (it->tree_name) {
+        ctx.tree_name = it->tree_name.value_or(std::string{});
+        break;
       }
+    }
+    // Set callable_name so port suggestions work
+    if (paren_callable_name) {
+      ctx.callable_name = *paren_callable_name;
     }
     return ctx;
   }
@@ -179,8 +192,12 @@ std::optional<CompletionContext> classify_completion_context(
     const OpenBrace & innermost = brace_stack.back();
     if (innermost.after_tree || innermost.after_node) {
       ctx.kind = CompletionContextKind::TreeBody;
-      if (innermost.tree_name) {
-        ctx.tree_name = innermost.tree_name.value();
+      // Search brace stack for tree_name
+      for (auto it = brace_stack.rbegin(); it != brace_stack.rend(); ++it) {
+        if (it->tree_name) {
+          ctx.tree_name = it->tree_name.value_or(std::string{});
+          break;
+        }
       }
       if (innermost.node_name) {
         ctx.callable_name = innermost.node_name.value();

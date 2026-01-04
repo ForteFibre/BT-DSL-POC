@@ -3,7 +3,7 @@
 // This is a thin wrapper around bt_dsl::lsp::Workspace (serverless APIs).
 // It implements the subset of LSP needed by the VS Code extension e2e tests.
 //
-#include <bt_dsl/basic/source_manager.hpp>
+#include <algorithm>
 #include <bt_dsl/driver/stdlib_finder.hpp>
 #include <bt_dsl/lsp/lsp.hpp>
 #include <cstdint>
@@ -32,6 +32,120 @@ struct DocState
   std::vector<uint32_t> line_offsets;      // byte offsets of each line start
   std::vector<std::string> imported_uris;  // resolved direct imports (+ stdlib)
 };
+
+// -----------------------------
+// UTF-8/UTF-16 conversion helpers
+// -----------------------------
+
+struct Utf8Decode
+{
+  uint32_t codepoint = 0;
+  uint32_t bytes = 0;
+  bool valid = false;
+};
+
+bool is_utf8_cont(unsigned char c) { return (c & 0xC0) == 0x80; }
+
+Utf8Decode decode_utf8_at(std::string_view s, uint32_t i)
+{
+  Utf8Decode d;
+  if (i >= s.size()) {
+    return d;
+  }
+
+  const auto c0 = static_cast<unsigned char>(s[i]);
+
+  // ASCII fast-path.
+  if (c0 < 0x80) {
+    d.codepoint = c0;
+    d.bytes = 1;
+    d.valid = true;
+    return d;
+  }
+
+  // 2-byte
+  if ((c0 & 0xE0) == 0xC0) {
+    if (i + 1 >= s.size()) return d;
+    const auto c1 = static_cast<unsigned char>(s[i + 1]);
+    if (!is_utf8_cont(c1)) return d;
+
+    const uint32_t cp = ((c0 & 0x1F) << 6) | (c1 & 0x3F);
+    // Reject overlong encodings.
+    if (cp < 0x80) return d;
+
+    d.codepoint = cp;
+    d.bytes = 2;
+    d.valid = true;
+    return d;
+  }
+
+  // 3-byte
+  if ((c0 & 0xF0) == 0xE0) {
+    if (i + 2 >= s.size()) return d;
+    const auto c1 = static_cast<unsigned char>(s[i + 1]);
+    const auto c2 = static_cast<unsigned char>(s[i + 2]);
+    if (!is_utf8_cont(c1) || !is_utf8_cont(c2)) return d;
+
+    const uint32_t cp = ((c0 & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
+    // Reject overlong encodings.
+    if (cp < 0x800) return d;
+    // Reject surrogate range.
+    if (cp >= 0xD800 && cp <= 0xDFFF) return d;
+
+    d.codepoint = cp;
+    d.bytes = 3;
+    d.valid = true;
+    return d;
+  }
+
+  // 4-byte
+  if ((c0 & 0xF8) == 0xF0) {
+    if (i + 3 >= s.size()) return d;
+    const auto c1 = static_cast<unsigned char>(s[i + 1]);
+    const auto c2 = static_cast<unsigned char>(s[i + 2]);
+    const auto c3 = static_cast<unsigned char>(s[i + 3]);
+    if (!is_utf8_cont(c1) || !is_utf8_cont(c2) || !is_utf8_cont(c3)) return d;
+
+    const uint32_t cp =
+      ((c0 & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F);
+    // Reject overlong encodings and out-of-range code points.
+    if (cp < 0x10000 || cp > 0x10FFFF) return d;
+
+    d.codepoint = cp;
+    d.bytes = 4;
+    d.valid = true;
+    return d;
+  }
+
+  return d;
+}
+
+uint32_t utf16_units_for_codepoint(uint32_t cp) { return (cp <= 0xFFFF) ? 1U : 2U; }
+
+uint32_t utf16_units_from_utf8_prefix(std::string_view s, uint32_t byte_limit)
+{
+  const uint32_t limit = std::min<uint32_t>(byte_limit, static_cast<uint32_t>(s.size()));
+
+  uint32_t units = 0;
+  uint32_t i = 0;
+  while (i < limit) {
+    const auto dec = decode_utf8_at(s, i);
+    if (!dec.valid || dec.bytes == 0) {
+      // Invalid byte: treat as U+FFFD consuming 1 byte and 1 UTF-16 unit.
+      units += 1;
+      i += 1;
+      continue;
+    }
+    if (i + dec.bytes > limit) {
+      // The requested byte offset lands inside this code point; clamp to the
+      // start of the code point.
+      break;
+    }
+    units += utf16_units_for_codepoint(dec.codepoint);
+    i += dec.bytes;
+  }
+  return units;
+}
 
 std::vector<uint32_t> build_line_offsets(std::string_view text)
 {
@@ -187,20 +301,6 @@ int symbol_kind(std::string_view s)
   return 13;
 }
 
-json to_lsp_range_from_full_range(const json & fr)
-{
-  // FullSourceRange uses 1-indexed line/column; LSP uses 0-indexed.
-  const int sl = std::max(0, fr.value("startLine", 1) - 1);
-  const int sc = std::max(0, fr.value("startColumn", 1) - 1);
-  const int el = std::max(0, fr.value("endLine", 1) - 1);
-  const int ec = std::max(0, fr.value("endColumn", 1) - 1);
-
-  return json{
-    {"start", json{{"line", sl}, {"character", sc}}},
-    {"end", json{{"line", el}, {"character", ec}}},
-  };
-}
-
 std::optional<uint32_t> utf8_position_to_byte_offset(
   const DocState & doc, uint32_t line, uint32_t character)
 {
@@ -253,27 +353,11 @@ std::optional<uint32_t> utf16_position_to_byte_offset(
   };
 
   while (byte_index < slice.size() && utf16_units < character) {
-    const auto c0 = static_cast<unsigned char>(slice[byte_index]);
+    const auto dec = decode_utf8_at(slice, byte_index);
+    const uint32_t nbytes = (dec.valid && dec.bytes > 0) ? dec.bytes : 1U;
+    const uint32_t cp = dec.valid ? dec.codepoint : 0xFFFD;
+    const uint32_t units = utf16_units_for_codepoint(cp);
 
-    // Decode a single UTF-8 code point.
-    uint32_t cp = c0;
-    uint32_t nbytes = 1;
-    if (c0 >= 0x80 && (c0 & 0xE0) == 0xC0 && byte_index + 1 < slice.size()) {
-      cp = ((c0 & 0x1F) << 6) | (static_cast<unsigned char>(slice[byte_index + 1]) & 0x3F);
-      nbytes = 2;
-    } else if (c0 >= 0x80 && (c0 & 0xF0) == 0xE0 && byte_index + 2 < slice.size()) {
-      cp = ((c0 & 0x0F) << 12) | ((static_cast<unsigned char>(slice[byte_index + 1]) & 0x3F) << 6) |
-           (static_cast<unsigned char>(slice[byte_index + 2]) & 0x3F);
-      nbytes = 3;
-    } else if (c0 >= 0x80 && (c0 & 0xF8) == 0xF0 && byte_index + 3 < slice.size()) {
-      cp = ((c0 & 0x07) << 18) |
-           ((static_cast<unsigned char>(slice[byte_index + 1]) & 0x3F) << 12) |
-           ((static_cast<unsigned char>(slice[byte_index + 2]) & 0x3F) << 6) |
-           (static_cast<unsigned char>(slice[byte_index + 3]) & 0x3F);
-      nbytes = 4;
-    }
-
-    const uint32_t units = (cp <= 0xFFFF) ? 1U : 2U;
     if (!advance(nbytes, units)) {
       break;
     }
@@ -343,7 +427,10 @@ int main()
 
     std::unordered_map<std::string, DocState> docs;
     std::string stdlib_base;  // Base directory containing std/ (parent of stdlib dir)
-    std::string negotiated_position_encoding = "utf-8";
+    // LSP defaults to UTF-16 when position encodings are not negotiated.
+    std::string negotiated_position_encoding = "utf-16";
+
+    const bool debug = (std::getenv("BT_DSL_LSP_DEBUG") != nullptr);
 
     auto upsert_doc = [&](const std::string & uri, const std::string & text) -> DocState & {
       auto & d = docs[uri];
@@ -413,42 +500,6 @@ int main()
       }
     };
 
-    auto publish_diagnostics = [&](const DocState & doc) {
-      json dj;
-      try {
-        dj = json::parse(ws.diagnostics_json(doc.uri, doc.imported_uris));
-      } catch (...) {
-        dj = json{{"uri", doc.uri}, {"items", json::array()}};
-      }
-
-      json lsp_diags = json::array();
-      if (dj.contains("items") && dj["items"].is_array()) {
-        for (const auto & it : dj["items"]) {
-          if (!it.is_object()) continue;
-          json d0;
-          d0["message"] = it.value("message", "");
-          d0["severity"] = lsp_severity(it.value("severity", "Info"));
-          if (it.contains("source") && it["source"].is_string()) {
-            d0["source"] = it["source"];
-          }
-          if (it.contains("range") && it["range"].is_object()) {
-            d0["range"] = to_lsp_range_from_full_range(it["range"]);
-          } else {
-            d0["range"] = json{
-              {"start", json{{"line", 0}, {"character", 0}}},
-              {"end", json{{"line", 0}, {"character", 0}}}};
-          }
-          lsp_diags.push_back(std::move(d0));
-        }
-      }
-
-      json notif;
-      notif["jsonrpc"] = "2.0";
-      notif["method"] = "textDocument/publishDiagnostics";
-      notif["params"] = json{{"uri", doc.uri}, {"diagnostics", lsp_diags}};
-      write_message(notif);
-    };
-
     auto pos_to_byte_offset = [&](const DocState & doc, const json & pos) -> uint32_t {
       const auto line = pos.value<uint32_t>("line", 0U);
       const auto character = pos.value<uint32_t>("character", 0U);
@@ -468,11 +519,42 @@ int main()
     };
 
     auto byte_offset_to_lsp_position = [&](const DocState & doc, uint32_t byte_offset) -> json {
-      const bt_dsl::SourceManager sm(doc.text);
-      const auto lc = sm.get_line_column(bt_dsl::SourceLocation(byte_offset));
-      const int line = std::max(0, static_cast<int>(lc.line) - 1);
-      const int col = std::max(0, static_cast<int>(lc.column) - 1);
-      return json{{"line", line}, {"character", col}};
+      if (doc.line_offsets.empty()) {
+        return json{{"line", 0}, {"character", 0}};
+      }
+
+      const uint32_t clamped =
+        std::min<uint32_t>(byte_offset, static_cast<uint32_t>(doc.text.size()));
+
+      // Find the line containing clamped.
+      const auto it = std::upper_bound(doc.line_offsets.begin(), doc.line_offsets.end(), clamped);
+      const uint32_t line = (it == doc.line_offsets.begin())
+                              ? 0U
+                              : static_cast<uint32_t>((it - doc.line_offsets.begin()) - 1);
+
+      const uint32_t line_start = doc.line_offsets[line];
+      const uint32_t next_line_start = (line + 1 < doc.line_offsets.size())
+                                         ? doc.line_offsets[line + 1]
+                                         : static_cast<uint32_t>(doc.text.size());
+      const uint32_t line_end =
+        std::min<uint32_t>(next_line_start, static_cast<uint32_t>(doc.text.size()));
+
+      const uint32_t byte_in_line = (clamped >= line_start) ? (clamped - line_start) : 0U;
+      const uint32_t byte_in_line_clamped =
+        std::min<uint32_t>(byte_in_line, (line_end >= line_start) ? (line_end - line_start) : 0U);
+
+      const std::string_view slice =
+        std::string_view(doc.text).substr(line_start, line_end - line_start);
+
+      uint32_t character = 0;
+      if (negotiated_position_encoding == "utf-16") {
+        character = utf16_units_from_utf8_prefix(slice, byte_in_line_clamped);
+      } else {
+        // utf-8: character is a byte offset.
+        character = byte_in_line_clamped;
+      }
+
+      return json{{"line", static_cast<int>(line)}, {"character", static_cast<int>(character)}};
     };
 
     auto byte_range_to_lsp_range = [&](const DocState & doc, uint32_t sb, uint32_t eb) -> json {
@@ -480,6 +562,60 @@ int main()
         {"start", byte_offset_to_lsp_position(doc, sb)},
         {"end", byte_offset_to_lsp_position(doc, eb)},
       };
+    };
+
+    auto to_lsp_range_from_full_range_with_doc = [&](
+                                                   const DocState * doc, const json & fr) -> json {
+      if (doc != nullptr && fr.is_object() && fr.contains("startByte") && fr.contains("endByte")) {
+        const auto sb = fr.value<uint32_t>("startByte", 0U);
+        const auto eb = fr.value<uint32_t>("endByte", 0U);
+        return byte_range_to_lsp_range(*doc, sb, eb);
+      }
+      // Fallback: FullSourceRange uses 1-indexed line/column; LSP uses 0-indexed.
+      const int sl = std::max(0, fr.value("startLine", 1) - 1);
+      const int sc = std::max(0, fr.value("startColumn", 1) - 1);
+      const int el = std::max(0, fr.value("endLine", 1) - 1);
+      const int ec = std::max(0, fr.value("endColumn", 1) - 1);
+      return json{
+        {"start", json{{"line", sl}, {"character", sc}}},
+        {"end", json{{"line", el}, {"character", ec}}},
+      };
+    };
+
+    auto publish_diagnostics = [&](const DocState & doc) {
+      json dj;
+      try {
+        dj = json::parse(ws.diagnostics_json(doc.uri, doc.imported_uris));
+      } catch (...) {
+        dj = json{{"uri", doc.uri}, {"items", json::array()}};
+      }
+
+      json lsp_diags = json::array();
+      if (dj.contains("items") && dj["items"].is_array()) {
+        for (const auto & it : dj["items"]) {
+          if (!it.is_object()) continue;
+          json d0;
+          d0["message"] = it.value("message", "");
+          d0["severity"] = lsp_severity(it.value("severity", "Info"));
+          if (it.contains("source") && it["source"].is_string()) {
+            d0["source"] = it["source"];
+          }
+          if (it.contains("range") && it["range"].is_object()) {
+            d0["range"] = to_lsp_range_from_full_range_with_doc(&doc, it["range"]);
+          } else {
+            d0["range"] = json{
+              {"start", json{{"line", 0}, {"character", 0}}},
+              {"end", json{{"line", 0}, {"character", 0}}}};
+          }
+          lsp_diags.push_back(std::move(d0));
+        }
+      }
+
+      json notif;
+      notif["jsonrpc"] = "2.0";
+      notif["method"] = "textDocument/publishDiagnostics";
+      notif["params"] = json{{"uri", doc.uri}, {"diagnostics", lsp_diags}};
+      write_message(notif);
     };
 
     bool running = true;
@@ -516,7 +652,7 @@ int main()
 
       if (method == "initialize" && is_request) {
         // Determine position encoding
-        negotiated_position_encoding = "utf-8";
+        negotiated_position_encoding = "utf-16";
         try {
           if (params.contains("capabilities") && params["capabilities"].is_object()) {
             const auto & caps = params["capabilities"];
@@ -531,15 +667,15 @@ int main()
                   if (s == "utf-8") has_utf8 = true;
                   if (s == "utf-16") has_utf16 = true;
                 }
-                negotiated_position_encoding = "utf-8";
-                if (!has_utf8 && has_utf16) {
-                  negotiated_position_encoding = "utf-16";
-                }
+                // Prefer UTF-16 when available. VS Code consistently supports
+                // UTF-16 and many client-side Position values originate as
+                // UTF-16 code unit offsets.
+                negotiated_position_encoding = (has_utf8 && !has_utf16) ? "utf-8" : "utf-16";
               }
             }
           }
         } catch (...) {
-          negotiated_position_encoding = "utf-8";
+          negotiated_position_encoding = "utf-16";
         }
 
         // Auto-detect stdlib directory using find_stdlib().
@@ -558,6 +694,12 @@ int main()
         caps["documentSymbolProvider"] = true;
 
         const json result = json{{"capabilities", caps}};
+
+        if (debug) {
+          std::cerr << "bt_dsl_lsp_server: negotiated positionEncoding="
+                    << negotiated_position_encoding << "\n";
+        }
+
         respond(msg["id"], result);
         continue;
       }
@@ -641,6 +783,20 @@ int main()
         const DocState & doc = it->second;
         const uint32_t off = pos_to_byte_offset(doc, pos);
 
+        if (debug) {
+          const auto line = pos.value<uint32_t>("line", 0U);
+          const auto ch = pos.value<uint32_t>("character", 0U);
+          const uint32_t s = (off > 24U) ? (off - 24U) : 0U;
+          const uint32_t e = std::min<uint32_t>(static_cast<uint32_t>(doc.text.size()), off + 24U);
+          std::string snippet = doc.text.substr(s, e - s);
+          for (char & c : snippet) {
+            if (c == '\n') c = ' ';
+            if (c == '\r') c = ' ';
+          }
+          std::cerr << "bt_dsl_lsp_server: completion pos " << line << ":" << ch
+                    << " -> byteOff=" << off << " snippet=\"" << snippet << "\"\n";
+        }
+
         json cj;
         try {
           cj = json::parse(ws.completion_json(uri, off, doc.imported_uris));
@@ -698,6 +854,13 @@ int main()
         const DocState & doc = it->second;
         const uint32_t off = pos_to_byte_offset(doc, pos);
 
+        if (debug) {
+          const auto line = pos.value<uint32_t>("line", 0U);
+          const auto ch = pos.value<uint32_t>("character", 0U);
+          std::cerr << "bt_dsl_lsp_server: hover pos " << line << ":" << ch << " -> byteOff=" << off
+                    << "\n";
+        }
+
         json hj;
         try {
           hj = json::parse(ws.hover_json(uri, off, doc.imported_uris));
@@ -715,7 +878,7 @@ int main()
         json out;
         out["contents"] = json{{"kind", "markdown"}, {"value", hj["contents"]}};
         if (hj.contains("range") && hj["range"].is_object()) {
-          out["range"] = to_lsp_range_from_full_range(hj["range"]);
+          out["range"] = to_lsp_range_from_full_range_with_doc(&doc, hj["range"]);
         }
 
         respond(msg["id"], out);
@@ -748,7 +911,15 @@ int main()
             json out;
             out["uri"] = loc.value("uri", "");
             if (loc.contains("range") && loc["range"].is_object()) {
-              out["range"] = to_lsp_range_from_full_range(loc["range"]);
+              const std::string target_uri = out["uri"].get<std::string>();
+              const DocState * tdoc = nullptr;
+              if (!target_uri.empty()) {
+                auto tit = docs.find(target_uri);
+                if (tit != docs.end()) {
+                  tdoc = &tit->second;
+                }
+              }
+              out["range"] = to_lsp_range_from_full_range_with_doc(tdoc, loc["range"]);
             } else {
               out["range"] = json{
                 {"start", json{{"line", 0}, {"character", 0}}},
@@ -781,8 +952,11 @@ int main()
             ds["name"] = s0.value("name", "");
             ds["kind"] = symbol_kind(s0.value("kind", ""));
             if (s0.contains("range") && s0["range"].is_object()) {
-              ds["range"] = to_lsp_range_from_full_range(s0["range"]);
-              ds["selectionRange"] = to_lsp_range_from_full_range(s0["selectionRange"]);
+              auto it = docs.find(uri);
+              const DocState * docp = (it == docs.end()) ? nullptr : &it->second;
+              ds["range"] = to_lsp_range_from_full_range_with_doc(docp, s0["range"]);
+              ds["selectionRange"] =
+                to_lsp_range_from_full_range_with_doc(docp, s0["selectionRange"]);
             } else {
               ds["range"] = json{
                 {"start", json{{"line", 0}, {"character", 0}}},

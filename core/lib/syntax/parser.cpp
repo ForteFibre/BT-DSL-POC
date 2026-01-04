@@ -98,7 +98,14 @@ void Parser::synchronize_to_stmt()
     if (match(TokenKind::Semicolon)) {
       return;
     }
+    // Also stop at tokens that can start a new statement or close a block.
     if (at(TokenKind::RBrace)) {
+      return;
+    }
+    // Stop at keywords that begin new declarations/statements.
+    if (
+      is_kw("var", cur()) || is_kw("const", cur()) || is_kw("type", cur()) ||
+      is_kw("tree", cur()) || is_kw("import", cur()) || is_kw("extern", cur())) {
       return;
     }
     advance();
@@ -1295,6 +1302,7 @@ std::string Parser::unescape_string(std::string_view raw, const Token & tok_for_
         break;
       case 'u': {
         // \u{HEX}
+        bool valid = true;
         if (i + 1 >= raw.size() || raw[i + 1] != '{') {
           error_at(tok_for_diag, "expected \\u{...} escape");
           break;
@@ -1313,6 +1321,7 @@ std::string Parser::unescape_string(std::string_view raw, const Token & tok_for_
             v = static_cast<uint32_t>(10 + (h - 'A'));
           } else {
             error_at(tok_for_diag, "invalid hex digit in \\u{...} escape");
+            valid = false;
             break;
           }
           any = true;
@@ -1320,22 +1329,28 @@ std::string Parser::unescape_string(std::string_view raw, const Token & tok_for_
           i += 1;
           if (cp > 0x10FFFF) {
             error_at(tok_for_diag, "unicode escape out of range");
+            valid = false;
             break;
           }
         }
         if (!any) {
           error_at(tok_for_diag, "empty unicode escape");
+          valid = false;
         }
         if (i + 1 < raw.size() && raw[i + 1] == '}') {
           i += 1;  // consume '}'
         } else {
           error_at(tok_for_diag, "unterminated unicode escape");
+          valid = false;
         }
         if (cp >= 0xD800 && cp <= 0xDFFF) {
           error_at(tok_for_diag, "unicode surrogate not allowed");
-          break;
+          valid = false;
         }
-        append_utf8(out, cp);
+        // Only append the codepoint if the entire escape sequence was valid.
+        if (valid) {
+          append_utf8(out, cp);
+        }
         break;
       }
       default:

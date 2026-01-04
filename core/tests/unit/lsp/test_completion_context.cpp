@@ -95,3 +95,66 @@ TEST(LspCompletionContext, ArgStartAfterLParen)
   const auto & ctxv = *ctx;
   EXPECT_EQ(ctxv.kind, CompletionContextKind::ArgStart);
 }
+
+TEST(LspCompletionContext, CallableNameSetInParenContext)
+{
+  const std::string src = "tree MyTree() {\n  NodeCall(arg: 1);\n}\n";
+  // Position cursor inside parens, after '('
+  const uint32_t off = off_at(src, "NodeCall(") + 9;  // after 'NodeCall('
+
+  auto ctx = classify_completion_context(src, off);
+  if (!ctx.has_value()) {
+    ADD_FAILURE() << "expected a completion context";
+    return;
+  }
+  const auto & ctxv = *ctx;
+  // Should be ArgStart or ArgName since we're inside parens
+  EXPECT_TRUE(
+    ctxv.kind == CompletionContextKind::ArgStart || ctxv.kind == CompletionContextKind::ArgName ||
+    ctxv.kind == CompletionContextKind::ArgValue);
+  // callable_name should be set to NodeCall
+  EXPECT_TRUE(ctxv.callable_name.has_value()) << "callable_name should be set";
+  if (ctxv.callable_name.has_value()) {
+    EXPECT_EQ(*ctxv.callable_name, "NodeCall");
+  }
+  // tree_name should also be set
+  EXPECT_TRUE(ctxv.tree_name.has_value()) << "tree_name should be set";
+  if (ctxv.tree_name.has_value()) {
+    EXPECT_EQ(*ctxv.tree_name, "MyTree");
+  }
+}
+
+TEST(LspCompletionContext, CallableNameWithNestedBraces)
+{
+  // Mimic the E2E test fixture structure
+  const std::string src =
+    "tree Main() {\n"
+    "  TestDeco(enabled: true) {\n"
+    "    Sequence {\n"
+    "      TestAction(pos: 1);\n"
+    "    }\n"
+    "  }\n"
+    "}\n";
+  // Position cursor inside TestAction( after 'pos'
+  const uint32_t off = off_at(src, "TestAction(p") + 11;  // after 'TestAction('
+
+  auto ctx = classify_completion_context(src, off);
+  if (!ctx.has_value()) {
+    ADD_FAILURE() << "expected a completion context";
+    return;
+  }
+  const auto & ctxv = *ctx;
+  EXPECT_TRUE(
+    ctxv.kind == CompletionContextKind::ArgStart || ctxv.kind == CompletionContextKind::ArgName ||
+    ctxv.kind == CompletionContextKind::ArgValue);
+  // callable_name should be TestAction
+  EXPECT_TRUE(ctxv.callable_name.has_value()) << "callable_name should be set";
+  if (ctxv.callable_name.has_value()) {
+    EXPECT_EQ(*ctxv.callable_name, "TestAction");
+  }
+  // tree_name should be Main
+  EXPECT_TRUE(ctxv.tree_name.has_value()) << "tree_name should be set";
+  if (ctxv.tree_name.has_value()) {
+    EXPECT_EQ(*ctxv.tree_name, "Main");
+  }
+}

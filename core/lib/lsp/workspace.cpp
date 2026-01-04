@@ -1107,12 +1107,20 @@ struct Workspace::Impl
       }
 
       const bt_dsl::NodeSymbol * sym = doc->module.nodes.lookup(*ctx.callable_name);
+      const Document * decl_doc = doc;
       if (sym == nullptr) {
-        for (auto * imp : doc->module.imports) {
-          if (imp == nullptr) continue;
-          const bt_dsl::NodeSymbol * imported = imp->nodes.lookup(*ctx.callable_name);
+        // Prefer URIs explicitly provided by the host; this is more robust than
+        // relying on d.module.imports being populated/cached.
+        for (const auto & imp_uri : imported_uris) {
+          auto * imp_doc = get_doc(imp_uri);
+          if (imp_doc == nullptr) {
+            continue;
+          }
+          ensure_indexed(*imp_doc);
+          const bt_dsl::NodeSymbol * imported = imp_doc->module.nodes.lookup(*ctx.callable_name);
           if (imported != nullptr && bt_dsl::ModuleInfo::is_public(imported->name)) {
             sym = imported;
+            decl_doc = imp_doc;
             break;
           }
         }
@@ -1132,7 +1140,7 @@ struct Workspace::Impl
           if (p->type != nullptr) {
             // TypeExpr's printed name is not trivially available here; fallback to slice.
             const auto tr = p->type->get_range();
-            const auto slice = doc->module.parsedUnit->source.get_source_slice(tr);
+            const auto slice = decl_doc->module.parsedUnit->source.get_source_slice(tr);
             ps.type = std::string(slice);
           }
           ports.push_back(std::move(ps));
@@ -1149,7 +1157,7 @@ struct Workspace::Impl
           ps.type = "";
           if (param->type != nullptr) {
             const auto tr = param->type->get_range();
-            ps.type = std::string(doc->module.parsedUnit->source.get_source_slice(tr));
+            ps.type = std::string(decl_doc->module.parsedUnit->source.get_source_slice(tr));
           }
           ports.push_back(std::move(ps));
         }
@@ -1321,12 +1329,19 @@ struct Workspace::Impl
 
     if (auto w = word_at(doc->text, byte_offset)) {
       const bt_dsl::NodeSymbol * sym = doc->module.nodes.lookup(*w);
+      const Document * decl_doc = doc;
       if (sym == nullptr) {
-        for (auto * imp : doc->module.imports) {
-          if (imp == nullptr) continue;
-          const bt_dsl::NodeSymbol * imported = imp->nodes.lookup(*w);
+        // Prefer URIs explicitly provided by the host.
+        for (const auto & imp_uri : imported_uris) {
+          auto * imp_doc = get_doc(imp_uri);
+          if (imp_doc == nullptr) {
+            continue;
+          }
+          ensure_indexed(*imp_doc);
+          const bt_dsl::NodeSymbol * imported = imp_doc->module.nodes.lookup(*w);
           if (imported != nullptr && bt_dsl::ModuleInfo::is_public(imported->name)) {
             sym = imported;
+            decl_doc = imp_doc;
             break;
           }
         }
@@ -1345,8 +1360,8 @@ struct Workspace::Impl
               const std::string dir =
                 p->direction ? std::string(bt_dsl::to_string(*p->direction)) : "";
               const std::string ty =
-                p->type ? std::string(
-                            doc->module.parsedUnit->source.get_source_slice(p->type->get_range()))
+                p->type ? std::string(decl_doc->module.parsedUnit->source.get_source_slice(
+                            p->type->get_range()))
                         : "";
               md += "\n- `" + format_port(dir, p->name, ty) + "`";
             }
@@ -1360,8 +1375,8 @@ struct Workspace::Impl
               const std::string dir =
                 p->direction ? std::string(bt_dsl::to_string(*p->direction)) : "";
               const std::string ty =
-                p->type ? std::string(
-                            doc->module.parsedUnit->source.get_source_slice(p->type->get_range()))
+                p->type ? std::string(decl_doc->module.parsedUnit->source.get_source_slice(
+                            p->type->get_range()))
                         : "";
               md += "\n- `" + format_port(dir, p->name, ty) + "`";
             }
