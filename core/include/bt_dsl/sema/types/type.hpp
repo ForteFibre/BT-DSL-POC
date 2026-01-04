@@ -210,6 +210,7 @@ public:
   [[nodiscard]] const Type * integer_literal_type() const noexcept { return &integer_literal_; }
   [[nodiscard]] const Type * float_literal_type() const noexcept { return &float_literal_; }
   [[nodiscard]] const Type * null_literal_type() const noexcept { return &null_literal_; }
+  [[nodiscard]] const Type * unknown_type() const noexcept { return &unknown_; }
 
   // ===========================================================================
   // Composite Type Creation (Interned)
@@ -249,6 +250,7 @@ private:
   Type bool_, string_;
   Type error_;
   Type integer_literal_, float_literal_, null_literal_;
+  Type unknown_;
 
   // Arena for composite types
   std::pmr::monotonic_buffer_resource arena_{4096};

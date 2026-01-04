@@ -6,6 +6,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/basic/diagnostic.hpp"
@@ -113,7 +114,7 @@ private:
   const Type * infer_var_ref(VarRefExpr * node);
   const Type * infer_binary_expr(BinaryExpr * node, const Type * expected);
   const Type * infer_unary_expr(UnaryExpr * node, const Type * expected);
-  const Type * infer_cast_expr(CastExpr * node);
+  const Type * infer_cast_expr(CastExpr * node, const Type * expected);
   const Type * infer_index_expr(IndexExpr * node);
   const Type * infer_array_literal(ArrayLiteralExpr * node, const Type * expected);
   const Type * infer_array_repeat(ArrayRepeatExpr * node, const Type * expected);
@@ -143,6 +144,24 @@ private:
   /// Get type of a symbol from SymbolTable
   const Type * get_symbol_type(const Symbol * sym);
 
+  /// Get type from explicit annotation / const value only (no inference overrides).
+  const Type * get_declared_symbol_type(const Symbol * sym);
+
+  /// Check whether a symbol is eligible for type inference (var-like, not const).
+  [[nodiscard]] static bool is_inferable_var_symbol(const Symbol * sym) noexcept;
+
+  /// Constrain/infer a variable type from an assignment/usage.
+  void constrain_var_type(const Symbol * sym, const Type * constraint_type, SourceRange where);
+
+  /// Union two inferable variables into the same inference class.
+  void unify_infer_vars(const Symbol * a, const Symbol * b, SourceRange where);
+
+  /// Find the representative (root) of an inferable variable.
+  const Symbol * find_infer_root(const Symbol * sym);
+
+  /// Resolve wildcard types to a concrete type when possible.
+  const Type * normalize_inference_type(const Type * t);
+
   /// Apply defaults to placeholder types
   const Type * apply_defaults(const Type * type);
 
@@ -161,6 +180,19 @@ private:
   // Flow-sensitive type overrides for Value symbols during expression checking.
   // Used to model nullable narrowing under short-circuit boolean operators.
   std::unordered_map<const Symbol *, const Type *> value_type_overrides_;
+
+  // Persistent inferred types for vars without concrete annotation.
+  std::unordered_map<const Symbol *, const Type *> inferred_symbol_types_;
+
+  // Union-Find parent map for inference equivalence classes.
+  // Only populated for inferable vars.
+  std::unordered_map<const Symbol *, const Symbol *> infer_parent_;
+
+  // Variables declared but still unresolved at end of scope.
+  std::unordered_set<const Symbol *> unresolved_vars_;
+
+  // Current value scope (tree scope or children_block scope) during checking.
+  const Scope * current_scope_ = nullptr;
 
   bool has_errors_ = false;
   size_t error_count_ = 0;

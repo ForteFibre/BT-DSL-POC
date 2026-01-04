@@ -6,10 +6,10 @@
 
 ## 1. デザインゴール (Design Goals)
 
-1.  **Zero Configuration Start**: 単一ファイルであれば設定なしで即座にコンパイル可能であること。
-2.  **Project-based**: 大規模な BehaviorTree 開発を想定し、プロジェクト設定ファイルによる依存関係管理とビルド設定をサポートすること。
-3.  **Developer Experience (DX)**: 高速なビルド、明確なエラーメッセージ、LSP (Language Server Protocol) との統合を重視すること。
-4.  **XML-Only Output**: コンパイラの責務を「XML生成」に限定し、ホスト(C++)側との結合を疎に保つこと。
+1. **Zero Configuration Start**: 単一ファイルであれば設定なしで即座にコンパイル可能であること。
+2. **Project-based**: 大規模な BehaviorTree 開発を想定し、プロジェクト設定ファイルによる依存関係管理とビルド設定をサポートすること。
+3. **Developer Experience (DX)**: 高速なビルド、明確なエラーメッセージ、LSP (Language Server Protocol) との統合を重視すること。
+4. **XML-Only Output**: コンパイラの責務を「XML生成」に限定し、ホスト(C++)側との結合を疎に保つこと。
 
 ---
 
@@ -108,7 +108,7 @@ $ btc build --watch
 コード生成を行わず、構文チェックと静的解析のみを実行します。CI/CD パイプラインでの利用を想定します。
 
 ```bash
-$ btc check
+btc check
 ```
 
 #### `btc init`
@@ -116,7 +116,7 @@ $ btc check
 新しい BT-DSL プロジェクトを初期化し、`btc.yaml` とディレクトリ構造を生成します。
 
 ```bash
-$ btc init my_new_project
+btc init my_new_project
 ```
 
 ---
@@ -125,16 +125,16 @@ $ btc init my_new_project
 
 ビルドは以下のパイプラインで実行されます。
 
-1.  **Load & Parse**:
+1. **Load & Parse**:
     - エントリポイント（`btc.yaml` または引数指定）からパースを開始。
     - `import` 文を検出し、依存ファイルを再帰的に探索・パース。
     - **キャッシング**: 変更のないファイルはパースをスキップ（インクリメンタルビルド）。
-2.  **Resolve & Validate**:
+2. **Resolve & Validate**:
     - シンボル解決：全ファイルに渡る識別子のリンク。
     - **型チェック**: `expression-typing.md` に基づく厳格な型検証。
     - **安全性検証**: `static-analysis-and-safety.md` に基づく循環参照や無限ループの検出。
     - エラーがある場合、ここでビルドを停止し、詳細な診断メッセージを表示。
-3.  **Generate**:
+3. **Generate**:
     - XML形式のコード生成。
 
 ---
