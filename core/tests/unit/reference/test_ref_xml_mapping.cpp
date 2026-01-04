@@ -542,3 +542,106 @@ TEST(RefXmlMapping, StringLiteralSerialization)
   // String should appear in XML
   EXPECT_TRUE(xml.find("hello") != std::string::npos);
 }
+
+// ============================================================================
+// 7. Nullable Types and Existence Check
+// Reference: null assignment -> UnsetBlackboard, != null -> BlackboardExists
+// ============================================================================
+
+TEST(RefXmlMapping, NullAssignmentUnsetBlackboard)
+{
+  XmlTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      var x: int32? = 10;
+      x = null;
+    }
+  )"));
+  auto xml = ctx.generate_xml();
+  // x = null should generate UnsetBlackboard
+  EXPECT_TRUE(xml.find("<UnsetBlackboard") != std::string::npos);
+  EXPECT_TRUE(xml.find("key=\"x#") != std::string::npos);
+}
+
+TEST(RefXmlMapping, BlackboardExistsCheck)
+{
+  XmlTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action DoWork();
+    tree Main() {
+      var x: int32? = null;
+      @guard(x != null)
+      DoWork();
+    }
+  )"));
+  auto xml = ctx.generate_xml();
+  // @guard(x != null) should use BlackboardExists
+  EXPECT_TRUE(xml.find("<BlackboardExists") != std::string::npos);
+  EXPECT_TRUE(xml.find("key=\"x#") != std::string::npos);
+}
+
+TEST(RefXmlMapping, ComplexNullCheckTransformation)
+{
+  // Spec 7.5: @skip_if(x != null && x > 10)
+  // Should verify that the transformation logic described in 7.5 is generated.
+  // This typically involves a helper variable and ForceSuccess/BlackboardExists sequence.
+  XmlTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action DoWork();
+    tree Main() {
+      var x: int32? = 10;
+      @skip_if(x != null && x > 10)
+      DoWork();
+    }
+  )"));
+  auto xml = ctx.generate_xml();
+
+  // We expect a helper variable for the skip condition
+  // And a check sequence involving BlackboardExists
+  // Note: The implementation might use specific names for helpers, but we check for key components
+  EXPECT_TRUE(xml.find("<ForceSuccess>") != std::string::npos);
+  EXPECT_TRUE(xml.find("<BlackboardExists") != std::string::npos);
+  EXPECT_TRUE(xml.find("_skipIf=") != std::string::npos);
+}
+
+TEST(RefXmlMapping, OrNullCheckPattern)
+{
+  // Spec 7.5: @skip_if(x == null || x < 0)
+  // Should verify transformation logic for OR
+  XmlTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action DoWork();
+    tree Main() {
+      var x: int32? = null;
+      @skip_if(x == null || x < 0)
+      DoWork();
+    }
+  )"));
+  auto xml = ctx.generate_xml();
+  // Expect helper var init to true
+  EXPECT_TRUE(xml.find(":=") != std::string::npos);
+  EXPECT_TRUE(xml.find("true") != std::string::npos);
+  // Expect ForceSuccess block
+  EXPECT_TRUE(xml.find("<ForceSuccess>") != std::string::npos);
+}
+
+// ============================================================================
+// 6.1 Compound Assignment Unfolding
+// Reference: x += 3 -> x = x + 3
+// ============================================================================
+
+TEST(RefXmlMapping, CompoundAssignmentUnfolding)
+{
+  XmlTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main() {
+      var x: int32 = 0;
+      x += 3;
+    }
+  )"));
+  auto xml = ctx.generate_xml();
+  // Should NOT find += in script
+  EXPECT_FALSE(xml.find("+=") != std::string::npos);
+  // Should find x = x + ...
+  EXPECT_TRUE(xml.find('=') != std::string::npos && xml.find('+') != std::string::npos);
+}

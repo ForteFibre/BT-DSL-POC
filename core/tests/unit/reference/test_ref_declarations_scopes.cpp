@@ -332,6 +332,23 @@ TEST(RefDeclScopes, NameResolutionPriorityParam)
       Foo(val: x);
     }
   )"));
+  // Per spec 4.2.3: "Shadowing parent scope identifiers is prohibited"
+  // So defining a param 'x' when 'x' exists in global scope should be an ERROR.
+  // Although the original test expected success, strict compliance requires failure.
+  EXPECT_FALSE(ctx.run_sema());
+}
+
+TEST(RefDeclScopes, ShadowingGlobalByTreeOkIfDifferentNamespace)
+{
+  // Same name in different namespace (e.g. Node vs Value) is OK
+  ScopeTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action Foo();
+    tree Main() {
+      // Foo is a Node, x is a Value -> OK
+      var Foo: int32 = 1;
+    }
+  )"));
   EXPECT_TRUE(ctx.run_sema());
 }
 

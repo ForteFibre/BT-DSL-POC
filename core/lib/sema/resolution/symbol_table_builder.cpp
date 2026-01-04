@@ -154,6 +154,11 @@ void SymbolTableBuilder::build_tree_scope(TreeDecl * tree)
   // need to detect duplicates for reference compliance.
   for (const auto * param : tree->params) {
     if (!param) continue;
+
+    // Spec §4.2.3: Shadowing is forbidden across ancestor scopes.
+    // Tree params live in the tree scope (parent is global scope).
+    check_shadowing(param->name, param->get_range());
+
     if (const Symbol * existing = current_scope_->lookup_local(param->name)) {
       if (existing->astNode != param) {
         report_error(param->get_range(), "redefinition of parameter");

@@ -326,3 +326,20 @@ TEST(RefTypeDefinitions, BoundedStringExactLimit)
   ASSERT_TRUE(ctx.parse(R"(const X: string<5> = "hello";)"));  // 5 bytes = 5
   EXPECT_TRUE(ctx.run_sema());
 }
+
+TEST(RefTypeDefinitions, BoundedStringMultiByte)
+{
+  // "あ" is 3 bytes in UTF-8.
+  // string<3> should fit "あ"
+  TypeDefTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(const X: string<3> = "あ";)"));
+  EXPECT_TRUE(ctx.run_sema());
+}
+
+TEST(RefTypeDefinitions, BoundedStringMultiByteOverflow)
+{
+  // "あ" is 3 bytes. string<2> should fail.
+  TypeDefTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(const X: string<2> = "あ";)"));
+  EXPECT_FALSE(ctx.run_sema());
+}

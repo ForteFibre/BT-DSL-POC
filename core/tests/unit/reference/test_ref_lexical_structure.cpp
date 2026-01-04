@@ -148,6 +148,12 @@ TEST(RefLexicalStructure, IntegerLiteralInvalidOctalDigit)
   EXPECT_TRUE(parses_with_error("const X = 0o89;"));
 }
 
+TEST(RefLexicalStructure, IntegerLiteralSeparatorUnsupported)
+{
+  // MUST FAIL: Separators are not supported (1.4.2)
+  EXPECT_TRUE(parses_with_error("const X = 1_000;"));
+}
+
 TEST(RefLexicalStructure, IntegerLiteralInvalidBinaryDigit)
 {
   // MUST FAIL: Invalid binary digits
