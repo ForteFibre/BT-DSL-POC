@@ -159,7 +159,7 @@ jobs:
 
   # 4b. Lint Core (clang-tidy) - split by directory for parallel execution
   lint-core-tidy:
-    needs: [changes, build-grammar]
+    needs: changes
     if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
     strategy:
@@ -169,12 +169,6 @@ jobs:
     name: lint-core-tidy (${{ matrix.directory }})
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download Grammar Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: grammar-build
-          path: tree-sitter-bt-dsl
 
       - name: Configure for clang-tidy
         run: cmake -S core -B core/build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -186,18 +180,11 @@ jobs:
 
   # 5. Core Native Build & Test (Skip if only frontend changed)
   test-core-native:
-    needs: [changes, build-grammar]
+    needs: changes
     if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # Download Grammar Source (Required for C++ build)
-      - name: Download Grammar Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: grammar-build
-          path: tree-sitter-bt-dsl
 
       - name: Configure CMake (with WERROR)
         run: cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release
@@ -210,17 +197,11 @@ jobs:
 
   # 6. Core Sanitizer Tests
   test-core-sanitizers:
-    needs: [changes, build-grammar]
+    needs: changes
     if: ${{ needs.changes.outputs.core == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.workflow == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download Grammar Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: grammar-build
-          path: tree-sitter-bt-dsl
 
       - name: Configure CMake (with Sanitizers)
         run: cmake -S core -B core/build-san -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON

@@ -159,3 +159,139 @@ TEST(LspWorkspace, DocumentSymbols)
   EXPECT_TRUE(has_tree);
   EXPECT_TRUE(has_extern);
 }
+
+TEST(LspWorkspace, PortCompletionInsideParens)
+{
+  using json = nlohmann::json;
+
+  bt_dsl::lsp::Workspace ws;
+
+  // Simulate the E2E test scenario with an imported file
+  const std::string nodes_src =
+    "extern action TestAction(\n"
+    "  in pos: int,\n"
+    "  out found: bool\n"
+    ");\n";
+  const std::string nodes_uri = "file:///tmp/test-nodes.bt";
+  ws.set_document(nodes_uri, nodes_src);
+
+  const std::string main_src =
+    "import \"./test-nodes.bt\";\n"
+    "var Found: bool;\n"
+    "tree Main() {\n"
+    "  TestAction(p);\n"  // cursor inside parens at 'p'
+    "}\n";
+  const std::string main_uri = "file:///tmp/main.bt";
+  ws.set_document(main_uri, main_src);
+
+  // Position cursor inside TestAction( after '(' at 'p'
+  const uint32_t off = find_byte_offset(main_src, "TestAction(p") + 11U;  // after "TestAction("
+
+  std::cerr << "Testing offset: " << off << ", char around: '"
+            << main_src.substr(off > 2 ? off - 2 : 0, 5) << "'\n";
+
+  // Get completion with imports resolved
+  const std::vector<std::string> imported_uris = {nodes_uri};
+  const auto j = json::parse(ws.completion_json(main_uri, off, imported_uris));
+
+  std::cerr << "Completion result: " << j.dump(2) << "\n";
+
+  ASSERT_TRUE(j.contains("items"));
+  ASSERT_TRUE(j["items"].is_array());
+
+  // Check that port names 'pos' and 'found' are in the completion list
+  bool has_pos = false;
+  bool has_found = false;
+  for (const auto & it : j["items"]) {
+    if (it.contains("label") && it["label"].is_string()) {
+      const std::string label = it["label"].get<std::string>();
+      if (label == "pos") has_pos = true;
+      if (label == "found") has_found = true;
+    }
+  }
+
+  EXPECT_TRUE(has_pos) << "Expected 'pos' port in completions";
+  EXPECT_TRUE(has_found) << "Expected 'found' port in completions";
+}
+
+TEST(LspWorkspace, PortCompletionWithJapaneseCommentBefore)
+{
+  using json = nlohmann::json;
+
+  bt_dsl::lsp::Workspace ws;
+
+  // Match the exact E2E fixture with Japanese comment BEFORE the TestAction
+  const std::string nodes_src =
+    "extern action TestAction(\n"
+    "  in pos: int,\n"
+    "  out found: bool\n"
+    ");\n";
+  const std::string nodes_uri = "file:///tmp/test-nodes.bt";
+  ws.set_document(nodes_uri, nodes_src);
+
+  // This is the exact content of main.bt with Japanese comment
+  const std::string main_src =
+    "//! Fixture for VS Code extension e2e tests\n"
+    "import \"./test-nodes.bt\";\n"
+    "\n"
+    "// 日本語🙂 を入れて UTF-8/UTF-16 変換のズレを検出しやすくする\n"
+    "var Ammo: int;\n"
+    "var Found: bool;\n"
+    "\n"
+    "/// main tree\n"
+    "tree Main() {\n"
+    "  TestDeco(enabled: true) {\n"
+    "    Sequence {\n"
+    "      TestAction(pos: 1, found: out Found);\n"
+    "    }\n"
+    "  }\n"
+    "}\n";
+  const std::string main_uri = "file:///tmp/main.bt";
+  ws.set_document(main_uri, main_src);
+
+  // Calculate byte offset for position line=11, character=18 (after "TestAction(")
+  // Need to build line offsets and convert UTF-16 position to byte offset
+  std::vector<uint32_t> line_offsets;
+  line_offsets.push_back(0);
+  for (size_t i = 0; i < main_src.size(); ++i) {
+    if (main_src[i] == '\n') {
+      line_offsets.push_back(static_cast<uint32_t>(i + 1));
+    }
+  }
+
+  // Line 11 (0-indexed), char 18
+  const uint32_t line = 11;
+  const uint32_t line_start = line_offsets[line];
+
+  std::cerr << "Line " << line << " starts at byte " << line_start << "\n";
+  std::cerr << "Line content: '" << main_src.substr(line_start, 50) << "'\n";
+
+  // Line 11 has only ASCII, so char 18 = byte 18 within line
+  const uint32_t off = line_start + 18;
+
+  std::cerr << "Testing offset: " << off << ", char around: '"
+            << main_src.substr(off > 2 ? off - 2 : 0, 5) << "'\n";
+
+  // Get completion with imports resolved
+  const std::vector<std::string> imported_uris = {nodes_uri};
+  const auto j = json::parse(ws.completion_json(main_uri, off, imported_uris));
+
+  std::cerr << "Completion result items count: " << j["items"].size() << "\n";
+
+  ASSERT_TRUE(j.contains("items"));
+  ASSERT_TRUE(j["items"].is_array());
+
+  // Check that port names 'pos' and 'found' are in the completion list
+  bool has_pos = false;
+  bool has_found = false;
+  for (const auto & it : j["items"]) {
+    if (it.contains("label") && it["label"].is_string()) {
+      const std::string label = it["label"].get<std::string>();
+      if (label == "pos") has_pos = true;
+      if (label == "found") has_found = true;
+    }
+  }
+
+  EXPECT_TRUE(has_pos) << "Expected 'pos' port in completions with Japanese comment";
+  EXPECT_TRUE(has_found) << "Expected 'found' port in completions with Japanese comment";
+}
