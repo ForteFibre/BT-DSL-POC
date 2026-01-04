@@ -177,6 +177,7 @@ BasicBlock * CFGBuilder::build_children_block(
   const NodeStmt * node, CFG & cfg, BasicBlock * current, BasicBlock * context_entry,
   BasicBlock * success_exit, BasicBlock * failure_exit)
 {
+  (void)context_entry;
   if (node == nullptr || node->children.empty()) {
     return current;
   }
@@ -190,8 +191,9 @@ BasicBlock * CFGBuilder::build_children_block(
   children_entry->dataPolicy = data_policy;
   children_entry->flowPolicy = flow_policy;
   children_entry->parentNode = node;
-  // Use parent's context for the entry block itself, but pass childrenEntry as context for kids
-  children_entry->contextEntry = context_entry;
+  // This block is the entry of the (potentially isolated) children context.
+  // Data-flow analysis relies on contextEntry to identify the isolation boundary.
+  children_entry->contextEntry = children_entry;
 
   // Connect current block to children entry
   current->add_successor(children_entry, CFGEdgeKind::Unconditional);
@@ -232,6 +234,12 @@ BasicBlock * CFGBuilder::build_preconditions(
 
     BasicBlock * enter_body = cfg.create_block();
     enter_body->contextEntry = context_entry;
+    // Preserve policy metadata so downstream analyses can reason correctly.
+    // (Some precondition blocks were previously left as defaults.)
+    if (current) {
+      enter_body->flowPolicy = current->flowPolicy;
+      enter_body->dataPolicy = current->dataPolicy;
+    }
 
     BasicBlock * on_true = nullptr;
     BasicBlock * on_false = nullptr;

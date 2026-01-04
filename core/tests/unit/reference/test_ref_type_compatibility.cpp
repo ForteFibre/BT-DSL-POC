@@ -318,7 +318,7 @@ TEST(RefTypeCompatibility, OutputWideningOk)
   CompatTestContext ctx;
   ASSERT_TRUE(ctx.parse(R"(
     extern action GetSmall(out result: int8);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var x: int32;
       Sequence {

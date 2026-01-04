@@ -20,6 +20,36 @@ struct PortContract
   bool isNullable = false;
 };
 
+[[nodiscard]] bool is_declared_nullable_symbol(const Symbol * sym)
+{
+  if (sym == nullptr || sym->astNode == nullptr) {
+    return false;
+  }
+
+  // Parameters
+  if (const auto * p = dyn_cast<ParamDecl>(sym->astNode)) {
+    return (p->type != nullptr) ? p->type->nullable : false;
+  }
+
+  // Locals
+  if (const auto * v = dyn_cast<BlackboardDeclStmt>(sym->astNode)) {
+    return (v->type != nullptr) ? v->type->nullable : false;
+  }
+  if (const auto * c = dyn_cast<ConstDeclStmt>(sym->astNode)) {
+    return (c->type != nullptr) ? c->type->nullable : false;
+  }
+
+  // Globals
+  if (const auto * gv = dyn_cast<GlobalVarDecl>(sym->astNode)) {
+    return (gv->type != nullptr) ? gv->type->nullable : false;
+  }
+  if (const auto * gc = dyn_cast<GlobalConstDecl>(sym->astNode)) {
+    return (gc->type != nullptr) ? gc->type->nullable : false;
+  }
+
+  return false;
+}
+
 std::optional<PortContract> get_port_contract(const NodeStmt * node, const Argument * arg)
 {
   if (node == nullptr || arg == nullptr) return std::nullopt;
@@ -123,6 +153,42 @@ void apply_null_facts_from_condition(const Expr * expr, bool branch_truth, NullS
       if (is_not_null_path) {
         state.insert(var_name);
       } else {
+        state.erase(var_name);
+      }
+      return;
+    }
+  }
+}
+
+void erase_vars_referenced_by_null_condition(const Expr * expr, NullStateSet & state)
+{
+  if (expr == nullptr) return;
+
+  if (const auto * unary = dyn_cast<UnaryExpr>(expr)) {
+    if (unary->op == UnaryOp::Not) {
+      erase_vars_referenced_by_null_condition(unary->operand, state);
+    }
+    return;
+  }
+
+  if (const auto * bin = dyn_cast<BinaryExpr>(expr)) {
+    if (bin->op == BinaryOp::And || bin->op == BinaryOp::Or) {
+      erase_vars_referenced_by_null_condition(bin->lhs, state);
+      erase_vars_referenced_by_null_condition(bin->rhs, state);
+      return;
+    }
+
+    if (bin->op == BinaryOp::Eq || bin->op == BinaryOp::Ne) {
+      const Expr * var_expr = nullptr;
+      if (isa<NullLiteralExpr>(bin->lhs))
+        var_expr = bin->rhs;
+      else if (isa<NullLiteralExpr>(bin->rhs))
+        var_expr = bin->lhs;
+
+      if (var_expr == nullptr) return;
+
+      const std::string_view var_name = get_var_name_from_expr_local(var_expr);
+      if (!var_name.empty()) {
         state.erase(var_name);
       }
       return;
@@ -308,6 +374,22 @@ void NullChecker::transfer_block(const BasicBlock * block, NullStateSet & state,
 void NullChecker::transfer_edge(
   const BasicBlock::Edge & edge, const BasicBlock * source, NullStateSet & state)
 {
+  // Guard-based narrowing is intentionally scoped to the guarded statement only.
+  // After the statement finishes (success or failure), we discard those facts to prevent
+  // "narrowing leakage" across sibling branches and subsequent statements.
+  if (edge.kind == CFGEdgeKind::ChildSuccess || edge.kind == CFGEdgeKind::ChildFailure) {
+    if (source != nullptr && !source->stmts.empty()) {
+      const Stmt * last_stmt = source->stmts.back();
+      if (const auto * node = dyn_cast<NodeStmt>(last_stmt)) {
+        for (const auto * pc : node->preconditions) {
+          if (pc == nullptr) continue;
+          if (pc->kind != PreconditionKind::Guard) continue;
+          erase_vars_referenced_by_null_condition(pc->condition, state);
+        }
+      }
+    }
+  }
+
   // Post-call transfer: on Success edge, apply out-port nullability contract.
   // Spec §6.2.3: Passing T? to out T is allowed; if the node succeeds, the variable becomes NotNull.
   if (edge.kind == CFGEdgeKind::ChildSuccess) {
@@ -372,48 +454,40 @@ void NullChecker::check_stmt(const Stmt * stmt, NullStateSet & state, bool repor
       const auto * assign = cast<AssignmentStmt>(stmt);
       // x = expr
       if (!assign->target.empty()) {
-        bool expr_is_not_null = false;
-        if (isa<NullLiteralExpr>(assign->value)) {
-          expr_is_not_null = false;
-        } else if (const auto * var = dyn_cast<VarRefExpr>(assign->value)) {
-          if (state.count(var->name)) expr_is_not_null = true;
-        } else {
-          if (
-            isa<IntLiteralExpr>(assign->value) || isa<BoolLiteralExpr>(assign->value) ||
-            isa<StringLiteralExpr>(assign->value)) {
-            expr_is_not_null = true;
-          }
-        }
+        // Reference behavior (strict): assigning a non-null value to a nullable variable
+        // does NOT permanently narrow it. Assignments also invalidate any previous narrowing.
+        // The only supported narrowing sources are:
+        // - @guard / @run_while derived facts (scoped)
+        // - successful out-port writes (post-call contract)
+        const bool target_is_declared_nullable =
+          is_declared_nullable_symbol(assign->resolvedTarget);
 
-        if (expr_is_not_null) {
-          state.insert(assign->target);
-        } else {
+        // Nullable targets are never treated as NotNull based on assignment.
+        // Also, assigning null to any target invalidates NotNull knowledge.
+        const bool assigned_null = isa<NullLiteralExpr>(assign->value);
+        if (assigned_null || target_is_declared_nullable) {
           state.erase(assign->target);
+        } else {
+          // Non-nullable targets remain NotNull.
+          state.insert(assign->target);
         }
       }
       break;
     }
     case NodeKind::BlackboardDeclStmt: {
       const auto * decl = cast<BlackboardDeclStmt>(stmt);
-      if (decl->initialValue) {
-        bool expr_is_not_null = false;
-        if (isa<NullLiteralExpr>(decl->initialValue)) {
-          expr_is_not_null = false;
-        } else if (const auto * var = dyn_cast<VarRefExpr>(decl->initialValue)) {
-          if (state.count(var->name)) expr_is_not_null = true;
-        } else {
-          if (
-            isa<IntLiteralExpr>(decl->initialValue) || isa<BoolLiteralExpr>(decl->initialValue) ||
-            isa<StringLiteralExpr>(decl->initialValue)) {
-            expr_is_not_null = true;
-          }
-        }
+      const bool is_declared_nullable = (decl->type != nullptr) ? decl->type->nullable : false;
 
-        if (expr_is_not_null) {
-          state.insert(decl->name);
-        } else {
-          state.erase(decl->name);
-        }
+      // See AssignmentStmt notes above: nullable declarations are not treated as NotNull
+      // even if initialized with a non-null value.
+      if (is_declared_nullable) {
+        state.erase(decl->name);
+        break;
+      }
+
+      // Non-nullable locals: treat as NotNull when initialized with a non-null literal.
+      if (decl->initialValue && !isa<NullLiteralExpr>(decl->initialValue)) {
+        state.insert(decl->name);
       } else {
         state.erase(decl->name);
       }
@@ -421,21 +495,8 @@ void NullChecker::check_stmt(const Stmt * stmt, NullStateSet & state, bool repor
     }
     case NodeKind::ConstDeclStmt: {
       const auto * decl = cast<ConstDeclStmt>(stmt);
-      // Consts are initialized.
-      bool expr_is_not_null = false;
-      if (isa<NullLiteralExpr>(decl->value)) {
-        expr_is_not_null = false;
-      } else if (const auto * var = dyn_cast<VarRefExpr>(decl->value)) {
-        if (state.count(var->name)) expr_is_not_null = true;
-      } else {
-        if (
-          isa<IntLiteralExpr>(decl->value) || isa<BoolLiteralExpr>(decl->value) ||
-          isa<StringLiteralExpr>(decl->value)) {
-          expr_is_not_null = true;
-        }
-      }
-
-      if (expr_is_not_null) {
+      const bool is_declared_nullable = (decl->type != nullptr) ? decl->type->nullable : false;
+      if (!is_declared_nullable && !isa<NullLiteralExpr>(decl->value)) {
         state.insert(decl->name);
       } else {
         state.erase(decl->name);

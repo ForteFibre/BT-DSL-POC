@@ -175,7 +175,7 @@ TEST(RefStaticAnalysis, OutBeforeInOk)
   ASSERT_TRUE(ctx.parse(R"(
     extern action GetValue(out result: int32);
     extern action UseValue(in value: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var x: int32;
       Sequence {
@@ -200,7 +200,7 @@ TEST(RefStaticAnalysis, DataPolicyAllSequence)
     extern action GetA(out a: int32);
     extern action GetB(out b: int32);
     extern action Use(in a: int32, in b: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var a: int32;
       var b: int32;
@@ -257,7 +257,7 @@ TEST(RefStaticAnalysis, DataPolicyNoneNoGuarantee)
     extern decorator ForceSuccess();
     extern action GetValue(out result: int32);
     extern action Use(in value: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var x: int32;
       Sequence {
@@ -334,7 +334,7 @@ TEST(RefStaticAnalysis, PortDirectionCorrectMatch)
   ASSERT_TRUE(ctx.parse(R"(
     extern action GetValue(out result: int32);
     extern action UseValue(in value: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var x: int32;
       Sequence {
@@ -421,7 +421,7 @@ TEST(RefStaticAnalysis, NullableToOutConnection)
   AnalysisTestContext ctx;
   ASSERT_TRUE(ctx.parse(R"(
     extern action FindTarget(out result: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var target: int32? = null;
       Sequence {
@@ -469,7 +469,7 @@ TEST(RefStaticAnalysis, MutParamCanBeReadAndWritten)
   ASSERT_TRUE(ctx.parse(R"(
     extern action UseValue(in value: int32);
     extern action GetValue(out result: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main(mut x: int32) {
       Sequence {
         UseValue(value: x);
@@ -515,7 +515,7 @@ TEST(RefStaticAnalysis, SkippedNodeNoOutGuarantee)
   ASSERT_TRUE(ctx.parse(R"(
     extern action GetValue(out result: int32);
     extern action UseValue(in value: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var x: int32;
       Sequence {
@@ -541,7 +541,7 @@ TEST(RefStaticAnalysis, NullableNarrowingInGuard)
   AnalysisTestContext ctx;
   ASSERT_TRUE(ctx.parse(R"(
     extern action Use(in val: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var x: int32? = null;
       Sequence {
@@ -560,7 +560,7 @@ TEST(RefStaticAnalysis, NarrowingWithConjunction)
   AnalysisTestContext ctx;
   ASSERT_TRUE(ctx.parse(R"(
     extern action Use(in val: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var x: int32? = null;
       var y: int32? = null;
@@ -582,7 +582,7 @@ TEST(RefStaticAnalysis, NarrowingWithNegation)
   AnalysisTestContext ctx;
   ASSERT_TRUE(ctx.parse(R"(
     extern action Use(in val: int32);
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var x: int32? = null;
       Sequence {

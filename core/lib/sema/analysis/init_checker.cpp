@@ -3,6 +3,7 @@
 #include "bt_dsl/sema/analysis/init_checker.hpp"
 
 #include <deque>
+#include <unordered_map>
 
 #include "bt_dsl/basic/casting.hpp"
 #include "bt_dsl/sema/analysis/cfg_builder.hpp"
@@ -113,6 +114,20 @@ static bool merge_init_states(InitStateMap & target, const InitStateMap & source
   return changed;
 }
 
+static void union_init_states(InitStateMap & target, const InitStateMap & source)
+{
+  for (const auto & [name, st] : source) {
+    if (st == InitState::Init) {
+      target[name] = InitState::Init;
+    } else {
+      // Ensure key exists so later merges remain stable.
+      if (target.find(name) == target.end()) {
+        target[name] = InitState::Uninit;
+      }
+    }
+  }
+}
+
 void InitializationChecker::analyze_data_flow(const CFG & cfg, InitStateMap & initial_state)
 {
   if (cfg.blocks.empty()) return;
@@ -136,6 +151,32 @@ void InitializationChecker::analyze_data_flow(const CFG & cfg, InitStateMap & in
   }
 
   // Phase 1: Fixed-point iteration (Checking disabled)
+  // Additional state for FlowPolicy::Isolated:
+  // - Children should not see siblings' writes.
+  // - After the isolated node completes successfully, the effects of *all* successful children
+  //   must become visible.
+  // We approximate this by tracking a per-context "committed" state (union of child-success states),
+  // while still resetting the visible state to the context baseline when entering siblings.
+  std::unordered_map<size_t, InitStateMap> isolated_committed;
+  std::unordered_map<size_t, bool> isolated_committed_init;
+
+  auto ensure_isolated_committed = [&](const BasicBlock * ctx_entry) {
+    if (ctx_entry == nullptr) {
+      return;
+    }
+    const size_t ctx_id = ctx_entry->id;
+    if (isolated_committed_init[ctx_id]) {
+      return;
+    }
+
+    // Baseline for isolated context is the In-state at the context entry.
+    // This is the state each child starts with (no sibling visibility).
+    InitStateMap baseline = block_in_states[ctx_id];
+    transfer_block(ctx_entry, baseline, false);
+    isolated_committed[ctx_id] = std::move(baseline);
+    isolated_committed_init[ctx_id] = true;
+  };
+
   while (!worklist.empty()) {
     BasicBlock * block = worklist.front();
     worklist.pop_front();
@@ -149,29 +190,44 @@ void InitializationChecker::analyze_data_flow(const CFG & cfg, InitStateMap & in
       BasicBlock * succ = edge.target;
       if (succ == nullptr) continue;
 
-      InitStateMap succ_in_candidate;
+      // First, compute the normal edge transfer (this includes out-port writes on ChildSuccess).
+      InitStateMap after_edge = out_state;
+      transfer_edge(edge, block, after_edge);
 
-      bool reset_for_isolated = false;
-      if (succ->flowPolicy == FlowPolicy::Isolated && succ->contextEntry != nullptr) {
-        if (
-          (edge.kind == CFGEdgeKind::Unconditional || edge.kind == CFGEdgeKind::ChildSuccess ||
-           edge.kind == CFGEdgeKind::ChildFailure) &&
-          !succ->stmts.empty()) {
-          reset_for_isolated = true;
+      InitStateMap succ_in_candidate = after_edge;
+
+      // If we're inside an isolated context, accumulate committed effects on each child success,
+      // even if this edge exits the isolated context (e.g. last child -> success exit).
+      if (block->flowPolicy == FlowPolicy::Isolated && block->contextEntry != nullptr) {
+        ensure_isolated_committed(block->contextEntry);
+        if (edge.kind == CFGEdgeKind::ChildSuccess) {
+          const size_t ctx_id = block->contextEntry->id;
+          union_init_states(isolated_committed[ctx_id], after_edge);
         }
       }
 
-      if (reset_for_isolated) {
-        // Reset state to Context(Parent) state
-        // We use In[ContextEntry] + Transfer(ContextEntry) to approximate "Before Children" state.
-        // Note: contextEntry is the children_block entry.
-        InitStateMap context_state = block_in_states[succ->contextEntry->id];
+      // If we're exiting an isolated context, expose the committed state.
+      if (
+        block->flowPolicy == FlowPolicy::Isolated && block->contextEntry != nullptr &&
+        (succ->flowPolicy != FlowPolicy::Isolated || succ->contextEntry != block->contextEntry)) {
+        const size_t ctx_id = block->contextEntry->id;
+        auto it = isolated_committed.find(ctx_id);
+        if (it != isolated_committed.end()) {
+          succ_in_candidate = it->second;
+        }
+      }
+
+      // If we're inside an isolated context, track committed effects and reset visibility
+      // when entering a sibling.
+      if (succ->flowPolicy == FlowPolicy::Isolated && succ->contextEntry != nullptr) {
+        const size_t ctx_id = succ->contextEntry->id;
+        ensure_isolated_committed(succ->contextEntry);
+
+        // Reset visible state when entering blocks within the isolated context
+        // (prevents sibling visibility). The committed effects will be applied when exiting.
+        InitStateMap context_state = block_in_states[ctx_id];
         transfer_block(succ->contextEntry, context_state, false);
         succ_in_candidate = context_state;
-      } else {
-        // Normal flow
-        succ_in_candidate = out_state;
-        transfer_edge(edge, block, succ_in_candidate);
       }
 
       InitStateMap & curr_succ_in = block_in_states[succ->id];

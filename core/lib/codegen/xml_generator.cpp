@@ -575,7 +575,17 @@ struct NullableShortCircuit
   std::optional<NullableShortCircuit> nullable_skip;
 
   // Special-case: @guard(x != null) -> gate with <BlackboardExists> (xml-mapping.md §7.3)
-  std::optional<std::string> guard_exists_key;
+  enum class GuardExistsMode { Exists, NotExists };
+  struct GuardExists
+  {
+    std::string key;
+    GuardExistsMode mode = GuardExistsMode::Exists;
+  };
+
+  std::optional<GuardExists> guard_exists;
+
+  // Special-case: nullable short-circuit patterns in @guard, same as @skip_if (ref/xml-mapping.md).
+  std::optional<NullableShortCircuit> nullable_guard;
 
   for (const auto * pc : preconditions) {
     if (!pc) {
@@ -629,12 +639,28 @@ struct NullableShortCircuit
   // xml-mapping.md §7.3: nullable existence check inside @guard
   if (guard_conditions.size() == 1U) {
     std::string_view var_name;
-    if (is_var_null_compare(guard_conditions.front(), BinaryOp::Ne, var_name)) {
+    const Expr * cond = guard_conditions.front();
+
+    // x != null  -> BlackboardExists(key)
+    // x == null  -> Inverter(BlackboardExists(key))
+    if (
+      is_var_null_compare(cond, BinaryOp::Ne, var_name) ||
+      is_var_null_compare(cond, BinaryOp::Eq, var_name)) {
+      GuardExists g;
       if (auto local = ctx.lookup_local_var_key(var_name)) {
-        guard_exists_key = std::string(*local);
+        g.key = std::string(*local);
       } else {
-        guard_exists_key = std::string(var_name);
+        g.key = std::string(var_name);
       }
+      g.mode = is_var_null_compare(cond, BinaryOp::Eq, var_name) ? GuardExistsMode::NotExists
+                                                                 : GuardExistsMode::Exists;
+      guard_exists = std::move(g);
+    } else {
+      // Patterns like:
+      //   x != null && expr
+      //   x == null || expr
+      // should be desugared to avoid accessing missing keys.
+      nullable_guard = try_build_skip_if_nullable_short_circuit(cond, ctx);
     }
   }
 
@@ -671,10 +697,19 @@ struct NullableShortCircuit
     return node;
   }
 
-  // Special-case guard existence check: <BlackboardExists> + normal @guard scaffold with constant true.
-  if (guard_exists_key.has_value()) {
-    btcpp::Node exists = make_blackboard_exists_node(*guard_exists_key);
-    exists.attributes.push_back(btcpp::Attribute{"_while", "true"});
+  // Special-case guard existence check.
+  if (guard_exists.has_value()) {
+    btcpp::Node bb_exists = make_blackboard_exists_node(guard_exists->key);
+    // xml-mapping.md §7.3: The existence check itself is evaluated while the guard is active.
+    bb_exists.attributes.push_back(btcpp::Attribute{"_while", "true"});
+
+    btcpp::Node gate = std::move(bb_exists);
+    if (guard_exists->mode == GuardExistsMode::NotExists) {
+      btcpp::Node inv;
+      inv.tag = "Inverter";
+      inv.children.push_back(std::move(gate));
+      gate = std::move(inv);
+    }
 
     node.attributes.push_back(btcpp::Attribute{"_while", "true"});
 
@@ -684,7 +719,42 @@ struct NullableShortCircuit
 
     btcpp::Node seq;
     seq.tag = "Sequence";
-    seq.children.push_back(std::move(exists));
+    seq.children.push_back(std::move(gate));
+    seq.children.push_back(std::move(node));
+    seq.children.push_back(std::move(always));
+    return seq;
+  }
+
+  // Nullable @guard short-circuit desugaring (similar to @skip_if transformations).
+  if (nullable_guard.has_value()) {
+    btcpp::Node init =
+      make_assignment_script_node(nullable_guard->helper_key, nullable_guard->helper_init);
+
+    btcpp::Node compute;
+    compute.tag = "ForceSuccess";
+
+    btcpp::Node inner;
+    inner.tag = "Sequence";
+    inner.children.push_back(make_blackboard_exists_node(nullable_guard->var_key));
+
+    const std::string rhs =
+      "(" + serialize_expression(nullable_guard->eval_expr, ctx, ExprMode::Script) + ")";
+    inner.children.push_back(make_assignment_script_node(nullable_guard->helper_key, rhs));
+
+    compute.children.push_back(std::move(inner));
+
+    btcpp::Node seq;
+    seq.tag = "Sequence";
+    seq.children.push_back(std::move(init));
+    seq.children.push_back(std::move(compute));
+
+    const std::string helper_ref = "{" + nullable_guard->helper_key + "}";
+    node.attributes.push_back(btcpp::Attribute{"_while", helper_ref});
+
+    btcpp::Node always;
+    always.tag = "AlwaysSuccess";
+    always.attributes.push_back(btcpp::Attribute{"_failureIf", "!(" + helper_ref + ")"});
+
     seq.children.push_back(std::move(node));
     seq.children.push_back(std::move(always));
     return seq;

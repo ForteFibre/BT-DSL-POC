@@ -850,8 +850,10 @@ ParamDecl * Parser::parse_param_decl()
 
   Expr * def = nullptr;
   if (match(TokenKind::Eq)) {
-    if (dir && (*dir == PortDirection::Ref || *dir == PortDirection::Out)) {
-      error_at(tokens_[idx_ - 1], "default value is not allowed for ref/out ports");
+    if (
+      dir &&
+      (*dir == PortDirection::Ref || *dir == PortDirection::Out || *dir == PortDirection::Mut)) {
+      error_at(tokens_[idx_ - 1], "default value is not allowed for ref/out/mut ports");
     }
     def = parse_expr();
   }
@@ -875,8 +877,10 @@ ExternPort * Parser::parse_extern_port()
 
   Expr * def = nullptr;
   if (match(TokenKind::Eq)) {
-    if (dir && (*dir == PortDirection::Ref || *dir == PortDirection::Out)) {
-      error_at(tokens_[idx_ - 1], "default value is not allowed for ref/out ports");
+    if (
+      dir &&
+      (*dir == PortDirection::Ref || *dir == PortDirection::Out || *dir == PortDirection::Mut)) {
+      error_at(tokens_[idx_ - 1], "default value is not allowed for ref/out/mut ports");
     }
     def = parse_expr();
   }

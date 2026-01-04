@@ -141,7 +141,7 @@ TEST(RefXmlMapping, ControlNodeWithChildren)
 {
   XmlTestContext ctx;
   ASSERT_TRUE(ctx.parse(R"(
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     extern action A();
     extern action B();
     tree Main() {
