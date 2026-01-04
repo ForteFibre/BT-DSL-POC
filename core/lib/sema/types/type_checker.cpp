@@ -510,7 +510,9 @@ const Type * TypeChecker::infer_binary_expr(BinaryExpr * node, const Type * /*ex
   }
 
   // For all non short-circuit ops, infer RHS normally.
-  rhs_type = check_expr(node->rhs);
+  if (!rhs_type) {
+    rhs_type = check_expr(node->rhs);
+  }
 
   switch (node->op) {
     // Arithmetic operations

@@ -522,28 +522,15 @@ struct NullableShortCircuit
   const Expr * eval_expr = nullptr;
   std::string init;
 
-  if (is_and) {
-    // x != null && expr
-    if (is_var_null_compare(be->lhs, BinaryOp::Ne, var_name)) {
-      init = "false";
-      eval_expr = be->rhs;
-    } else if (is_var_null_compare(be->rhs, BinaryOp::Ne, var_name)) {
-      init = "false";
-      eval_expr = be->lhs;
-    } else {
-      return std::nullopt;
-    }
+  const BinaryOp expected_op = is_and ? BinaryOp::Ne : BinaryOp::Eq;
+  init = is_and ? "false" : "true";
+
+  if (is_var_null_compare(be->lhs, expected_op, var_name)) {
+    eval_expr = be->rhs;
+  } else if (is_var_null_compare(be->rhs, expected_op, var_name)) {
+    eval_expr = be->lhs;
   } else {
-    // x == null || expr
-    if (is_var_null_compare(be->lhs, BinaryOp::Eq, var_name)) {
-      init = "true";
-      eval_expr = be->rhs;
-    } else if (is_var_null_compare(be->rhs, BinaryOp::Eq, var_name)) {
-      init = "true";
-      eval_expr = be->lhs;
-    } else {
-      return std::nullopt;
-    }
+    return std::nullopt;
   }
 
   if (var_name.empty() || eval_expr == nullptr) {
