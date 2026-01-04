@@ -159,6 +159,11 @@ void InitializationChecker::analyze_data_flow(const CFG & cfg, InitStateMap & in
   // while still resetting the visible state to the context baseline when entering siblings.
   std::unordered_map<size_t, InitStateMap> isolated_committed;
   std::unordered_map<size_t, bool> isolated_committed_init;
+  // For DataPolicy::Any contexts, track whether the first child has committed.
+  // This is needed because Any requires intersection semantics (only variables
+  // initialized in ALL children remain Init), and the first child should
+  // initialize the committed state rather than intersecting with a baseline.
+  std::unordered_map<size_t, bool> isolated_any_first_committed;
 
   auto ensure_isolated_committed = [&](const BasicBlock * ctx_entry) {
     if (ctx_entry == nullptr) {
@@ -202,7 +207,26 @@ void InitializationChecker::analyze_data_flow(const CFG & cfg, InitStateMap & in
         ensure_isolated_committed(block->contextEntry);
         if (edge.kind == CFGEdgeKind::ChildSuccess) {
           const size_t ctx_id = block->contextEntry->id;
-          union_init_states(isolated_committed[ctx_id], after_edge);
+          const DataPolicy ctx_data_policy = block->contextEntry->dataPolicy;
+
+          if (ctx_data_policy == DataPolicy::Any) {
+            // DataPolicy::Any + FlowPolicy::Isolated (e.g., hypothetical ParallelAny):
+            // Parent succeeds if ANY one child succeeds, so only variables
+            // initialized in ALL children can be guaranteed Init after parent success.
+            // This requires intersection semantics.
+            if (!isolated_any_first_committed[ctx_id]) {
+              // First child to commit: initialize committed state with this child's state
+              isolated_committed[ctx_id] = after_edge;
+              isolated_any_first_committed[ctx_id] = true;
+            } else {
+              // Subsequent children: intersect with previous (keep only common Init)
+              merge_init_states(isolated_committed[ctx_id], after_edge);
+            }
+          } else {
+            // DataPolicy::All (or None): Parent succeeds only if ALL children succeed,
+            // so all child writes are guaranteed. Use union semantics.
+            union_init_states(isolated_committed[ctx_id], after_edge);
+          }
         }
       }
 
