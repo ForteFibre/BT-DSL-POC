@@ -92,9 +92,10 @@ namespace
     return types.get_nullable_type(base);
   }
 
-  // Placeholder literals vs concrete.
-  if (a->kind == TypeKind::IntegerLiteral && (b->is_integer() || b->is_float())) return b;
-  if (b->kind == TypeKind::IntegerLiteral && (a->is_integer() || a->is_float())) return a;
+  // Placeholder literals vs concrete (same category only).
+  // Per spec §3.2.3.1: mixed int/float is always an error, even with literals.
+  if (a->kind == TypeKind::IntegerLiteral && b->is_integer()) return b;
+  if (b->kind == TypeKind::IntegerLiteral && a->is_integer()) return a;
   if (a->kind == TypeKind::FloatLiteral && b->is_float()) return b;
   if (b->kind == TypeKind::FloatLiteral && a->is_float()) return a;
 
@@ -105,19 +106,10 @@ namespace
     const bool a_flt = a->is_float() || a->kind == TypeKind::FloatLiteral;
     const bool b_flt = b->is_float() || b->kind == TypeKind::FloatLiteral;
 
+    // Per spec §3.2.3.1: "int と float が混在する場合、BT-DSL は厳密性を重視し、
+    // 暗黙の共通型推論を行いません（明示的なキャストが必要です）"
     if ((a_int && b_flt) || (a_flt && b_int)) {
-      // Allow literal -> float (contextual), but forbid concrete int <-> concrete float.
-      const bool a_concrete_int = a->is_integer();
-      const bool b_concrete_int = b->is_integer();
-      const bool a_concrete_flt = a->is_float();
-      const bool b_concrete_flt = b->is_float();
-
-      if ((a_concrete_int && b_concrete_flt) || (a_concrete_flt && b_concrete_int)) {
-        return types.error_type();
-      }
-      // Literal with float: choose float.
-      if (a_flt && b_int) return a->is_float() ? a : types.float64_type();
-      if (b_flt && a_int) return b->is_float() ? b : types.float64_type();
+      return types.error_type();
     }
 
     const Type * common = common_numeric_type(types, a, b);
