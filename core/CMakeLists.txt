@@ -431,6 +431,10 @@ if(BUILD_TESTS)
     bt_dsl_add_gtest_exe(bt_dsl_core_ref_xml_mapping
         tests/unit/reference/test_ref_xml_mapping.cpp
     )
+
+    bt_dsl_add_gtest_exe(bt_dsl_core_ref_imports
+        tests/unit/reference/test_ref_imports.cpp
+    )
 endif()
 
 

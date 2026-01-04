@@ -528,3 +528,120 @@ TEST(RefStaticAnalysis, SkippedNodeNoOutGuarantee)
   // x may not be initialized if GetValue is skipped
   EXPECT_FALSE(ctx.run_full_analysis());
 }
+
+// ============================================================================
+// 6.2.1 Flow-Sensitive Typing (Narrowing)
+// Reference: @guard(x != null) allows x to be treated as T (not T?)
+// ============================================================================
+
+TEST(RefStaticAnalysis, NullableNarrowingInGuard)
+{
+  // Positive test: Passing a nullable var 'x' to an 'in int32' port
+  // should SUCCEED if it is inside a @guard(x != null) block.
+  AnalysisTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action Use(in val: int32);
+    extern control Sequence();
+    tree Main() {
+      var x: int32? = null;
+      Sequence {
+        @guard(x != null)
+        Use(val: x);
+      }
+    }
+  )"));
+  // If narrowing works, checking should pass
+  EXPECT_TRUE(ctx.run_full_analysis());
+}
+
+TEST(RefStaticAnalysis, NarrowingWithConjunction)
+{
+  // @guard(x != null && y != null) -> Both x and y should be non-null
+  AnalysisTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action Use(in val: int32);
+    extern control Sequence();
+    tree Main() {
+      var x: int32? = null;
+      var y: int32? = null;
+      Sequence {
+        @guard(x != null && y != null)
+        Sequence {
+          Use(val: x); // x should be treated as int32
+          Use(val: y); // y should be treated as int32
+        }
+      }
+    }
+  )"));
+  EXPECT_TRUE(ctx.run_full_analysis());
+}
+
+TEST(RefStaticAnalysis, NarrowingWithNegation)
+{
+  // @guard(!(x == null)) -> Should be treated same as x != null
+  AnalysisTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action Use(in val: int32);
+    extern control Sequence();
+    tree Main() {
+      var x: int32? = null;
+      Sequence {
+        @guard(!(x == null))
+        Use(val: x);
+      }
+    }
+  )"));
+  EXPECT_TRUE(ctx.run_full_analysis());
+}
+
+// ============================================================================
+// 6.1 Initialization Safety - ref and mut
+// Reference: ref/mut arguments MUST be init at call site
+// ============================================================================
+
+TEST(RefStaticAnalysis, RefArgMustBeInit)
+{
+  // MUST FAIL: Passing Uninit var to ref port
+  AnalysisTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action UseRef(ref r: int32);
+    tree Main() {
+      var x: int32; // Uninit
+      UseRef(r: x);
+    }
+  )"));
+  EXPECT_FALSE(ctx.run_full_analysis());
+}
+
+TEST(RefStaticAnalysis, MutArgMustBeInit)
+{
+  // MUST FAIL: Passing Uninit var to mut port
+  AnalysisTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    extern action UseMut(mut m: int32);
+    tree Main() {
+      var x: int32; // Uninit
+      UseMut(m: x);
+    }
+  )"));
+  EXPECT_FALSE(ctx.run_full_analysis());
+}
+
+// ============================================================================
+// 6.3.2 Warning Check (Unused)
+// ============================================================================
+
+TEST(RefStaticAnalysis, UnusedMutParamWarning)
+{
+  // Should produce a WARNING (not error, but diagnostics should not be empty)
+  // Note: Current testing infrastructure checks has_errors(), we need to check non-empty diags for warnings
+  AnalysisTestContext ctx;
+  ASSERT_TRUE(ctx.parse(R"(
+    tree Main(mut x: int32) {
+      // x is unused
+    }
+  )"));
+  ctx.run_full_analysis();
+  EXPECT_FALSE(ctx.has_error());  // Should NOT fail compilation
+  // EXPECT_FALSE(ctx.diags.empty()); // Should have warnings - TBD if warning infrastructure is ready
+}

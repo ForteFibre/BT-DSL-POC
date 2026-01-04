@@ -373,6 +373,12 @@ const Type * TypeChecker::infer_var_ref(VarRefExpr * node)
     // NameResolver didn't find this - already an error
     return types_.error_type();
   }
+
+  if (const auto it = value_type_overrides_.find(node->resolvedSymbol);
+      it != value_type_overrides_.end()) {
+    return it->second;
+  }
+
   return get_symbol_type(node->resolvedSymbol);
 }
 
@@ -402,9 +408,109 @@ const Type * TypeChecker::infer_binary_expr(BinaryExpr * node, const Type * /*ex
     }
   }
 
-  // First, infer types of operands
+  // Infer LHS first. RHS may need flow-sensitive narrowing (nullable) under short-circuit ops.
   const Type * lhs_type = check_expr(node->lhs);
-  const Type * rhs_type = check_expr(node->rhs);
+  const Type * rhs_type = nullptr;
+
+  struct ScopedOverride
+  {
+    TypeChecker & self;
+    const Symbol * sym = nullptr;
+    bool active = false;
+
+    ScopedOverride(TypeChecker & s, const Symbol * symbol, const Type * ty) : self(s), sym(symbol)
+    {
+      if (sym && ty) {
+        self.value_type_overrides_.insert_or_assign(sym, ty);
+        active = true;
+      }
+    }
+
+    ~ScopedOverride()
+    {
+      if (active) {
+        (void)self.value_type_overrides_.erase(sym);
+      }
+    }
+
+    ScopedOverride(const ScopedOverride &) = delete;
+    ScopedOverride & operator=(const ScopedOverride &) = delete;
+  };
+
+  auto try_extract_null_check = [](Expr * e, const Symbol *& out_sym, BinaryOp & out_op) -> bool {
+    if (!e || e->get_kind() != NodeKind::BinaryExpr) {
+      return false;
+    }
+    auto * be = static_cast<BinaryExpr *>(e);
+    if (be->op != BinaryOp::Eq && be->op != BinaryOp::Ne) {
+      return false;
+    }
+    if (!be->lhs || !be->rhs) {
+      return false;
+    }
+    const bool lhs_is_null = be->lhs->get_kind() == NodeKind::NullLiteral;
+    const bool rhs_is_null = be->rhs->get_kind() == NodeKind::NullLiteral;
+    if (!(lhs_is_null ^ rhs_is_null)) {
+      return false;
+    }
+
+    Expr * non_null_expr = lhs_is_null ? be->rhs : be->lhs;
+    if (non_null_expr->get_kind() != NodeKind::VarRef) {
+      return false;
+    }
+    auto * vr = static_cast<VarRefExpr *>(non_null_expr);
+    if (!vr->resolvedSymbol) {
+      return false;
+    }
+    out_sym = vr->resolvedSymbol;
+    out_op = be->op;
+    return true;
+  };
+
+  switch (node->op) {
+    // Logical operations (short-circuit) with nullable narrowing
+    case BinaryOp::And:
+    case BinaryOp::Or: {
+      if (lhs_type->kind != TypeKind::Bool) {
+        report_error(node->lhs->get_range(), "logical operation requires bool operands");
+        return types_.error_type();
+      }
+
+      const Symbol * narrowed_sym = nullptr;
+      BinaryOp null_check_op = BinaryOp::Eq;
+      (void)try_extract_null_check(node->lhs, narrowed_sym, null_check_op);
+
+      const Type * override_type = nullptr;
+      if (narrowed_sym) {
+        const Type * original = get_symbol_type(narrowed_sym);
+        if (original && original->is_nullable() && original->base_type) {
+          // (x != null && rhs)  => rhs sees x as non-null
+          // (x == null || rhs)  => rhs sees x as non-null (since rhs runs only when lhs is false)
+          const bool should_narrow = (node->op == BinaryOp::And && null_check_op == BinaryOp::Ne) ||
+                                     (node->op == BinaryOp::Or && null_check_op == BinaryOp::Eq);
+
+          if (should_narrow) {
+            override_type = original->base_type;
+          }
+        }
+      }
+
+      const ScopedOverride scoped(*this, narrowed_sym, override_type);
+      rhs_type = check_expr(node->rhs);
+
+      if (rhs_type->kind != TypeKind::Bool) {
+        report_error(node->rhs->get_range(), "logical operation requires bool operands");
+        return types_.error_type();
+      }
+      return types_.bool_type();
+    }
+
+    default:
+      break;
+  }
+
+  // For all non short-circuit ops, infer RHS normally.
+  rhs_type = check_expr(node->rhs);
 
   switch (node->op) {
     // Arithmetic operations
@@ -465,17 +571,9 @@ const Type * TypeChecker::infer_binary_expr(BinaryExpr * node, const Type * /*ex
 
     // Logical operations
     case BinaryOp::And:
-    case BinaryOp::Or: {
-      if (lhs_type->kind != TypeKind::Bool) {
-        report_error(node->lhs->get_range(), "logical operation requires bool operands");
-        return types_.error_type();
-      }
-      if (rhs_type->kind != TypeKind::Bool) {
-        report_error(node->rhs->get_range(), "logical operation requires bool operands");
-        return types_.error_type();
-      }
+    case BinaryOp::Or:
+      // handled earlier
       return types_.bool_type();
-    }
 
     // Bitwise operations
     case BinaryOp::BitAnd:

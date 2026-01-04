@@ -456,11 +456,139 @@ struct CodegenContext
   return make_plain_script_node(std::move(code));
 }
 
+struct NullableShortCircuit
+{
+  std::string_view var_name;
+  std::string var_key;               // e.g. "x#1" (no braces)
+  std::string helper_key;            // e.g. "_should_skip#7" (no braces)
+  std::string helper_init;           // "true" or "false"
+  const Expr * eval_expr = nullptr;  // expression to evaluate only when var exists
+};
+
+[[nodiscard]] bool is_var_null_compare(const Expr * expr, BinaryOp op, std::string_view & out_name)
+{
+  if (!expr || expr->get_kind() != NodeKind::BinaryExpr) {
+    return false;
+  }
+  const auto * be = static_cast<const BinaryExpr *>(expr);
+  if (be->op != op) {
+    return false;
+  }
+
+  const Expr * lhs = be->lhs;
+  const Expr * rhs = be->rhs;
+  if (!lhs || !rhs) {
+    return false;
+  }
+
+  auto is_var_ref = [](const Expr * e, std::string_view & name) -> bool {
+    if (!e || e->get_kind() != NodeKind::VarRef) {
+      return false;
+    }
+    name = static_cast<const VarRefExpr *>(e)->name;
+    return !name.empty();
+  };
+
+  std::string_view name;
+  if (is_var_ref(lhs, name) && is_null_literal_expr(rhs)) {
+    out_name = name;
+    return true;
+  }
+  if (is_var_ref(rhs, name) && is_null_literal_expr(lhs)) {
+    out_name = name;
+    return true;
+  }
+  return false;
+}
+
+[[nodiscard]] std::optional<NullableShortCircuit> try_build_skip_if_nullable_short_circuit(
+  const Expr * cond, CodegenContext & ctx)
+{
+  if (!cond || cond->get_kind() != NodeKind::BinaryExpr) {
+    return std::nullopt;
+  }
+  const auto * be = static_cast<const BinaryExpr *>(cond);
+
+  // xml-mapping.md §7.5 patterns:
+  //   (x != null && expr)  -> init false, eval expr only if x exists
+  //   (x == null || expr)  -> init true,  eval expr only if x exists
+  const bool is_and = (be->op == BinaryOp::And);
+  const bool is_or = (be->op == BinaryOp::Or);
+  if (!is_and && !is_or) {
+    return std::nullopt;
+  }
+
+  std::string_view var_name;
+  const Expr * eval_expr = nullptr;
+  std::string init;
+
+  if (is_and) {
+    // x != null && expr
+    if (is_var_null_compare(be->lhs, BinaryOp::Ne, var_name)) {
+      init = "false";
+      eval_expr = be->rhs;
+    } else if (is_var_null_compare(be->rhs, BinaryOp::Ne, var_name)) {
+      init = "false";
+      eval_expr = be->lhs;
+    } else {
+      return std::nullopt;
+    }
+  } else {
+    // x == null || expr
+    if (is_var_null_compare(be->lhs, BinaryOp::Eq, var_name)) {
+      init = "true";
+      eval_expr = be->rhs;
+    } else if (is_var_null_compare(be->rhs, BinaryOp::Eq, var_name)) {
+      init = "true";
+      eval_expr = be->lhs;
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  if (var_name.empty() || eval_expr == nullptr) {
+    return std::nullopt;
+  }
+
+  std::string var_key;
+  if (auto local = ctx.lookup_local_var_key(var_name)) {
+    var_key = std::string(*local);
+  } else {
+    // Fallback: best-effort. (Tests expect local vars -> mangled key.)
+    var_key = std::string(var_name);
+  }
+
+  // Helper variable lives in the current codegen scope.
+  const std::string helper_key = ctx.declare_var("_should_skip");
+
+  NullableShortCircuit out;
+  out.var_name = var_name;
+  out.var_key = std::move(var_key);
+  out.helper_key = helper_key;
+  out.helper_init = std::move(init);
+  out.eval_expr = eval_expr;
+  return out;
+}
+
+[[nodiscard]] btcpp::Node make_blackboard_exists_node(std::string key)
+{
+  btcpp::Node exists;
+  exists.tag = "BlackboardExists";
+  exists.attributes.push_back(btcpp::Attribute{"key", std::move(key)});
+  return exists;
+}
+
 [[nodiscard]] btcpp::Node apply_preconditions_and_guard(
   btcpp::Node node, gsl::span<Precondition * const> preconditions, CodegenContext & ctx)
 {
   std::vector<const Expr *> guard_conditions;
   guard_conditions.reserve(preconditions.size());
+
+  // Nullable short-circuit transform for @skip_if (xml-mapping.md §7.5)
+  std::optional<NullableShortCircuit> nullable_skip;
+
+  // Special-case: @guard(x != null) -> gate with <BlackboardExists> (xml-mapping.md §7.3)
+  std::optional<std::string> guard_exists_key;
 
   for (const auto * pc : preconditions) {
     if (!pc) {
@@ -490,13 +618,92 @@ struct CodegenContext
     }
 
     if (!attr_name.empty()) {
-      node.attributes.push_back(btcpp::Attribute{
-        std::move(attr_name), serialize_expression(pc->condition, ctx, ExprMode::Precondition)});
+      if (pc->kind == PreconditionKind::SkipIf && nullable_skip == std::nullopt) {
+        // Detect patterns like:
+        //   x != null && expr
+        //   x == null || expr
+        // and desugar into helper+BlackboardExists to avoid accessing missing keys.
+        nullable_skip = try_build_skip_if_nullable_short_circuit(pc->condition, ctx);
+        if (nullable_skip.has_value()) {
+          node.attributes.push_back(
+            btcpp::Attribute{std::move(attr_name), "{" + nullable_skip->helper_key + "}"});
+        } else {
+          node.attributes.push_back(
+            btcpp::Attribute{
+              std::move(attr_name),
+              serialize_expression(pc->condition, ctx, ExprMode::Precondition)});
+        }
+      } else {
+        node.attributes.push_back(
+          btcpp::Attribute{
+            std::move(attr_name),
+            serialize_expression(pc->condition, ctx, ExprMode::Precondition)});
+      }
     }
   }
 
+  // xml-mapping.md §7.3: nullable existence check inside @guard
+  if (guard_conditions.size() == 1U) {
+    std::string_view var_name;
+    if (is_var_null_compare(guard_conditions.front(), BinaryOp::Ne, var_name)) {
+      if (auto local = ctx.lookup_local_var_key(var_name)) {
+        guard_exists_key = std::string(*local);
+      } else {
+        guard_exists_key = std::string(var_name);
+      }
+    }
+  }
+
+  // If we created a nullable @skip_if desugaring, we need to run the helper logic
+  // before the node executes.
+  if (nullable_skip.has_value()) {
+    btcpp::Node init =
+      make_assignment_script_node(nullable_skip->helper_key, nullable_skip->helper_init);
+
+    btcpp::Node compute;
+    compute.tag = "ForceSuccess";
+
+    btcpp::Node inner;
+    inner.tag = "Sequence";
+    inner.children.push_back(make_blackboard_exists_node(nullable_skip->var_key));
+
+    const std::string rhs =
+      "(" + serialize_expression(nullable_skip->eval_expr, ctx, ExprMode::Script) + ")";
+    inner.children.push_back(make_assignment_script_node(nullable_skip->helper_key, rhs));
+
+    compute.children.push_back(std::move(inner));
+
+    btcpp::Node seq;
+    seq.tag = "Sequence";
+    seq.children.push_back(std::move(init));
+    seq.children.push_back(std::move(compute));
+    seq.children.push_back(std::move(node));
+
+    node = std::move(seq);
+  }
+
+  // No guard -> done (after possible nullable skip_if wrapper).
   if (guard_conditions.empty()) {
     return node;
+  }
+
+  // Special-case guard existence check: <BlackboardExists> + normal @guard scaffold with constant true.
+  if (guard_exists_key.has_value()) {
+    btcpp::Node exists = make_blackboard_exists_node(*guard_exists_key);
+    exists.attributes.push_back(btcpp::Attribute{"_while", "true"});
+
+    node.attributes.push_back(btcpp::Attribute{"_while", "true"});
+
+    btcpp::Node always;
+    always.tag = "AlwaysSuccess";
+    always.attributes.push_back(btcpp::Attribute{"_failureIf", "!(true)"});
+
+    btcpp::Node seq;
+    seq.tag = "Sequence";
+    seq.children.push_back(std::move(exists));
+    seq.children.push_back(std::move(node));
+    seq.children.push_back(std::move(always));
+    return seq;
   }
 
   // xml-mapping.md §5.1: @guard(expr) ->
@@ -755,6 +962,11 @@ struct CodegenContext
         const auto * st = static_cast<const BlackboardDeclStmt *>(child);
         const std::string key = ctx.declare_var(st->name);
         if (st->initialValue) {
+          // xml-mapping.md §7.1: nullable の null は「エントリ不在」で表現するため、
+          // `var x: T? = null;` ではエントリを作成しない。
+          if (st->type && st->type->nullable && is_null_literal_expr(st->initialValue)) {
+            break;
+          }
           const std::string rhs = serialize_expression(st->initialValue, ctx, ExprMode::Script);
           converted_children.push_back(make_assignment_script_node(key, rhs));
         }
@@ -1110,8 +1322,9 @@ btcpp::Document AstToBtCppModelConverter::convert(const ModuleInfo & module)
             as->op == AssignOp::Assign && as->indices.empty() && is_null_literal_expr(as->value)) {
             btcpp::Node unset;
             unset.tag = "UnsetBlackboard";
-            unset.attributes.push_back(btcpp::Attribute{
-              "key", ctx.var_ref(as->target, as->resolvedTarget, ExprMode::Script)});
+            unset.attributes.push_back(
+              btcpp::Attribute{
+                "key", ctx.var_ref(as->target, as->resolvedTarget, ExprMode::Script)});
             roots.push_back(
               apply_preconditions_and_guard(std::move(unset), as->preconditions, ctx));
           } else {
@@ -1356,8 +1569,9 @@ btcpp::Document AstToBtCppModelConverter::convert_single_output(const ModuleInfo
             as->op == AssignOp::Assign && as->indices.empty() && is_null_literal_expr(as->value)) {
             btcpp::Node unset;
             unset.tag = "UnsetBlackboard";
-            unset.attributes.push_back(btcpp::Attribute{
-              "key", ctx.var_ref(as->target, as->resolvedTarget, ExprMode::Script)});
+            unset.attributes.push_back(
+              btcpp::Attribute{
+                "key", ctx.var_ref(as->target, as->resolvedTarget, ExprMode::Script)});
             roots.push_back(
               apply_preconditions_and_guard(std::move(unset), as->preconditions, ctx));
           } else {

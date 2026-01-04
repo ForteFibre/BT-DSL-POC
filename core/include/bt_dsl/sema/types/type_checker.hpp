@@ -5,6 +5,8 @@
 //
 #pragma once
 
+#include <unordered_map>
+
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/basic/diagnostic.hpp"
 #include "bt_dsl/sema/resolution/symbol_table.hpp"
@@ -155,6 +157,10 @@ private:
   const TypeTable & type_table_;
   const SymbolTable & values_;
   DiagnosticBag * diags_;
+
+  // Flow-sensitive type overrides for Value symbols during expression checking.
+  // Used to model nullable narrowing under short-circuit boolean operators.
+  std::unordered_map<const Symbol *, const Type *> value_type_overrides_;
 
   bool has_errors_ = false;
   size_t error_count_ = 0;
