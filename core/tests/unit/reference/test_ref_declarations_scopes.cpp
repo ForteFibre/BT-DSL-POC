@@ -216,7 +216,7 @@ TEST(RefDeclScopes, ShadowingInBlockError)
   // MUST FAIL: Block var shadows tree-level var
   ScopeTestContext ctx;
   ASSERT_TRUE(ctx.parse(R"(
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     tree Main() {
       var x: int32 = 1;
       Sequence {
@@ -232,7 +232,7 @@ TEST(RefDeclScopes, SeparateBlocksSameNameOk)
   // Different blocks (not ancestor relation) can have same name
   ScopeTestContext ctx;
   ASSERT_TRUE(ctx.parse(R"(
-    extern control Sequence();
+    #[behavior(All, Chained)] extern control Sequence();
     extern action Foo(in val: int32);
     tree Main() {
       Sequence {
