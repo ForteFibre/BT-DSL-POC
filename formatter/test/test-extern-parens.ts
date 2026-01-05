@@ -1,15 +1,9 @@
+import { test } from 'node:test';
+import assert from 'node:assert';
 import { formatBtDslText } from '../src/index.js';
 
-function assertIncludes(haystack: string, needle: string, message: string): void {
-  if (!haystack.includes(needle)) {
-    // Make failures obvious in CI.
-    console.error('Formatted output was:');
-    console.error(haystack);
-    throw new Error(message);
-  }
-}
-
-const input = `extern control Sequence();
+await test('Extern declaration parentheses', async () => {
+  const input = `extern control Sequence();
 extern decorator Inverter();
 
 // With ports as well
@@ -22,17 +16,14 @@ tree Main() {
 }
 `;
 
-const formatted = await formatBtDslText(input, { filepath: 'test.bt' });
+  const formatted = await formatBtDslText(input, { filepath: 'test.bt' });
 
-assertIncludes(
-  formatted,
-  'extern control Sequence();',
-  'extern control without ports must keep parentheses',
-);
-assertIncludes(
-  formatted,
-  'extern decorator Inverter();',
-  'extern decorator without ports must keep parentheses',
-);
-
-console.log('extern parens test passed');
+  assert.ok(
+    formatted.includes('extern control Sequence();'),
+    'extern control without ports must keep parentheses',
+  );
+  assert.ok(
+    formatted.includes('extern decorator Inverter();'),
+    'extern decorator without ports must keep parentheses',
+  );
+});

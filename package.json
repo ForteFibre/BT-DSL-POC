@@ -8,13 +8,13 @@
   },
   "license": "MIT",
   "scripts": {
-    "build": "pnpm run build:grammar && pnpm -r build",
-    "build:grammar": "pnpm --filter @bt-dsl/tree-sitter build",
+    "build": "pnpm -r build",
     "build:core": "pnpm --filter core build",
+    "build:wasm": "pnpm --filter core build:wasm",
     "build:lsp": "pnpm --filter core build:lsp",
     "dev": "pnpm -r --parallel dev",
-    "docs:dev": "pnpm run build:grammar && pnpm --filter bt-dsl-docs dev",
-    "docs:build": "pnpm run build:grammar && pnpm --filter bt-dsl-docs build",
+    "docs:dev": "pnpm --filter bt-dsl-docs dev",
+    "docs:build": "pnpm --filter bt-dsl-docs build",
     "docs:preview": "pnpm --filter bt-dsl-docs preview",
     "docs:lint": "markdownlint-cli2",
     "docs:lint:fix": "markdownlint-cli2 --fix",
@@ -46,9 +46,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild",
-      "tree-sitter",
-      "tree-sitter-cli"
+      "esbuild"
     ]
   }
 }

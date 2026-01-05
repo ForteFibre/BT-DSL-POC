@@ -22,7 +22,6 @@ export default tseslint.config(
       '**/build/**',
       '**/core/build/**',
       '**/core/build-*/**',
-      '**/tree-sitter-bt-dsl/build/**',
 
       '**/vscode/out-test/**',
       '**/vscode/out-tsc/**',

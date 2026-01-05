@@ -8,14 +8,13 @@ Language）。XMLの可読性と保守性を改善し、強力な静的解析と
 - 🔍 **コンパイル時検証**: 変数のタイポ、型不一致、ref権限エラー、ポートの必須チェック等を検出
 - 📝 **可読性向上**: 冗長なXMLタグを排除した、クリーンなC++風の構文
 - 🔗 **シンボル解決**: Blackboard変数とTree引数の自動解決
-- ⚡ **高速なパース**: Tree-sitterベースの高速なパーサーとC++実装のコアロジック
+- ⚡ **高速なパース**: C++実装のコアロジックで高速処理
 
 ## アーキテクチャ
 
 本プロジェクトは以下のコンポーネントで構成されています：
 
 - **core**: C++17で記述されたコンパイラコア（パーサー、意味解析、XML生成）
-- **tree-sitter-bt-dsl**: Tree-sitter文法定義
 - **vscode**: VS Code拡張機能（LSPクライアント/サーバー）
 - **formatter**: Prettierプラグインによるコードフォーマッター
 
@@ -74,7 +73,6 @@ pnpm test
 ### プロジェクト構成
 
 - `core/`: C++実装のコアライブラリとCLI
-- `tree-sitter-bt-dsl/`: Tree-sitter文法定義
 - `vscode/`: VS Code拡張機能
 - `formatter/`: Prettierプラグイン
 - `shared/examples/`: サンプルコード

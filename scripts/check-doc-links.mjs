@@ -41,7 +41,6 @@ const ignore = [
   '**/core/build/**',
   '**/core/build-*/**',
   '**/core/**/_deps/**',
-  '**/tree-sitter-bt-dsl/build/**',
   'docs/generated/**',
 ];
 

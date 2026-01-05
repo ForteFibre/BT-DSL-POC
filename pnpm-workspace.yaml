@@ -1,5 +1,4 @@
 packages:
-  - 'tree-sitter-bt-dsl'
   - 'formatter'
   - 'core'
   - 'vscode'

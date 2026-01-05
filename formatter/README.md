@@ -1,11 +1,10 @@
 # BT DSL Formatter
 
-Prettier plugin for BT DSL using tree-sitter parser.
+Prettier plugin for BT DSL using the core parser (WASM).
 
 ## 概要
 
-このパッケージは、tree-sitter-bt-dslを使用したBT
-DSL言語のPrettierプラグインです。Langiumに依存せず、スタンドアロンで動作します。
+このパッケージは、core 同梱の lexer/parser を WASM 経由で呼び出す BT DSL 言語の Prettier プラグインです。
 
 ## インストール
 
@@ -64,7 +63,7 @@ const formatted = await prettier.format(source, {
 - ✅ **全てのコメントの保持** (通常のコメント `//`, `/* */` も含む)
 - ✅ Documentation comments (`///`, `//!`) の保持
 - ✅ 空行の保持（元のコードの空行を維持）
-- ✅ tree-sitter-bt-dsl WASMパーサーを使用（プラットフォーム非依存）
+- ✅ core WASM パーサーを使用
 
 ## フォーマット例
 
