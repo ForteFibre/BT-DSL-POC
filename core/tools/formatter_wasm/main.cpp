@@ -74,11 +74,10 @@ std::string parse_to_ast_json(const std::string & source_text)
     if (
       t.kind == TokenKind::DocLine || t.kind == TokenKind::DocModule ||
       t.kind == TokenKind::LineComment || t.kind == TokenKind::BlockComment) {
-      comments.push_back(
-        json{
-          {"kind", std::string(bt_dsl::syntax::to_string(t.kind))},
-          {"range", j_range(t.range)},
-          {"text", std::string(slice(src, t.range))}});
+      comments.push_back(json{
+        {"kind", std::string(bt_dsl::syntax::to_string(t.kind))},
+        {"range", j_range(t.range)},
+        {"text", std::string(slice(src, t.range))}});
     }
   }
 
@@ -117,12 +116,11 @@ std::string parse_to_ast_json(const std::string & source_text)
         break;
     }
 
-    diagnostics.push_back(
-      json{
-        {"severity", sev},
-        {"range", j_range(d.primary_range())},
-        {"message", d.message},
-        {"code", d.code}});
+    diagnostics.push_back(json{
+      {"severity", sev},
+      {"range", j_range(d.primary_range())},
+      {"message", d.message},
+      {"code", d.code}});
   }
 
   // Merge: use AST JSON as base, add comments and diagnostics
