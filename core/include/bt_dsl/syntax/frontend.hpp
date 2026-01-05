@@ -1,6 +1,7 @@
 // bt_dsl/syntax/frontend.hpp - High-level parse pipeline entry point
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -13,16 +14,16 @@
 namespace bt_dsl
 {
 
-struct ParsedUnit
+struct ParseOutput
 {
-  SourceManager source;
-  AstContext ast;
-  DiagnosticBag diags;
+  FileId file_id = FileId::invalid();
   Program * program = nullptr;
 };
 
 // Parse pipeline:
 // source -> lexer (token stream) -> recursive-descent parser (AST) -> diagnostics
-[[nodiscard]] std::unique_ptr<ParsedUnit> parse_source(std::string source_text);
+[[nodiscard]] ParseOutput parse_source(
+  SourceRegistry & sources, const std::filesystem::path & path, std::string source_text,
+  AstContext & ast, DiagnosticBag & diags);
 
 }  // namespace bt_dsl

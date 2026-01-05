@@ -173,10 +173,9 @@ private:
    * Parse a source file and create the AST.
    *
    * @param path Absolute path to the source file
-   * @param module ModuleInfo to populate
-   * @return true if parsing succeeded
+    * @return Parsed ModuleInfo (owned by the graph), or nullptr on fatal error
    */
-  bool parse_file(const std::filesystem::path & path, ModuleInfo & module);
+  ModuleInfo * parse_file(const std::filesystem::path & path);
 
   /**
    * Register all declarations from a module into its symbol tables.

@@ -10,6 +10,7 @@
 #include "bt_dsl/ast/ast_context.hpp"
 #include "bt_dsl/basic/casting.hpp"
 #include "bt_dsl/sema/types/type_table.hpp"
+#include "bt_dsl/sema/types/type_utils.hpp"
 
 namespace bt_dsl
 {
@@ -124,7 +125,8 @@ ConstValue convert_const_value_to_target(
   if (dst->is_integer()) {
     auto i = val.to_integer();
     if (!i.has_value()) {
-      report_error(range, "cannot cast non-numeric value to integer type");
+      report_error(
+        range, "cannot cast value of type '" + to_string(val.type) + "' to integer type");
       return ConstValue::make_error();
     }
     auto out = ConstValue::make_integer(*i);
@@ -135,7 +137,7 @@ ConstValue convert_const_value_to_target(
   if (dst->is_float()) {
     auto f = val.to_float();
     if (!f.has_value()) {
-      report_error(range, "cannot cast non-numeric value to float type");
+      report_error(range, "cannot cast value of type '" + to_string(val.type) + "' to float type");
       return ConstValue::make_error();
     }
     auto out = ConstValue::make_float(*f);
@@ -146,7 +148,7 @@ ConstValue convert_const_value_to_target(
   // Bool casts (keep strict for now)
   if (dst->kind == TypeKind::Bool) {
     if (!val.is_bool()) {
-      report_error(range, "cannot cast non-boolean value to bool");
+      report_error(range, "cannot cast value of type '" + to_string(val.type) + "' to bool");
       return ConstValue::make_error();
     }
     auto out = ConstValue::make_bool(val.as_bool());
@@ -157,7 +159,7 @@ ConstValue convert_const_value_to_target(
   // String casts (including bounded string)
   if (dst->is_string()) {
     if (!val.is_string()) {
-      report_error(range, "cannot cast non-string value to string");
+      report_error(range, "cannot cast value of type '" + to_string(val.type) + "' to string");
       return ConstValue::make_error();
     }
     auto out = ConstValue::make_string(val.as_string());
@@ -165,7 +167,8 @@ ConstValue convert_const_value_to_target(
     return out;
   }
 
-  report_error(range, "unsupported cast target type in constant expression");
+  report_error(
+    range, "unsupported cast target type '" + to_string(target.type) + "' in constant expression");
   return ConstValue::make_error();
 }
 
@@ -399,7 +402,8 @@ ConstValue ConstEvaluator::eval_var_ref(const VarRefExpr * node)
   // Check for circular reference
   const Symbol * sym = node->resolvedSymbol;
   if (sym && evaluating_.count(sym)) {
-    report_error(node->get_range(), "circular reference in constant expression");
+    report_error(
+      node->get_range(), "circular reference involving constant '" + std::string(sym->name) + "'");
     return ConstValue::make_error();
   }
 
@@ -411,13 +415,15 @@ ConstValue ConstEvaluator::eval_var_ref(const VarRefExpr * node)
 
   // Get resolved symbol
   if (!sym) {
-    report_error(node->get_range(), "unresolved identifier");
+    report_error(node->get_range(), "unresolved identifier '" + std::string(node->name) + "'");
     return ConstValue::make_error();
   }
 
   // Must be a const
   if (!sym->is_const()) {
-    report_error(node->get_range(), "non-constant value in constant expression");
+    report_error(
+      node->get_range(),
+      "non-constant value '" + std::string(sym->name) + "' in constant expression");
     return ConstValue::make_error();
   }
 
@@ -963,7 +969,8 @@ std::vector<const AstNode *> ConstEvaluator::build_evaluation_order(
     if (in_stack.count(name)) {
       // Cycle detected
       if (auto * gc = const_map[name]) {
-        report_error(gc->get_range(), "circular dependency in constant");
+        report_error(
+          gc->get_range(), "circular dependency in constant '" + std::string(name) + "'");
       }
       return false;
     }
@@ -1007,7 +1014,7 @@ void ConstEvaluator::report_error(SourceRange range, std::string_view message)
   error_count_++;
 
   if (diags_) {
-    diags_->error(range, message);
+    diags_->report_error(range, std::string(message));
   }
 }
 

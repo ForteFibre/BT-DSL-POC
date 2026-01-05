@@ -119,7 +119,10 @@ private:
   void check_node_args(const NodeStmt * node, const InitStateMap & state);
 
   /// Check a statement (part of transfer function)
-  static void check_stmt(const Stmt * stmt, InitStateMap & state);
+  void check_stmt(const Stmt * stmt, InitStateMap & state, bool report_errors = true);
+
+  /// Check an expression for uninitialized usage
+  void check_expr(const Expr * expr, const InitStateMap & state, bool report_errors = true);
 
   /// Transfer function for an edge
   /// Updates state based on the edge kind and source block (e.g. out params on success)

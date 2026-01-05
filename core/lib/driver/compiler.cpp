@@ -11,7 +11,6 @@
 #include "bt_dsl/sema/analysis/tree_recursion_checker.hpp"
 #include "bt_dsl/sema/resolution/module_resolver.hpp"
 #include "bt_dsl/sema/resolution/name_resolver.hpp"
-#include "bt_dsl/sema/resolution/symbol_table_builder.hpp"
 #include "bt_dsl/sema/types/const_evaluator.hpp"
 #include "bt_dsl/sema/types/type_checker.hpp"
 
@@ -20,14 +19,6 @@ namespace bt_dsl
 
 namespace
 {
-
-/// Merge diagnostics from a ParsedUnit into a DiagnosticBag
-void merge_diagnostics(DiagnosticBag & dest, const DiagnosticBag & src)
-{
-  for (const auto & diag : src) {
-    dest.add(diag);
-  }
-}
 
 }  // namespace
 
@@ -41,7 +32,7 @@ CompileResult Compiler::compile_single_file(
 
   // Ensure file exists
   if (!fs::exists(file)) {
-    result.diagnostics.error(SourceRange{}, "file not found: " + file.string());
+    result.diagnostics.report_error(SourceRange{}, "file not found: " + file.string());
     return result;
   }
 
@@ -71,16 +62,16 @@ CompileResult Compiler::compile_single_file(
   // Get entry point module
   ModuleInfo * entry = result.module_graph->get_module(file);
   if (!entry || !entry->program) {
-    result.diagnostics.error(SourceRange{}, "failed to load entry point");
+    result.diagnostics.report_error(SourceRange{}, "failed to load entry point");
     return result;
   }
 
   // Run semantic analysis on all modules
   for (auto * module : result.module_graph->get_all_modules()) {
-    // Merge parse diagnostics
-    if (module->parsedUnit) {
-      merge_diagnostics(result.diagnostics, module->parsedUnit->diags);
-    }
+    // Merge parse diagnostics - REMOVED: Managed by ModuleResolver
+    // if (module->parsedUnit) {
+    //   merge_diagnostics(result.diagnostics, module->parsedUnit->diags);
+    // }
 
     if (!run_semantic_analysis(*module, types, result.diagnostics)) {
       // Continue to collect more errors from other modules
@@ -123,7 +114,8 @@ CompileResult Compiler::compile_project(
 
   // Handle empty entry points
   if (config.compiler.entry_points.empty()) {
-    result.diagnostics.error(SourceRange{}, "no entry points defined in project configuration");
+    result.diagnostics.report_error(
+      SourceRange{}, "no entry points defined in project configuration");
     return result;
   }
 
@@ -141,7 +133,8 @@ CompileResult Compiler::compile_project(
     const fs::path entry_path = config.project_root / entry_rel;
 
     if (!fs::exists(entry_path)) {
-      result.diagnostics.error(SourceRange{}, "entry point not found: " + entry_path.string());
+      result.diagnostics.report_error(
+        SourceRange{}, "entry point not found: " + entry_path.string());
       continue;
     }
 
@@ -168,16 +161,16 @@ CompileResult Compiler::compile_project(
     // Get entry point module
     ModuleInfo * entry = result.module_graph->get_module(entry_path);
     if (!entry || !entry->program) {
-      result.diagnostics.error(SourceRange{}, "failed to load entry point: " + entry_path.string());
+      result.diagnostics.report_error(
+        SourceRange{}, "failed to load entry point: " + entry_path.string());
       continue;
     }
 
-    // Run semantic analysis
+    // Run semantic analysis on all modules
     for (auto * module : result.module_graph->get_all_modules()) {
-      if (module->parsedUnit) {
-        merge_diagnostics(result.diagnostics, module->parsedUnit->diags);
+      if (!run_semantic_analysis(*module, types, result.diagnostics)) {
+        // Continue to collect more errors from other modules
       }
-      run_semantic_analysis(*module, types, result.diagnostics);
     }
 
     // Generate XML if no errors and in Build mode
@@ -203,10 +196,13 @@ bool Compiler::run_semantic_analysis(
   bool success = true;
 
   // 1. Build symbol table
-  SymbolTableBuilder builder(module.values, module.types, module.nodes, &diags);
-  if (!builder.build(*module.program)) {
-    success = false;
-  }
+  // Managed by ModuleResolver during registration to ensure imports work correctly.
+  // Running it again here causes duplicate redefinition errors because SymbolTableBuilder
+  // is not idempotent for redefinitions on the same module instance.
+  // SymbolTableBuilder builder(module.values, module.types, module.nodes, &diags);
+  // if (!builder.build(*module.program)) {
+  //   success = false;
+  // }
 
   // 2. Name resolution
   NameResolver name_resolver(module, &diags);
@@ -216,13 +212,13 @@ bool Compiler::run_semantic_analysis(
 
   // 3. Constant evaluation (const decls + default arguments)
   // Reference: docs/reference/declarations-and-scopes.md §4.3
-  if (module.parsedUnit) {
-    ConstEvaluator eval(module.parsedUnit->ast, types, module.values, &diags);
+  if (module.ast) {
+    ConstEvaluator eval(*module.ast, types, module.values, &diags);
     if (!eval.evaluate_program(*module.program)) {
       success = false;
     }
   } else {
-    diags.error(SourceRange{}, "internal error: missing AST for constant evaluation");
+    diags.report_error(SourceRange{}, "internal error: missing AST for constant evaluation");
     success = false;
   }
 
@@ -262,14 +258,14 @@ bool Compiler::generate_xml(
 
     std::ofstream out(output_path);
     if (!out.is_open()) {
-      diags.error(SourceRange{}, "failed to open output file: " + output_path.string());
+      diags.report_error(SourceRange{}, "failed to open output file: " + output_path.string());
       return false;
     }
 
     out << xml;
     return true;
   } catch (const std::exception & e) {
-    diags.error(SourceRange{}, "XML generation failed: " + std::string(e.what()));
+    diags.report_error(SourceRange{}, "XML generation failed: " + std::string(e.what()));
     return false;
   }
 }

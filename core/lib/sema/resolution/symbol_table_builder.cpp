@@ -40,7 +40,8 @@ bool SymbolTableBuilder::build(Program & program)
     if (existing != nullptr) {
       // Idempotent: ok if the existing symbol points at the same declaration.
       if (existing->decl != ext_type) {
-        report_error(ext_type->get_range(), "redefinition of type");
+        report_redefinition(
+          ext_type->get_range(), existing->decl->get_range(), ext_type->name, "type");
       }
       continue;
     }
@@ -59,7 +60,7 @@ bool SymbolTableBuilder::build(Program & program)
     const TypeSymbol * existing = types_.lookup(alias->name);
     if (existing != nullptr) {
       if (existing->decl != alias) {
-        report_error(alias->get_range(), "redefinition of type");
+        report_redefinition(alias->get_range(), existing->decl->get_range(), alias->name, "type");
       }
       continue;
     }
@@ -78,7 +79,7 @@ bool SymbolTableBuilder::build(Program & program)
     const NodeSymbol * existing = nodes_.lookup(ext->name);
     if (existing != nullptr) {
       if (existing->decl != ext) {
-        report_error(ext->get_range(), "redefinition of node");
+        report_redefinition(ext->get_range(), existing->decl->get_range(), ext->name, "node");
       }
       continue;
     }
@@ -96,7 +97,7 @@ bool SymbolTableBuilder::build(Program & program)
     const NodeSymbol * existing = nodes_.lookup(tree->name);
     if (existing != nullptr) {
       if (existing->decl != tree) {
-        report_error(tree->get_range(), "redefinition of node");
+        report_redefinition(tree->get_range(), existing->decl->get_range(), tree->name, "node");
       }
       continue;
     }
@@ -113,7 +114,7 @@ bool SymbolTableBuilder::build(Program & program)
       if (!v) continue;
       if (const Symbol * existing = global->lookup_local(v->name)) {
         if (existing->astNode != v) {
-          report_error(v->get_range(), "redefinition of variable");
+          report_redefinition(v->get_range(), existing->definitionRange, v->name, "variable");
         }
       }
     }
@@ -121,7 +122,7 @@ bool SymbolTableBuilder::build(Program & program)
       if (!c) continue;
       if (const Symbol * existing = global->lookup_local(c->name)) {
         if (existing->astNode != c) {
-          report_error(c->get_range(), "redefinition of constant");
+          report_redefinition(c->get_range(), existing->definitionRange, c->name, "constant");
         }
       }
     }
@@ -161,7 +162,8 @@ void SymbolTableBuilder::build_tree_scope(TreeDecl * tree)
 
     if (const Symbol * existing = current_scope_->lookup_local(param->name)) {
       if (existing->astNode != param) {
-        report_error(param->get_range(), "redefinition of parameter");
+        report_redefinition(
+          param->get_range(), existing->definitionRange, param->name, "parameter");
       }
     }
   }
@@ -222,7 +224,9 @@ void SymbolTableBuilder::visit_blackboard_decl_stmt(BlackboardDeclStmt * node)
   sym.astNode = node;
 
   if (current_scope_ && !current_scope_->define(sym)) {
-    report_error(node->get_range(), "redefinition of variable");
+    if (const Symbol * existing = current_scope_->lookup_local(sym.name)) {
+      report_redefinition(node->get_range(), existing->definitionRange, node->name, "variable");
+    }
   }
 }
 
@@ -239,7 +243,9 @@ void SymbolTableBuilder::visit_const_decl_stmt(ConstDeclStmt * node)
   sym.astNode = node;
 
   if (current_scope_ && !current_scope_->define(sym)) {
-    report_error(node->get_range(), "redefinition of constant");
+    if (const Symbol * existing = current_scope_->lookup_local(sym.name)) {
+      report_redefinition(node->get_range(), existing->definitionRange, node->name, "constant");
+    }
   }
 }
 
@@ -265,7 +271,11 @@ void SymbolTableBuilder::visit_argument(Argument * node)
     sym.astNode = node->inlineDecl;
 
     if (current_scope_ && !current_scope_->define(sym)) {
-      report_error(node->inlineDecl->get_range(), "redefinition of variable");
+      if (const Symbol * existing = current_scope_->lookup_local(sym.name)) {
+        report_redefinition(
+          node->inlineDecl->get_range(), existing->definitionRange, node->inlineDecl->name,
+          "variable");
+      }
     }
   }
 }
@@ -281,8 +291,8 @@ bool SymbolTableBuilder::check_shadowing(std::string_view name, SourceRange rang
   if (current_scope_ != nullptr) {
     const Scope * parent = current_scope_->get_parent();
     while (parent != nullptr) {
-      if (parent->lookup_local(name) != nullptr) {
-        report_error(range, "declaration shadows previous declaration");
+      if (const Symbol * existing = parent->lookup_local(name)) {
+        report_shadowing(range, existing->definitionRange, name);
         return true;
       }
       parent = parent->get_parent();
@@ -297,7 +307,36 @@ void SymbolTableBuilder::report_error(SourceRange range, std::string_view messag
   ++error_count_;
 
   if (diags_ != nullptr) {
-    diags_->error(range, message);
+    diags_->report_error(range, std::string(message));
+  }
+}
+
+void SymbolTableBuilder::report_redefinition(
+  SourceRange range, SourceRange prev_range, std::string_view name, std::string_view kind)
+{
+  has_errors_ = true;
+  ++error_count_;
+
+  if (diags_ != nullptr) {
+    diags_
+      ->report_error(
+        range, std::string("redefinition of ") + std::string(kind) + " '" + std::string(name) + "'")
+      .with_secondary_label(prev_range, "previous definition is here");
+  }
+}
+
+void SymbolTableBuilder::report_shadowing(
+  SourceRange range, SourceRange prev_range, std::string_view name)
+{
+  has_errors_ = true;
+  ++error_count_;
+
+  if (diags_ != nullptr) {
+    diags_
+      ->report_error(
+        range,
+        std::string("declaration of '") + std::string(name) + "' shadows previous declaration")
+      .with_secondary_label(prev_range, "previous declaration is here");
   }
 }
 

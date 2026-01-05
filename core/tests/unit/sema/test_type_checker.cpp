@@ -20,7 +20,7 @@
 #include "bt_dsl/sema/types/type.hpp"
 #include "bt_dsl/sema/types/type_checker.hpp"
 #include "bt_dsl/sema/types/type_table.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -36,7 +36,6 @@ static bool has_warning_containing(const DiagnosticBag & diags, std::string_view
 // Helper to parse, resolve names, evaluate constants, and type check
 struct TestContext
 {
-  std::unique_ptr<ParsedUnit> unit;
   Program * program = nullptr;
   ModuleInfo module;
   TypeContext types;
@@ -44,10 +43,18 @@ struct TestContext
 
   bool parse(const std::string & src)
   {
-    unit = parse_source(src);
-    if (!unit || !unit->diags.empty()) return false;
-    program = unit->program;
-    return program != nullptr;
+    auto parsed = test_support::parse(src);
+    if (parsed.program == nullptr || parsed.diags.has_errors()) {
+      diags.merge(parsed.diags);
+      return false;
+    }
+
+    program = parsed.program;
+    module.file_id = parsed.file_id;
+    module.ast = std::move(parsed.ast);
+    module.parse_diags = std::move(parsed.diags);
+    module.program = program;
+    return true;
   }
 
   bool resolve_names()
@@ -89,7 +96,8 @@ struct TestContext
 
   bool evaluate_consts()
   {
-    ConstEvaluator eval(unit->ast, types, module.values, &diags);
+    if (!module.ast) return false;
+    ConstEvaluator eval(*module.ast, types, module.values, &diags);
     return eval.evaluate_program(*program);
   }
 

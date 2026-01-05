@@ -5,7 +5,7 @@
 
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/basic/casting.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 static bt_dsl::NodeStmt * first_node_stmt(gsl::span<bt_dsl::Stmt *> body)
 {
@@ -40,11 +40,10 @@ TEST(AstLiterals, ParseLiterals)
     "  );\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::Program * p = unit->program;
+  bt_dsl::Program * p = unit.program;
   ASSERT_NE(p, nullptr);
   ASSERT_EQ(p->trees().size(), 1U);
 
@@ -87,11 +86,10 @@ TEST(AstLiterals, FloatExponent)
     "  Action(x: 1e3);\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
 
   auto * e = get_arg_expr(root, 0);
@@ -120,11 +118,10 @@ TEST(AstLiterals, StringEscapes)
     "  );\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->args.size(), 10U);
 
@@ -157,11 +154,10 @@ TEST(AstLiterals, NullLiteral)
     "  Action(x: null);\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
 
   auto * e = get_arg_expr(root, 0);
@@ -178,11 +174,10 @@ TEST(AstLiterals, ArrayLiteral)
     "  Action(arr: [1, 2, 3]);\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
 
   auto * e = get_arg_expr(root, 0);
@@ -204,11 +199,10 @@ TEST(AstLiterals, VecMacro)
     "  Action(v: vec![1, 2]);\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
 
   auto * e = get_arg_expr(root, 0);

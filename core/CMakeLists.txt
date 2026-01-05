@@ -67,6 +67,22 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(GSL)
 
+# fmt (fast formatting library)
+FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG 11.1.4
+)
+FetchContent_MakeAvailable(fmt)
+
+# rang (header-only terminal colors library)
+FetchContent_Declare(
+    rang
+    GIT_REPOSITORY https://github.com/agauniyal/rang.git
+    GIT_TAG v3.2
+)
+FetchContent_MakeAvailable(rang)
+
 # yaml-cpp (for btc.yaml project configuration)
 if(NOT BT_DSL_MINIMAL_CORE)
     FetchContent_Declare(
@@ -172,6 +188,8 @@ target_link_libraries(bt_dsl_core PUBLIC Microsoft.GSL::GSL)
 if(NOT BT_DSL_MINIMAL_CORE)
     target_link_libraries(bt_dsl_core PUBLIC yaml-cpp::yaml-cpp)
 endif()
+target_link_libraries(bt_dsl_core PUBLIC fmt::fmt)
+target_include_directories(bt_dsl_core PUBLIC ${rang_SOURCE_DIR}/include)
 
 # Common compiler warnings
 set(BT_DSL_COMPILE_OPTIONS

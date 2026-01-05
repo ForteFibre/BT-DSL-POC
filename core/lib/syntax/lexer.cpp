@@ -72,7 +72,7 @@ bool Lexer::skip_line_comment_or_emit_doc(Token & out)
     }
 
     out.kind = tk;
-    out.range = SourceRange(start, static_cast<uint32_t>(pos_));
+    out.range = make_range(start, static_cast<uint32_t>(pos_));
     out.text = src_.substr(payload_start, payload_end - payload_start);
 
     return true;
@@ -84,7 +84,7 @@ bool Lexer::skip_line_comment_or_emit_doc(Token & out)
   }
 
   out.kind = TokenKind::LineComment;
-  out.range = SourceRange(start, static_cast<uint32_t>(pos_));
+  out.range = make_range(start, static_cast<uint32_t>(pos_));
   out.text = {};  // tools should use out.range to slice the original text
 
   return true;
@@ -101,7 +101,7 @@ Token Lexer::lex_identifier_or_keyword()
 
   Token t;
   t.kind = TokenKind::Identifier;
-  t.range = SourceRange(start, end);
+  t.range = make_range(start, end);
   t.text = src_.substr(start, end - start);
   return t;
 }
@@ -156,7 +156,7 @@ Token Lexer::lex_number()
 
       const auto end = static_cast<uint32_t>(pos_);
       Token t;
-      t.range = SourceRange(start, end);
+      t.range = make_range(start, end);
       t.text = src_.substr(start, end - start);
       // If no digits or invalid digits, force a parse-time error by emitting Unknown.
       t.kind = (!any || invalid) ? TokenKind::Unknown : TokenKind::IntLiteral;
@@ -194,7 +194,7 @@ Token Lexer::lex_number()
   const auto end = static_cast<uint32_t>(pos_);
   Token t;
   t.kind = is_float ? TokenKind::FloatLiteral : TokenKind::IntLiteral;
-  t.range = SourceRange(start, end);
+  t.range = make_range(start, end);
   t.text = src_.substr(start, end - start);
   return t;
 }
@@ -221,7 +221,7 @@ Token Lexer::lex_string()
       const auto end = static_cast<uint32_t>(pos_);
       Token t;
       t.kind = TokenKind::Unknown;
-      t.range = SourceRange(start, end);
+      t.range = make_range(start, end);
       t.text = src_.substr(start, end - start);
       return t;
     }
@@ -295,7 +295,7 @@ Token Lexer::lex_string()
   const auto end = static_cast<uint32_t>(pos_);
 
   Token t;
-  t.range = SourceRange(start, end);
+  t.range = make_range(start, end);
 
   // Unterminated string or invalid escapes: emit Unknown and include the opening quote in text.
   if (!has_closing_quote || invalid) {
@@ -318,7 +318,7 @@ Token Lexer::next_token()
       Token t;
       t.kind = TokenKind::Eof;
       const auto at = static_cast<uint32_t>(src_.size());
-      t.range = SourceRange(at, at);
+      t.range = make_range(at, at);
       t.text = {};
       return t;
     }
@@ -343,7 +343,7 @@ Token Lexer::next_token()
         const auto end = static_cast<uint32_t>(pos_);
         Token t;
         t.kind = TokenKind::BlockComment;
-        t.range = SourceRange(start, end);
+        t.range = make_range(start, end);
         t.text = {};  // tools should use t.range to slice the original text
         return t;
       }
@@ -373,47 +373,47 @@ Token Lexer::next_token()
   // Multi-char operators
   if (starts_with("&&")) {
     advance(2);
-    return {TokenKind::AndAnd, SourceRange(start, static_cast<uint32_t>(pos_)), "&&"};
+    return {TokenKind::AndAnd, make_range(start, static_cast<uint32_t>(pos_)), "&&"};
   }
   if (starts_with("||")) {
     advance(2);
-    return {TokenKind::OrOr, SourceRange(start, static_cast<uint32_t>(pos_)), "||"};
+    return {TokenKind::OrOr, make_range(start, static_cast<uint32_t>(pos_)), "||"};
   }
   if (starts_with("==")) {
     advance(2);
-    return {TokenKind::EqEq, SourceRange(start, static_cast<uint32_t>(pos_)), "=="};
+    return {TokenKind::EqEq, make_range(start, static_cast<uint32_t>(pos_)), "=="};
   }
   if (starts_with("!=")) {
     advance(2);
-    return {TokenKind::Ne, SourceRange(start, static_cast<uint32_t>(pos_)), "!="};
+    return {TokenKind::Ne, make_range(start, static_cast<uint32_t>(pos_)), "!="};
   }
   if (starts_with("<=")) {
     advance(2);
-    return {TokenKind::Le, SourceRange(start, static_cast<uint32_t>(pos_)), "<="};
+    return {TokenKind::Le, make_range(start, static_cast<uint32_t>(pos_)), "<="};
   }
   if (starts_with(">=")) {
     advance(2);
-    return {TokenKind::Ge, SourceRange(start, static_cast<uint32_t>(pos_)), ">="};
+    return {TokenKind::Ge, make_range(start, static_cast<uint32_t>(pos_)), ">="};
   }
   if (starts_with("+=")) {
     advance(2);
-    return {TokenKind::PlusEq, SourceRange(start, static_cast<uint32_t>(pos_)), "+="};
+    return {TokenKind::PlusEq, make_range(start, static_cast<uint32_t>(pos_)), "+="};
   }
   if (starts_with("-=")) {
     advance(2);
-    return {TokenKind::MinusEq, SourceRange(start, static_cast<uint32_t>(pos_)), "-="};
+    return {TokenKind::MinusEq, make_range(start, static_cast<uint32_t>(pos_)), "-="};
   }
   if (starts_with("*=")) {
     advance(2);
-    return {TokenKind::StarEq, SourceRange(start, static_cast<uint32_t>(pos_)), "*="};
+    return {TokenKind::StarEq, make_range(start, static_cast<uint32_t>(pos_)), "*="};
   }
   if (starts_with("/=")) {
     advance(2);
-    return {TokenKind::SlashEq, SourceRange(start, static_cast<uint32_t>(pos_)), "/="};
+    return {TokenKind::SlashEq, make_range(start, static_cast<uint32_t>(pos_)), "/="};
   }
   if (starts_with("%=")) {
     advance(2);
-    return {TokenKind::PercentEq, SourceRange(start, static_cast<uint32_t>(pos_)), "%="};
+    return {TokenKind::PercentEq, make_range(start, static_cast<uint32_t>(pos_)), "%="};
   }
 
   // Single-char tokens
@@ -423,62 +423,62 @@ Token Lexer::next_token()
 
   switch (ch) {
     case '(':
-      return {TokenKind::LParen, SourceRange(start, end), "("};
+      return {TokenKind::LParen, make_range(start, end), "("};
     case ')':
-      return {TokenKind::RParen, SourceRange(start, end), ")"};
+      return {TokenKind::RParen, make_range(start, end), ")"};
     case '{':
-      return {TokenKind::LBrace, SourceRange(start, end), "{"};
+      return {TokenKind::LBrace, make_range(start, end), "{"};
     case '}':
-      return {TokenKind::RBrace, SourceRange(start, end), "}"};
+      return {TokenKind::RBrace, make_range(start, end), "}"};
     case '[':
-      return {TokenKind::LBracket, SourceRange(start, end), "["};
+      return {TokenKind::LBracket, make_range(start, end), "["};
     case ']':
-      return {TokenKind::RBracket, SourceRange(start, end), "]"};
+      return {TokenKind::RBracket, make_range(start, end), "]"};
     case ',':
-      return {TokenKind::Comma, SourceRange(start, end), ","};
+      return {TokenKind::Comma, make_range(start, end), ","};
     case ':':
-      return {TokenKind::Colon, SourceRange(start, end), ":"};
+      return {TokenKind::Colon, make_range(start, end), ":"};
     case ';':
-      return {TokenKind::Semicolon, SourceRange(start, end), ";"};
+      return {TokenKind::Semicolon, make_range(start, end), ";"};
     case '.':
-      return {TokenKind::Dot, SourceRange(start, end), "."};
+      return {TokenKind::Dot, make_range(start, end), "."};
     case '@':
-      return {TokenKind::At, SourceRange(start, end), "@"};
+      return {TokenKind::At, make_range(start, end), "@"};
     case '#':
-      return {TokenKind::Hash, SourceRange(start, end), "#"};
+      return {TokenKind::Hash, make_range(start, end), "#"};
     case '!':
-      return {TokenKind::Bang, SourceRange(start, end), "!"};
+      return {TokenKind::Bang, make_range(start, end), "!"};
     case '?':
-      return {TokenKind::Question, SourceRange(start, end), "?"};
+      return {TokenKind::Question, make_range(start, end), "?"};
     case '+':
-      return {TokenKind::Plus, SourceRange(start, end), "+"};
+      return {TokenKind::Plus, make_range(start, end), "+"};
     case '-':
-      return {TokenKind::Minus, SourceRange(start, end), "-"};
+      return {TokenKind::Minus, make_range(start, end), "-"};
     case '*':
-      return {TokenKind::Star, SourceRange(start, end), "*"};
+      return {TokenKind::Star, make_range(start, end), "*"};
     case '/':
-      return {TokenKind::Slash, SourceRange(start, end), "/"};
+      return {TokenKind::Slash, make_range(start, end), "/"};
     case '%':
-      return {TokenKind::Percent, SourceRange(start, end), "%"};
+      return {TokenKind::Percent, make_range(start, end), "%"};
     case '&':
-      return {TokenKind::Amp, SourceRange(start, end), "&"};
+      return {TokenKind::Amp, make_range(start, end), "&"};
     case '|':
-      return {TokenKind::Pipe, SourceRange(start, end), "|"};
+      return {TokenKind::Pipe, make_range(start, end), "|"};
     case '^':
-      return {TokenKind::Caret, SourceRange(start, end), "^"};
+      return {TokenKind::Caret, make_range(start, end), "^"};
     case '=':
-      return {TokenKind::Eq, SourceRange(start, end), "="};
+      return {TokenKind::Eq, make_range(start, end), "="};
     case '<':
-      return {TokenKind::Lt, SourceRange(start, end), "<"};
+      return {TokenKind::Lt, make_range(start, end), "<"};
     case '>':
-      return {TokenKind::Gt, SourceRange(start, end), ">"};
+      return {TokenKind::Gt, make_range(start, end), ">"};
     default:
       break;
   }
 
   Token t;
   t.kind = TokenKind::Unknown;
-  t.range = SourceRange(start, end);
+  t.range = make_range(start, end);
   t.text = src_.substr(start, end - start);
   return t;
 }

@@ -5,6 +5,7 @@
 
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 TEST(AstProgram, TopLevel)
 {
@@ -25,17 +26,16 @@ TEST(AstProgram, TopLevel)
     "  Action();\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
+  auto unit = bt_dsl::test_support::parse(src);
 
-  if (!unit->diags.empty()) {
-    for (const auto & d : unit->diags.all()) {
+  if (!unit.diags.empty()) {
+    for (const auto & d : unit.diags.all()) {
       std::cerr << "diag: " << d.message << "\n";
     }
   }
-  ASSERT_TRUE(unit->diags.empty());
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::Program * p = unit->program;
+  bt_dsl::Program * p = unit.program;
   ASSERT_NE(p, nullptr);
 
   ASSERT_EQ(p->imports().size(), 1U);

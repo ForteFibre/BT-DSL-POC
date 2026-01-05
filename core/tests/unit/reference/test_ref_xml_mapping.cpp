@@ -24,7 +24,7 @@
 #include "bt_dsl/sema/resolution/symbol_table_builder.hpp"
 #include "bt_dsl/sema/types/const_evaluator.hpp"
 #include "bt_dsl/sema/types/type_checker.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -36,9 +36,14 @@ class XmlTestContext
 public:
   bool parse(const std::string & src)
   {
-    unit = parse_source(src);
-    if (!unit || !unit->diags.empty()) return false;
-    program = unit->program;
+    auto parsed = test_support::parse(src);
+    if (parsed.program == nullptr || parsed.diags.has_errors()) return false;
+
+    program = parsed.program;
+    module.file_id = parsed.file_id;
+    module.ast = std::move(parsed.ast);
+    module.parse_diags = std::move(parsed.diags);
+    module.program = program;
     return true;
   }
 
@@ -78,7 +83,9 @@ public:
     NameResolver resolver(module);
     if (!resolver.resolve()) return false;
 
-    ConstEvaluator const_eval(unit->ast, types, module.values, &diags);
+    if (!module.ast) return false;
+
+    ConstEvaluator const_eval(*module.ast, types, module.values, &diags);
     if (!const_eval.evaluate_program(*program)) return false;
 
     TypeChecker checker(types, module.types, module.values, &diags);
@@ -103,7 +110,6 @@ public:
     return xml.find(needle) != std::string::npos;
   }
 
-  std::unique_ptr<ParsedUnit> unit;
   Program * program = nullptr;
   ModuleInfo module;
   TypeContext types;

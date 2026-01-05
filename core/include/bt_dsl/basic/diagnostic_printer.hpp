@@ -1,11 +1,12 @@
 // bt_dsl/basic/diagnostic_printer.hpp
 //
 // Prints diagnostics with source context, line/column information,
-// and position markers for easy error identification.
+// and position markers in Rust-style format.
 //
 #pragma once
 
 #include <iosfwd>
+#include <string>
 #include <string_view>
 
 #include "bt_dsl/basic/diagnostic.hpp"
@@ -15,11 +16,16 @@ namespace bt_dsl
 {
 
 /**
+ * Prints diagnostics in Rust-style format.
  *
  * Produces output like:
- *   src/main.bt:5:12: error: undefined variable 'foo'
- *       let x = foo + 1;
- *               ^~~
+ *   error[E0001]: undefined variable 'foo'
+ *     --> src/main.bt:5:12
+ *      |
+ *    5 | let x = foo + 1;
+ *      |         ^^^ not found in this scope
+ *      |
+ *      = help: consider declaring 'foo' before use
  */
 class DiagnosticPrinter
 {
@@ -28,45 +34,40 @@ public:
    * Create a diagnostic printer.
    *
    * @param os Output stream (typically std::cerr)
-   * @param useColor Whether to use ANSI color codes
+   * @param use_color Whether to use terminal colors
    */
   explicit DiagnosticPrinter(std::ostream & os, bool use_color = true);
 
   /**
-   * Print a single diagnostic with source context.
+   * Print a single diagnostic.
    *
-   * @param diag The diagnostic to print
-   * @param source SourceManager for line/column lookup
-   * @param filename Filename to display in output
+   * Source context is resolved via SourceRegistry and the diagnostic labels.
    */
-  void print(const Diagnostic & diag, const SourceManager & source, std::string_view filename);
+  void print(const Diagnostic & diag, const SourceRegistry & sources);
 
   /**
    * Print all diagnostics from a DiagnosticBag.
-   *
-   * @param diags Collection of diagnostics
-   * @param source SourceManager for line/column lookup
-   * @param filename Filename to display in output
    */
-  void print_all(
-    const DiagnosticBag & diags, const SourceManager & source, std::string_view filename);
+  void print_all(const DiagnosticBag & diags, const SourceRegistry & sources);
 
 private:
-  /// Print source line with position marker
+  // Rust-style formatting helpers
+  void print_severity_header(const Diagnostic & diag);
+
+  void print_label_context(const Label & label, const SourceRegistry & sources);
+
   void print_source_line(
-    const SourceManager & source, uint32_t line_index, uint32_t start_col, uint32_t end_col);
+    const SourceFile & source, uint32_t line_index, uint32_t start_col, uint32_t end_col,
+    LabelStyle style, std::string_view label_message);
 
-  /// Get severity string with optional coloring
-  std::string format_severity(Severity severity);
+  void print_fixit(const FixIt & fixit, const SourceRegistry & sources);
+  void print_help(std::string_view message);
+  void print_note(std::string_view message);
 
-  /// ANSI color codes
-  [[nodiscard]] std::string color_red() const;
-  [[nodiscard]] std::string color_magenta() const;
-  [[nodiscard]] std::string color_cyan() const;
-  [[nodiscard]] std::string color_yellow() const;
-  [[nodiscard]] std::string color_green() const;
-  [[nodiscard]] std::string color_bold() const;
-  [[nodiscard]] std::string color_reset() const;
+  // Gutter elements for Rust-style output
+  [[nodiscard]] std::string gutter_arrow() const;
+  [[nodiscard]] std::string gutter_pipe() const;
+  [[nodiscard]] std::string gutter_pipe_only() const;
 
   std::ostream & os_;
   bool use_color_;

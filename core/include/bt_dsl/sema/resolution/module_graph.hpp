@@ -5,15 +5,17 @@
 #pragma once
 
 #include <filesystem>
-#include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "bt_dsl/ast/ast.hpp"
+#include "bt_dsl/ast/ast_context.hpp"
+#include "bt_dsl/basic/diagnostic.hpp"
+#include "bt_dsl/basic/source_manager.hpp"
 #include "bt_dsl/sema/resolution/node_registry.hpp"
 #include "bt_dsl/sema/resolution/symbol_table.hpp"
 #include "bt_dsl/sema/types/type_table.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
 
 namespace bt_dsl
 {
@@ -30,14 +32,17 @@ namespace bt_dsl
  */
 struct ModuleInfo
 {
-  /// Absolute path to the source file
-  std::filesystem::path absolutePath;
+  /// Source file id (owned/managed by ModuleGraph::sources())
+  FileId file_id = FileId::invalid();
 
-  /// Parsed AST (owned by parsedUnit)
+  /// Parsed AST context (non-movable, owned by this module)
+  std::unique_ptr<AstContext> ast;
+
+  /// Diagnostics produced during parsing
+  DiagnosticBag parse_diags;
+
+  /// Parsed program root (owned by ast)
   Program * program = nullptr;
-
-  /// Full parsed unit (owns AstContext, SourceManager, DiagnosticBag)
-  std::unique_ptr<struct ParsedUnit> parsedUnit;
 
   /// Per-module symbol tables
   TypeTable types;
@@ -102,18 +107,30 @@ public:
    * @param path Absolute path to the module
    * @return Pointer to the ModuleInfo (never null)
    */
-  ModuleInfo * add_module(const std::filesystem::path & path)
+  [[nodiscard]] SourceRegistry & sources() noexcept { return sources_; }
+  [[nodiscard]] const SourceRegistry & sources() const noexcept { return sources_; }
+
+  /**
+   * Add a new module to the graph.
+   *
+   * If a module for the same FileId already exists, returns existing.
+   */
+  ModuleInfo * add_module(FileId file_id)
   {
-    auto canonical = std::filesystem::weakly_canonical(path);
-    auto it = modules_.find(canonical);
-    if (it != modules_.end()) {
-      return it->second.get();
+    if (!file_id.is_valid()) {
+      return nullptr;
     }
-    auto info = std::make_unique<ModuleInfo>();
-    info->absolutePath = canonical;
-    auto * ptr = info.get();
-    modules_.emplace(canonical, std::move(info));
-    return ptr;
+
+    const auto idx = static_cast<size_t>(file_id.value);
+    if (modules_.size() <= idx) {
+      modules_.resize(idx + 1);
+    }
+    if (!modules_[idx]) {
+      auto info = std::make_unique<ModuleInfo>();
+      info->file_id = file_id;
+      modules_[idx] = std::move(info);
+    }
+    return modules_[idx].get();
   }
 
   /**
@@ -122,16 +139,31 @@ public:
    * @param path Path to look up (will be canonicalized)
    * @return Pointer to ModuleInfo if found, nullptr otherwise
    */
+  [[nodiscard]] ModuleInfo * get_module(FileId file_id) const
+  {
+    if (!file_id.is_valid()) {
+      return nullptr;
+    }
+    const auto idx = static_cast<size_t>(file_id.value);
+    if (idx >= modules_.size()) {
+      return nullptr;
+    }
+    return modules_[idx].get();
+  }
+
   [[nodiscard]] ModuleInfo * get_module(const std::filesystem::path & path) const
   {
-    auto canonical = std::filesystem::weakly_canonical(path);
-    auto it = modules_.find(canonical);
-    return it != modules_.end() ? it->second.get() : nullptr;
+    const std::optional<FileId> id = sources_.find_by_path(path);
+    if (!id) {
+      return nullptr;
+    }
+    return get_module(*id);
   }
 
   /**
    * Check if a module exists in the graph.
    */
+  [[nodiscard]] bool has_module(FileId file_id) const { return get_module(file_id) != nullptr; }
   [[nodiscard]] bool has_module(const std::filesystem::path & path) const
   {
     return get_module(path) != nullptr;
@@ -144,7 +176,8 @@ public:
   {
     std::vector<ModuleInfo *> result;
     result.reserve(modules_.size());
-    for (const auto & [path, info] : modules_) {
+    for (const auto & info : modules_) {
+      if (!info) continue;
       result.push_back(info.get());
     }
     return result;
@@ -153,15 +186,23 @@ public:
   /**
    * Get the number of modules in the graph.
    */
-  [[nodiscard]] size_t size() const noexcept { return modules_.size(); }
+  [[nodiscard]] size_t size() const noexcept
+  {
+    size_t count = 0;
+    for (const auto & m : modules_) {
+      if (m) ++count;
+    }
+    return count;
+  }
 
   /**
    * Check if the graph is empty.
    */
-  [[nodiscard]] bool empty() const noexcept { return modules_.empty(); }
+  [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 
 private:
-  std::map<std::filesystem::path, std::unique_ptr<ModuleInfo>> modules_;
+  SourceRegistry sources_;
+  std::vector<std::unique_ptr<ModuleInfo>> modules_;  // indexed by FileId::value
 };
 
 }  // namespace bt_dsl

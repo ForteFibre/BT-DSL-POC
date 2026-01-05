@@ -191,6 +191,9 @@ private:
   // Variables declared but still unresolved at end of scope.
   std::unordered_set<const Symbol *> unresolved_vars_;
 
+  // Deduplication for circular type alias diagnostics (report once per cycle anchor).
+  std::unordered_set<const TypeAliasDecl *> reported_alias_cycles_;
+
   // Current value scope (tree scope or children_block scope) during checking.
   const Scope * current_scope_ = nullptr;
 

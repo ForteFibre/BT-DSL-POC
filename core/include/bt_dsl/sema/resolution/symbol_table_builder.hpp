@@ -90,6 +90,13 @@ private:
   /// Check for shadowing and report warning if found
   bool check_shadowing(std::string_view name, SourceRange range);
 
+  /// Report a redefinition error with previous definition location
+  void report_redefinition(
+    SourceRange range, SourceRange prev_range, std::string_view name, std::string_view kind);
+
+  /// Report a shadowing warning/error with previous declaration location
+  void report_shadowing(SourceRange range, SourceRange prev_range, std::string_view name);
+
   /// Report an error
   void report_error(SourceRange range, std::string_view message);
 

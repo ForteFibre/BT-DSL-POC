@@ -4,6 +4,7 @@
 
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 static bt_dsl::NodeStmt * first_node_stmt(gsl::span<bt_dsl::Stmt *> body)
 {
@@ -22,11 +23,10 @@ TEST(AstDocs, CrLfIsNormalized)
                           std::string("tree Main() {\r\n") + std::string("  /// Node doc\r\n") +
                           std::string("  Action();\r\n") + std::string("}\r\n");
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::Program * p = unit->program;
+  bt_dsl::Program * p = unit.program;
   ASSERT_NE(p, nullptr);
   ASSERT_EQ(p->innerDocs.size(), 1U);
   EXPECT_EQ(p->innerDocs[0].find('\r'), std::string_view::npos);

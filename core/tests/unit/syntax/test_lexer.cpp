@@ -18,7 +18,7 @@ TEST(SyntaxLexer, EmitsLineAndBlockCommentsAsTokens)
     "const X = 1; // trailing\n"
     "const Y = /* inline */ 2;\n";
 
-  Lexer lex(src);
+  Lexer lex(bt_dsl::FileId::invalid(), src);
   const auto toks = lex.lex_all();
 
   // Should emit tokens for non-doc comments so tools can preserve them.
@@ -47,7 +47,7 @@ TEST(SyntaxLexer, EmitsLineAndBlockCommentsAsTokens)
 TEST(SyntaxLexer, BasePrefixedIntegerLiterals)
 {
   {
-    Lexer lex("const X = 0xDEADBEEF;");
+    Lexer lex(bt_dsl::FileId::invalid(), "const X = 0xDEADBEEF;");
     const auto toks = lex.lex_all();
     bool saw = false;
     for (const auto & t : toks) {
@@ -61,7 +61,7 @@ TEST(SyntaxLexer, BasePrefixedIntegerLiterals)
   }
 
   {
-    Lexer lex("const X = 0b1010;");
+    Lexer lex(bt_dsl::FileId::invalid(), "const X = 0b1010;");
     const auto toks = lex.lex_all();
     bool saw = false;
     for (const auto & t : toks) {
@@ -75,7 +75,7 @@ TEST(SyntaxLexer, BasePrefixedIntegerLiterals)
   }
 
   {
-    Lexer lex("const X = 0o777;");
+    Lexer lex(bt_dsl::FileId::invalid(), "const X = 0o777;");
     const auto toks = lex.lex_all();
     bool saw = false;
     for (const auto & t : toks) {
@@ -91,7 +91,7 @@ TEST(SyntaxLexer, BasePrefixedIntegerLiterals)
 
 TEST(SyntaxLexer, InvalidBaseLiteralBecomesUnknown)
 {
-  Lexer lex("const X = 0o89;");
+  Lexer lex(bt_dsl::FileId::invalid(), "const X = 0o89;");
   const auto toks = lex.lex_all();
 
   bool saw_unknown = false;
@@ -106,7 +106,7 @@ TEST(SyntaxLexer, InvalidBaseLiteralBecomesUnknown)
 
 TEST(SyntaxLexer, RawNewlineInStringBecomesUnknown)
 {
-  Lexer lex("const X = \"hello\nworld\";");
+  Lexer lex(bt_dsl::FileId::invalid(), "const X = \"hello\nworld\";");
   const auto toks = lex.lex_all();
 
   bool saw_unknown = false;
@@ -121,7 +121,7 @@ TEST(SyntaxLexer, RawNewlineInStringBecomesUnknown)
 
 TEST(SyntaxLexer, DocCommentsPreservePayloadAndNormalizeCrlf)
 {
-  Lexer lex("//! module\r\n/// line\r\nconst X = 1;\n");
+  Lexer lex(bt_dsl::FileId::invalid(), "//! module\r\n/// line\r\nconst X = 1;\n");
   const auto toks = lex.lex_all();
 
   ASSERT_GE(toks.size(), 3U);
@@ -133,7 +133,7 @@ TEST(SyntaxLexer, DocCommentsPreservePayloadAndNormalizeCrlf)
 
 TEST(SyntaxLexer, UnclosedBlockCommentShouldNotBeSilentlySkipped)
 {
-  Lexer lex("/* unclosed comment");
+  Lexer lex(bt_dsl::FileId::invalid(), "/* unclosed comment");
   const auto toks = lex.lex_all();
 
   ASSERT_EQ(toks.size(), 1U);
@@ -142,7 +142,7 @@ TEST(SyntaxLexer, UnclosedBlockCommentShouldNotBeSilentlySkipped)
 
 TEST(SyntaxLexer, UnclosedStringReturnsUnknown)
 {
-  Lexer lex("const X = \"unclosed");
+  Lexer lex(bt_dsl::FileId::invalid(), "const X = \"unclosed");
   const auto toks = lex.lex_all();
 
   // Should see 'const', 'X', '=', 'Unknown' (for "unclosed)
@@ -154,6 +154,7 @@ TEST(SyntaxLexer, UnclosedStringReturnsUnknown)
 TEST(SyntaxLexer, InvalidCharReturnsUnknown)
 {
   Lexer lex(
+    bt_dsl::FileId::invalid(),
     "var @ x");  // @ is invalid in this context (unless it's precondition, but as start of expr)
   // construct is 'var' 'At(@)' 'x'
   const auto toks = lex.lex_all();
@@ -164,7 +165,7 @@ TEST(SyntaxLexer, InvalidCharReturnsUnknown)
   EXPECT_EQ(toks[1].kind, TokenKind::At);  // @ IS a valid token (TokenKind::At)
 
   // Let's try a truly invalid char like $ or `
-  Lexer lex2("var $ x");
+  Lexer lex2(bt_dsl::FileId::invalid(), "var $ x");
   const auto toks2 = lex2.lex_all();
   EXPECT_EQ(toks2[1].text, "$");
 }
@@ -174,7 +175,7 @@ TEST(SyntaxLexer, InvalidUnicodeEscapeReturnsUnknown)
   // \u{...} requires 1-6 hex digits.
   // Empty
   {
-    Lexer lex(R"(const S = "\u{}";)");
+    Lexer lex(bt_dsl::FileId::invalid(), R"(const S = "\u{}";)");
     auto toks = lex.lex_all();
     ASSERT_GE(toks.size(), 4U);
     // Should be Unknown because \u{} is invalid.
@@ -186,7 +187,7 @@ TEST(SyntaxLexer, MalformedFloatReturnsTokens)
 {
   // 1. is not a float (needs fraction).
   // It should be Int(1) then Dot(.)
-  Lexer lex("1.");
+  Lexer lex(bt_dsl::FileId::invalid(), "1.");
   auto toks = lex.lex_all();
   ASSERT_EQ(toks.size(), 3U);  // 1, ., EOF
   EXPECT_EQ(toks[0].kind, TokenKind::IntLiteral);
@@ -197,7 +198,7 @@ TEST(SyntaxLexer, FloatWithoutIntegerPart)
 {
   // .5 is not a valid float in BT-DSL (must start with digit).
   // Should be Dot(.) then Int(5)
-  Lexer lex(".5");
+  Lexer lex(bt_dsl::FileId::invalid(), ".5");
   auto toks = lex.lex_all();
   ASSERT_EQ(toks.size(), 3U);
   EXPECT_EQ(toks[0].kind, TokenKind::Dot);
@@ -207,7 +208,7 @@ TEST(SyntaxLexer, FloatWithoutIntegerPart)
 TEST(SyntaxLexer, IntegerSeparatorsAreTokenizedSeparately)
 {
   // 1_000 -> Int(1) then Ident(_000)
-  Lexer lex("1_000");
+  Lexer lex(bt_dsl::FileId::invalid(), "1_000");
   auto toks = lex.lex_all();
   ASSERT_EQ(toks.size(), 3U);  // 1, _000, EOF
   EXPECT_EQ(toks[0].kind, TokenKind::IntLiteral);

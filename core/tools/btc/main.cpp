@@ -61,25 +61,13 @@ void print_diagnostics(
   const bool use_color = isatty(fileno(stderr)) != 0;
   bt_dsl::DiagnosticPrinter printer(std::cerr, use_color);
 
-  for (const auto & diag : diagnostics) {
-    // Try to find source context from module graph
-    if (graph && !graph->empty()) {
-      // For now, use the first module's source manager as default
-      // In a more complete implementation, we'd track which file each diagnostic belongs to
-      const auto modules = graph->get_all_modules();
-      for (const auto * module : modules) {
-        if (module->parsedUnit) {
-          printer.print(diag, module->parsedUnit->source, module->absolutePath.string());
-          break;
-        }
-      }
-    } else {
-      // Fallback: print with minimal formatting (no source context)
-      std::cerr << default_filename;
-      if (diag.range.is_valid()) {
-        std::cerr << ":0:0";  // No line info available
-      }
-      std::cerr << ": ";
+  if (graph && !graph->empty()) {
+    // Use print_all which sorts diagnostics by location
+    printer.print_all(diagnostics, graph->sources());
+  } else {
+    // Fallback: minimal formatting (no source context)
+    for (const auto & diag : diagnostics) {
+      std::cerr << default_filename << ": ";
 
       const char * severity_str = "error";
       switch (diag.severity) {

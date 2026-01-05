@@ -4,7 +4,7 @@
 
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/basic/casting.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 static bt_dsl::NodeStmt * first_node_stmt(gsl::span<bt_dsl::Stmt *> body)
 {
@@ -39,11 +39,10 @@ TEST(AstPreconditions, ParseGuard)
     "  Action();\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   EXPECT_EQ(root->nodeName, "Action");
   ASSERT_EQ(root->preconditions.size(), 1U);
@@ -67,11 +66,10 @@ TEST(AstPreconditions, ParseSuccessIf)
     "  Action();\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->preconditions.size(), 1U);
   EXPECT_EQ(root->preconditions[0]->kind, bt_dsl::PreconditionKind::SuccessIf);
@@ -88,11 +86,10 @@ TEST(AstPreconditions, ParseFailureIf)
     "  Action();\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->preconditions.size(), 1U);
   EXPECT_EQ(root->preconditions[0]->kind, bt_dsl::PreconditionKind::FailureIf);
@@ -109,11 +106,10 @@ TEST(AstPreconditions, ParseRunWhile)
     "  Action();\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->preconditions.size(), 1U);
   EXPECT_EQ(root->preconditions[0]->kind, bt_dsl::PreconditionKind::RunWhile);
@@ -131,11 +127,10 @@ TEST(AstPreconditions, MultiplePreconditions)
     "  Action();\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->preconditions.size(), 2U);
   EXPECT_EQ(root->preconditions[0]->kind, bt_dsl::PreconditionKind::Guard);
@@ -156,11 +151,10 @@ TEST(AstPreconditions, AssignmentWithPrecondition)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * seq = find_node_stmt(unit->program->trees()[0]->body, "Sequence");
+  bt_dsl::NodeStmt * seq = find_node_stmt(unit.program->trees()[0]->body, "Sequence");
   ASSERT_NE(seq, nullptr);
   ASSERT_EQ(seq->children.size(), 1U);
 

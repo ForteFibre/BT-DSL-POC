@@ -17,7 +17,7 @@
 #include "bt_dsl/sema/types/const_evaluator.hpp"
 #include "bt_dsl/sema/types/type.hpp"
 #include "bt_dsl/sema/types/type_table.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -31,11 +31,15 @@ struct TestContext
 
   bool parse(const std::string & src)
   {
-    module.parsedUnit = parse_source(src);
-    if (!module.parsedUnit || !module.parsedUnit->diags.empty()) return false;
-    program = module.parsedUnit->program;
+    auto parsed = test_support::parse(src);
+    if (parsed.program == nullptr || parsed.diags.has_errors()) return false;
+
+    program = parsed.program;
+    module.file_id = parsed.file_id;
+    module.ast = std::move(parsed.ast);
+    module.parse_diags = std::move(parsed.diags);
     module.program = program;
-    return program != nullptr;
+    return true;
   }
 
   bool resolve_names()
@@ -81,7 +85,8 @@ struct TestContext
 
   bool evaluate_consts()
   {
-    ConstEvaluator eval(module.parsedUnit->ast, types, module.values, &diags);
+    if (!module.ast) return false;
+    ConstEvaluator eval(*module.ast, types, module.values, &diags);
     return eval.evaluate_program(*program);
   }
 

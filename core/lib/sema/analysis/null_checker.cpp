@@ -7,6 +7,7 @@
 
 #include "bt_dsl/basic/casting.hpp"
 #include "bt_dsl/sema/analysis/cfg_builder.hpp"
+#include "bt_dsl/sema/types/type.hpp"
 
 namespace bt_dsl
 {
@@ -19,36 +20,6 @@ struct PortContract
   PortDirection direction = PortDirection::In;
   bool isNullable = false;
 };
-
-[[nodiscard]] bool is_declared_nullable_symbol(const Symbol * sym)
-{
-  if (sym == nullptr || sym->astNode == nullptr) {
-    return false;
-  }
-
-  // Parameters
-  if (const auto * p = dyn_cast<ParamDecl>(sym->astNode)) {
-    return (p->type != nullptr) ? p->type->nullable : false;
-  }
-
-  // Locals
-  if (const auto * v = dyn_cast<BlackboardDeclStmt>(sym->astNode)) {
-    return (v->type != nullptr) ? v->type->nullable : false;
-  }
-  if (const auto * c = dyn_cast<ConstDeclStmt>(sym->astNode)) {
-    return (c->type != nullptr) ? c->type->nullable : false;
-  }
-
-  // Globals
-  if (const auto * gv = dyn_cast<GlobalVarDecl>(sym->astNode)) {
-    return (gv->type != nullptr) ? gv->type->nullable : false;
-  }
-  if (const auto * gc = dyn_cast<GlobalConstDecl>(sym->astNode)) {
-    return (gc->type != nullptr) ? gc->type->nullable : false;
-  }
-
-  return false;
-}
 
 std::optional<PortContract> get_port_contract(const NodeStmt * node, const Argument * arg)
 {
@@ -459,8 +430,25 @@ void NullChecker::check_stmt(const Stmt * stmt, NullStateSet & state, bool repor
         // The only supported narrowing sources are:
         // - @guard / @run_while derived facts (scoped)
         // - successful out-port writes (post-call contract)
-        const bool target_is_declared_nullable =
-          is_declared_nullable_symbol(assign->resolvedTarget);
+        bool target_is_declared_nullable = false;
+        if (const auto * sym = assign->resolvedTarget) {
+          if (const auto * v = dyn_cast<BlackboardDeclStmt>(sym->astNode)) {
+            if (v->type != nullptr) {
+              target_is_declared_nullable = v->type->nullable;
+            } else {
+              // Inferred: check the assigned value's type
+              if (assign->value && assign->value->resolvedType) {
+                target_is_declared_nullable = assign->value->resolvedType->is_nullable();
+              } else {
+                target_is_declared_nullable = true;  // Fallback
+              }
+            }
+          } else if (const auto * p = dyn_cast<ParamDecl>(sym->astNode)) {
+            target_is_declared_nullable = (p->type != nullptr) ? p->type->nullable : false;
+          } else if (const auto * gv = dyn_cast<GlobalVarDecl>(sym->astNode)) {
+            target_is_declared_nullable = (gv->type != nullptr) ? gv->type->nullable : false;
+          }
+        }
 
         // Nullable targets are never treated as NotNull based on assignment.
         // Also, assigning null to any target invalidates NotNull knowledge.
@@ -531,9 +519,19 @@ void NullChecker::check_node_args(const NodeStmt * node, const NullStateSet & st
 
     const std::string_view name = get_var_name_from_expr(arg->valueExpr);
     if (!name.empty()) {
-      if (state.find(name) == state.end()) {
-        report_error(
-          arg->get_range(), std::string("Variable '") + std::string(name) + "' may be null");
+      // Check if the expression's resolved type is nullable.
+      // We rely on TypeChecker to have already resolved types (including inference).
+      // If the type is known and non-nullable, we can skip the check.
+      bool should_check = true;
+      if (arg->valueExpr->resolvedType != nullptr && !arg->valueExpr->resolvedType->is_nullable()) {
+        should_check = false;
+      }
+
+      if (should_check) {
+        if (state.find(name) == state.end()) {
+          report_error(
+            arg->get_range(), std::string("Variable '") + std::string(name) + "' may be null");
+        }
       }
     }
   }
@@ -542,7 +540,10 @@ void NullChecker::check_node_args(const NodeStmt * node, const NullStateSet & st
 std::string_view NullChecker::get_var_name_from_expr(const Expr * expr)
 {
   if (expr == nullptr) return {};
-  if (const auto * var = dyn_cast<VarRefExpr>(expr)) return var->name;
+  if (const auto * var = dyn_cast<VarRefExpr>(expr)) {
+    if (var->resolvedSymbol == nullptr) return {};
+    return var->name;
+  }
   if (const auto * index_expr = dyn_cast<IndexExpr>(expr))
     return get_var_name_from_expr(index_expr->base);
   return {};
@@ -552,7 +553,7 @@ void NullChecker::report_error(SourceRange range, std::string_view message)
 {
   has_errors_ = true;
   error_count_++;
-  if (diags_) diags_->error(range, message);
+  if (diags_) diags_->report_error(range, std::string(message));
 }
 
 }  // namespace bt_dsl

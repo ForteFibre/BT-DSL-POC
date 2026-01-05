@@ -6,11 +6,8 @@
 #include <string>
 
 #include "bt_dsl/ast/ast.hpp"
-#include "bt_dsl/ast/ast_context.hpp"
 #include "bt_dsl/ast/json_visitor.hpp"
-#include "bt_dsl/basic/diagnostic.hpp"
-#include "bt_dsl/basic/source_manager.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using nlohmann::json;
 
@@ -22,10 +19,9 @@ class JsonVisitorTest : public ::testing::Test
 protected:
   static json parse_and_serialize(const std::string & source)
   {
-    auto unit = parse_source(source);
-    EXPECT_NE(unit, nullptr);
-    EXPECT_NE(unit->program, nullptr);
-    return to_json(unit->program);
+    auto unit = test_support::parse(source);
+    EXPECT_NE(unit.program, nullptr);
+    return to_json(unit.program);
   }
 };
 

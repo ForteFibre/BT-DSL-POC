@@ -13,7 +13,7 @@
 #include "bt_dsl/sema/analysis/init_checker.hpp"
 #include "bt_dsl/sema/resolution/name_resolver.hpp"
 #include "bt_dsl/sema/resolution/symbol_table_builder.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -24,14 +24,14 @@ using namespace bt_dsl;
 /**
  * Creates a ModuleInfo for a single-file test case.
  */
-static ModuleInfo create_test_module(ParsedUnit & unit)
+static ModuleInfo create_test_module(Program & program)
 {
   ModuleInfo module;
-  module.program = unit.program;
+  module.program = &program;
   module.types.register_builtins();
-  module.values.build_from_program(*unit.program);
+  module.values.build_from_program(program);
 
-  for (const auto * ext_type : unit.program->extern_types()) {
+  for (const auto * ext_type : program.extern_types()) {
     TypeSymbol sym;
     sym.name = ext_type->name;
     sym.decl = ext_type;
@@ -39,13 +39,13 @@ static ModuleInfo create_test_module(ParsedUnit & unit)
     module.types.define(sym);
   }
 
-  for (const auto * ext : unit.program->externs()) {
+  for (const auto * ext : program.externs()) {
     NodeSymbol sym;
     sym.name = ext->name;
     sym.decl = ext;
     module.nodes.define(sym);
   }
-  for (const auto * tree : unit.program->trees()) {
+  for (const auto * tree : program.trees()) {
     NodeSymbol sym;
     sym.name = tree->name;
     sym.decl = tree;
@@ -53,7 +53,7 @@ static ModuleInfo create_test_module(ParsedUnit & unit)
   }
 
   SymbolTableBuilder builder(module.values, module.types, module.nodes);
-  builder.build(*unit.program);
+  builder.build(program);
 
   return module;
 }
@@ -61,17 +61,21 @@ static ModuleInfo create_test_module(ParsedUnit & unit)
 // Helper to run the full pipeline up to initialization checking
 static bool check_initialization(const std::string & src, DiagnosticBag & diags)
 {
-  auto unit = parse_source(src);
-  if (unit == nullptr || !unit->diags.empty()) {
+  auto parsed = test_support::parse(src);
+  if (parsed.program == nullptr || parsed.diags.has_errors()) {
+    diags.merge(parsed.diags);
     return false;
   }
 
-  Program * program = unit->program;
+  Program * program = parsed.program;
   if (program == nullptr) {
     return false;
   }
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
+  module.file_id = parsed.file_id;
+  module.ast = std::move(parsed.ast);
+  module.parse_diags = std::move(parsed.diags);
 
   // Run name resolution (needed before init checking)
   NameResolver resolver(module);
