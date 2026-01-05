@@ -1,33 +1,33 @@
 {
   "name": "@bt-dsl/formatter",
   "version": "0.1.0",
-  "description": "Prettier plugin for BT DSL using tree-sitter parser",
+  "description": "Prettier plugin for BT DSL using core parser (WASM)",
   "type": "module",
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "files": [
     "dist",
-    "tree-sitter-bt_dsl.wasm"
+    "formatter_wasm.js",
+    "formatter_wasm.wasm"
   ],
   "scripts": {
-    "prebuild": "mkdir -p dist && cp ../tree-sitter-bt-dsl/tree-sitter-bt_dsl.wasm dist/ || (echo 'Error: WASM not found. Run: pnpm build:grammar' && exit 1)",
+    "prebuild": "mkdir -p dist && cp ../core/build-wasm/formatter_wasm.js dist/ && cp ../core/build-wasm/formatter_wasm.wasm dist/",
     "build": "tsc",
     "dev": "tsc --watch",
     "lint": "pnpm -w exec eslint formatter/src formatter/test --max-warnings 0",
     "lint:fix": "pnpm -w exec eslint formatter/src formatter/test --max-warnings 0 --fix",
     "pretest": "pnpm build",
-    "test": "node dist/test/test-format.js && node dist/test/test-standard-nodes.js && node dist/test/test-params.js && node dist/test/test-comment-preservation.js && node dist/test/test-extern-parens.js"
+    "test": "node dist/test/test-format.js && node dist/test/test-standard-nodes.js && node dist/test/test-params.js && node dist/test/test-comment-preservation.js && node dist/test/test-extern-parens.js && node dist/test/test-wasm-relocation.js && node dist/test/test-malformed-input.js && node dist/test/test-trailing-comments.js && node dist/test/test-argument-comments.js"
   },
   "keywords": [
     "prettier",
     "plugin",
     "formatter",
     "bt-dsl",
-    "tree-sitter"
+    "wasm"
   ],
   "dependencies": {
-    "prettier": "^3.4.2",
-    "web-tree-sitter": "^0.23.2"
+    "prettier": "^3.4.2"
   },
   "devDependencies": {
     "@types/node": "~18.19.0",

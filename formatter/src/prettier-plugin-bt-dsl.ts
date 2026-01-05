@@ -1,895 +1,1243 @@
-import { doc } from 'prettier';
-import type { AstPath, Doc, ParserOptions, Plugin } from 'prettier';
-import Parser from 'web-tree-sitter';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { doc, util } from 'prettier';
+import type { AstPath, Doc, ParserOptions, Plugin, Printer } from 'prettier';
+
+import { initCoreWasm } from './core-wasm.js';
+
+// Prettier expects `parser.parse()` to be synchronous.
+// We therefore initialize the WASM module at module-evaluation time.
+const coreWasm = await initCoreWasm();
 
 const { builders } = doc;
-const { group, indent, line, softline, hardline, join: joinDocs } = builders;
+const { group, indent, line, softline, hardline, join: joinDocs, ifBreak } = builders;
 
 type PrettierDoc = Doc;
 
-// Tree-sitter node type (our Prettier AST)
-type BtDslNode = Parser.SyntaxNode;
-
-type PrintFn = (path: AstPath<BtDslNode>) => Doc;
-
-let parser: Parser | null = null;
-let btDslLanguage: Parser.Language | null = null;
-let configuredWasmPath: string | null = null;
-
-/**
- * Configure the WASM path for environments where import.meta.url is not available.
- * Call this before formatBtDslText if running in CJS context.
- */
-export function setTreeSitterWasmPath(wasmPath: string): void {
-  configuredWasmPath = wasmPath;
+interface Range {
+  start: number | null;
+  end: number | null;
 }
 
-/**
- * Initialize web-tree-sitter parser with BT DSL grammar
- */
-async function initParser(): Promise<Parser> {
-  if (parser && btDslLanguage) {
-    return parser;
-  }
-
-  await Parser.init();
-  parser = new Parser();
-
-  // Use configured path if available, otherwise try to derive from import.meta.url
-  let wasmPath: string;
-  if (configuredWasmPath) {
-    wasmPath = configuredWasmPath;
-  } else {
-    // Load WASM file from dist directory (we're in dist/src/)
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    wasmPath = join(__dirname, '..', 'tree-sitter-bt_dsl.wasm');
-  }
-
-  btDslLanguage = await Parser.Language.load(wasmPath);
-  parser.setLanguage(btDslLanguage);
-
-  return parser;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value != null;
 }
 
-/**
- * Concatenate parts into a single doc
- */
-const concat = (parts: PrettierDoc[]): PrettierDoc => parts;
-
-/**
- * Get text content of a node from source
- */
-function getText(node: BtDslNode, text: string): string {
-  return text.slice(node.startIndex, node.endIndex);
+function normalizeRange(r: Range | null | undefined, textLength: number): Range {
+  const start = r?.start ?? 0;
+  const end = r?.end ?? textLength;
+  return { start, end };
 }
 
-/**
- * Check if the original node text ends with a semicolon
- */
-function hasTrailingSemicolon(node: BtDslNode, text: string): boolean {
-  const nodeText = getText(node, text);
-  return nodeText.trimEnd().endsWith(';');
-}
+// Core ranges are UTF-8 *byte* offsets. JS strings are UTF-16 code-unit indexed.
+// We convert all ranges to JS string indices right after parsing.
+function createByteOffsetToIndex(text: string): (byteOffset: number) => number {
+  // Fill with 0 so every index is always a number (avoids `number | undefined`).
+  const byteAtIndex = new Array<number>(text.length + 1).fill(0);
 
-/**
- * Get child node by field name
- */
-function getChild(node: BtDslNode, fieldName: string): BtDslNode | null {
-  return node.childForFieldName(fieldName);
-}
+  let bytes = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
 
-/**
- * Get all named children of a node
- */
-function getAllNamedChildren(node: BtDslNode): BtDslNode[] {
-  const children: BtDslNode[] = [];
-  for (let i = 0; i < node.namedChildCount; i++) {
-    const child = node.namedChild(i);
-    if (child) {
-      children.push(child);
+    // Surrogate pair.
+    if (c >= 0xd800 && c <= 0xdbff && i + 1 < text.length) {
+      const d = text.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d <= 0xdfff) {
+        // Boundary after the high surrogate (not a valid UTF-8 boundary, but keep monotonic).
+        byteAtIndex[i + 1] = bytes;
+
+        const cp = ((c - 0xd800) << 10) + (d - 0xdc00) + 0x10000;
+        bytes += cp <= 0x7f ? 1 : cp <= 0x7ff ? 2 : cp <= 0xffff ? 3 : 4;
+
+        i++;
+        byteAtIndex[i + 1] = bytes;
+        continue;
+      }
     }
-  }
-  return children;
-}
 
-/**
- * Collect trailing comments that were absorbed into a node due to missing semicolons.
- * Returns the comment text nodes that appear after the actual content.
- */
-function collectTrailingComments(node: BtDslNode, text: string): PrettierDoc[] {
-  const comments: PrettierDoc[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (
-      child.type === 'comment' ||
-      child.type === 'line_comment' ||
-      child.type === 'block_comment'
-    ) {
-      comments.push(getText(child, text));
+    bytes += c <= 0x7f ? 1 : c <= 0x7ff ? 2 : 3;
+    byteAtIndex[i + 1] = bytes;
+  }
+
+  const total = byteAtIndex[text.length];
+
+  return (byteOffset: number): number => {
+    if (!Number.isFinite(byteOffset)) return 0;
+    if (byteOffset <= 0) return 0;
+    if (byteOffset >= (total ?? 0)) return text.length;
+
+    // Lower_bound on byteAtIndex for `byteOffset`.
+    let lo = 0;
+    let hi = text.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      const v = byteAtIndex[mid] ?? 0;
+      if (v < byteOffset) lo = mid + 1;
+      else hi = mid;
     }
-  }
-  return comments;
+
+    const v = byteAtIndex[lo] ?? 0;
+    return v === byteOffset ? lo : Math.max(0, lo - 1);
+  };
 }
 
-/**
- * Check if there's a blank line between two nodes
- */
-function hasBlankLineBetween(nodeA: BtDslNode, nodeB: BtDslNode): boolean {
-  const endLine = nodeA.endPosition.row;
-  const startLine = nodeB.startPosition.row;
-  return startLine - endLine > 1;
-}
-
-/**
- * Join docs with preserved blank lines
- */
-function joinWithPreservedBlankLines(docs: PrettierDoc[], nodes: BtDslNode[]): PrettierDoc {
-  if (docs.length === 0) return '';
-  if (docs.length === 1) return docs[0] ?? '';
-
-  const first = docs[0];
-  if (first === undefined) {
-    return '';
+function convertRangesDeep(value: unknown, byteToIndex: (b: number) => number): unknown {
+  if (Array.isArray(value)) {
+    return value.map((x) => convertRangesDeep(x, byteToIndex));
   }
 
-  const parts: PrettierDoc[] = [first];
-  for (let i = 1; i < docs.length; i++) {
-    const docPart = docs[i];
-    if (docPart === undefined) continue;
+  if (!isRecord(value)) {
+    return value;
+  }
 
-    const prevNode = nodes[i - 1];
-    const nextNode = nodes[i];
-
-    // With `noUncheckedIndexedAccess`, index access can be undefined.
-    if (!prevNode || !nextNode) {
-      parts.push(hardline, docPart);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (k === 'range' && isRecord(v)) {
+      const start = typeof v.start === 'number' ? byteToIndex(v.start) : null;
+      const end = typeof v.end === 'number' ? byteToIndex(v.end) : null;
+      out[k] = { start, end } satisfies Range;
       continue;
     }
 
-    if (hasBlankLineBetween(prevNode, nextNode)) {
-      parts.push(hardline, hardline, docPart);
-    } else {
-      parts.push(hardline, docPart);
+    out[k] = convertRangesDeep(v, byteToIndex);
+  }
+
+  return out;
+}
+
+interface DiagnosticJson {
+  severity: 'Error' | 'Warning' | 'Info' | 'Hint';
+  range: Range;
+  message?: string;
+  code?: string;
+}
+
+interface CommentJson {
+  kind?: string;
+  range: Range;
+  text?: string;
+}
+
+interface BtDslComment {
+  type: 'CommentLine' | 'CommentBlock';
+  value: string;
+  range: Range;
+  /** The original textual form including delimiters (e.g. a line comment or a block comment). */
+  raw: string;
+  /** Used by Prettier to avoid printing comments that we already preserved verbatim. */
+  printed?: boolean;
+}
+
+interface ProgramJson {
+  type: 'Program';
+  range: Range;
+  decls: DeclJson[];
+  // Prettier attaches/prints comments when this is named `comments`.
+  comments: BtDslComment[];
+  diagnostics: DiagnosticJson[];
+  /** When set, the printer returns the original source for this subtree. */
+  verbatim?: boolean;
+}
+
+interface BehaviorAttrJson {
+  type: 'BehaviorAttr';
+  range: Range;
+  dataPolicy: string;
+  flowPolicy?: string;
+}
+
+type DeclJson =
+  | { type: 'ImportDecl'; range: Range; path: string }
+  | { type: 'ExternTypeDecl'; range: Range; name: string }
+  | { type: 'TypeAliasDecl'; range: Range; name: string; aliasedType: TypeJson }
+  | {
+      type: 'ExternDecl';
+      range: Range;
+      category: string;
+      name: string;
+      behaviorAttr?: BehaviorAttrJson;
+      ports: ExternPortJson[];
+    }
+  | {
+      type: 'GlobalVarDecl';
+      range: Range;
+      name: string;
+      typeExpr?: TypeJson;
+      initialValue?: ExprJson;
+    }
+  | { type: 'GlobalConstDecl'; range: Range; name: string; typeExpr?: TypeJson; value: ExprJson }
+  | { type: 'TreeDecl'; range: Range; name: string; params: ParamDeclJson[]; body: StmtJson[] }
+  // fallback (keep discriminated-union narrowing working)
+  | { type: 'UnknownDecl'; range: Range; verbatim?: boolean; [k: string]: unknown };
+
+interface ParamDeclJson {
+  type: 'ParamDecl';
+  range: Range;
+  name: string;
+  direction?: string;
+  typeExpr: TypeJson;
+  defaultValue?: ExprJson;
+}
+
+interface ExternPortJson {
+  type: 'ExternPort';
+  range: Range;
+  name: string;
+  direction?: string;
+  typeExpr: TypeJson;
+  defaultValue?: ExprJson;
+}
+
+interface PreconditionJson {
+  type: 'Precondition';
+  range: Range;
+  kind: string;
+  condition: ExprJson;
+}
+
+interface ArgumentJson {
+  type: 'Argument';
+  range: Range;
+  name: string;
+  direction?: string;
+  inlineDecl?: { type: 'InlineBlackboardDecl'; range: Range; name: string };
+  valueExpr?: ExprJson;
+}
+
+type StmtJson =
+  | {
+      type: 'BlackboardDeclStmt';
+      range: Range;
+      name: string;
+      typeExpr?: TypeJson;
+      initialValue?: ExprJson;
+    }
+  | { type: 'ConstDeclStmt'; range: Range; name: string; typeExpr?: TypeJson; value: ExprJson }
+  | {
+      type: 'AssignmentStmt';
+      range: Range;
+      preconditions: PreconditionJson[];
+      target: string;
+      indices: ExprJson[];
+      op: string;
+      value: ExprJson;
+    }
+  | {
+      type: 'NodeStmt';
+      range: Range;
+      nodeName: string;
+      preconditions: PreconditionJson[];
+      args: ArgumentJson[];
+      hasPropertyBlock: boolean;
+      hasChildrenBlock: boolean;
+      children: StmtJson[];
+    }
+  // fallback (keep discriminated-union narrowing working)
+  | { type: 'UnknownStmt'; range: Range; verbatim?: boolean; [k: string]: unknown };
+
+type TypeJson =
+  | { type: 'TypeExpr'; range: Range; base: TypeJson; nullable: boolean }
+  | { type: 'InferType'; range: Range }
+  | { type: 'PrimaryType'; range: Range; name: string; size?: string }
+  | { type: 'DynamicArrayType'; range: Range; elementType: TypeJson }
+  | {
+      type: 'StaticArrayType';
+      range: Range;
+      elementType: TypeJson;
+      size: string;
+      isBounded: boolean;
+    }
+  // fallback (keep discriminated-union narrowing working)
+  | { type: 'UnknownType'; range: Range; [k: string]: unknown };
+
+type ExprJson =
+  | { type: 'MissingExpr'; range: Range }
+  | { type: 'IntLiteralExpr'; range: Range; value: number }
+  | { type: 'FloatLiteralExpr'; range: Range; value: number }
+  | { type: 'StringLiteralExpr'; range: Range; value: string }
+  | { type: 'BoolLiteralExpr'; range: Range; value: boolean }
+  | { type: 'NullLiteralExpr'; range: Range }
+  | { type: 'VarRefExpr'; range: Range; name: string }
+  | { type: 'UnaryExpr'; range: Range; op: string; operand: ExprJson }
+  | { type: 'BinaryExpr'; range: Range; op: string; lhs: ExprJson; rhs: ExprJson }
+  | { type: 'IndexExpr'; range: Range; base: ExprJson; index: ExprJson }
+  | { type: 'CastExpr'; range: Range; expr: ExprJson; targetType: TypeJson }
+  | { type: 'ArrayLiteralExpr'; range: Range; elements: ExprJson[] }
+  | { type: 'ArrayRepeatExpr'; range: Range; value: ExprJson; count: ExprJson }
+  | { type: 'VecMacroExpr'; range: Range; inner: ExprJson }
+  // fallback (keep discriminated-union narrowing working)
+  | { type: 'UnknownExpr'; range: Range; verbatim?: boolean; [k: string]: unknown };
+
+function rs(r: Range): number {
+  return r.start ?? 0;
+}
+
+function re(r: Range): number {
+  return r.end ?? 0;
+}
+
+function intersects(a: Range, b: Range): boolean {
+  if (a.start == null || a.end == null || b.start == null || b.end == null) return false;
+
+  // Core diagnostics sometimes use a point-range (start === end) to mark an error position.
+  // Treat such ranges as spanning a single character for intersection purposes.
+  const aStart = a.start;
+  const bStart = b.start;
+  const aEnd = a.end === a.start ? a.end + 1 : a.end;
+  const bEnd = b.end === b.start ? b.end + 1 : b.end;
+
+  // Be slightly inclusive at boundaries so that errors reported *at* the end of a decl
+  // (e.g. missing ';' or missing '}') still cause the decl to be preserved.
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+function hasErrorInside(range: Range, diags: DiagnosticJson[]): boolean {
+  return diags.some((d) => d.severity === 'Error' && intersects(range, d.range));
+}
+
+function containsUnknownOrMissing(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some((v) => containsUnknownOrMissing(v));
+  }
+
+  if (typeof value !== 'object' || value == null) {
+    return false;
+  }
+
+  const obj = value as Record<string, unknown>;
+  const t = obj.type;
+  if (typeof t === 'string') {
+    if (t.startsWith('Unknown') || t === 'MissingExpr') {
+      return true;
     }
   }
-  return concat(parts);
-}
 
-/**
- * Print a string literal with proper quotes
- */
-function printString(value: string): string {
-  // If already quoted, return as-is
-  const trimmed = value.trim();
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed;
+  for (const v of Object.values(obj)) {
+    if (containsUnknownOrMissing(v)) return true;
   }
-  return JSON.stringify(value);
+  return false;
 }
 
-/**
- * Main printer function - recursively prints AST nodes
- */
-function printNode(
-  node: BtDslNode,
+function hasNullRangeDeep(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some((v) => hasNullRangeDeep(v));
+  }
+
+  if (typeof value !== 'object' || value == null) {
+    return false;
+  }
+
+  const obj = value as Record<string, unknown>;
+  const r = obj.range;
+  if (typeof r === 'object' && r != null) {
+    const rr = r as Range;
+    if (rr.start == null || rr.end == null) return true;
+  }
+
+  for (const v of Object.values(obj)) {
+    if (hasNullRangeDeep(v)) return true;
+  }
+
+  return false;
+}
+
+function toBtDslComment(c: CommentJson): BtDslComment {
+  const raw = c.text ?? '';
+  if (raw.startsWith('//')) {
+    return { type: 'CommentLine', value: raw.slice(2), raw, range: c.range };
+  }
+  if (raw.startsWith('/*')) {
+    const inner = raw.endsWith('*/') ? raw.slice(2, -2) : raw.slice(2);
+    return { type: 'CommentBlock', value: inner, raw, range: c.range };
+  }
+  // Fallback: treat unknown comment kinds as line-like.
+  return { type: 'CommentLine', value: raw, raw, range: c.range };
+}
+
+function attachCommentToExternPortIfInside(
+  program: ProgramJson,
+  comment: BtDslComment,
   text: string,
-  path: AstPath<BtDslNode>,
-  print: PrintFn,
-): PrettierDoc {
-  const type = node.type;
+): boolean {
+  const cs = comment.range.start;
+  const ce = comment.range.end;
+  if (cs == null || ce == null) return false;
 
-  switch (type) {
-    // Preserve ERROR and MISSING nodes as-is to prevent content loss
-    case 'ERROR':
-    case 'MISSING':
-      return getText(node, text);
+  // Heuristic: if this comment is immediately followed by a closing paren, it's very likely
+  // intended to live at the end of an extern argument list.
+  const next = util.getNextNonSpaceNonCommentCharacter(text, ce);
+  if (next !== ')') return false;
 
-    case 'program':
-      return printProgram(node, text, path, print);
+  for (const decl of program.decls) {
+    if (decl.type !== 'ExternDecl') continue;
+    if (decl.range.start == null || decl.range.end == null) continue;
+    if (cs < decl.range.start || cs > decl.range.end) continue;
 
-    case 'import_stmt':
-      return printImportStmt(node, text);
-
-    case 'extern_type_stmt':
-      return printExternTypeStmt(node, text);
-
-    case 'type_alias_stmt':
-      return printTypeAliasStmt(node, text);
-
-    case 'extern_stmt':
-      return printExternStmt(node, text);
-
-    case 'global_blackboard_decl':
-      return printGlobalBlackboardDecl(node, text);
-
-    case 'global_const_decl':
-      return printGlobalConstDecl(node, text);
-
-    case 'tree_def':
-      return printTreeDef(node, text, path, print);
-
-    case 'tree_body':
-      return printStatementBlock(node, text, path, print);
-
-    case 'param_decl':
-      return printParamDecl(node, text);
-
-    case 'statement':
-      return printStatement(node, text, path, print);
-
-    case 'blackboard_decl':
-      return printBlackboardDecl(node, text);
-
-    case 'local_const_decl':
-      return printLocalConstDecl(node, text);
-
-    case 'assignment_stmt':
-      return printAssignmentStmt(node, text);
-
-    case 'leaf_node_call':
-      return printLeafNodeCall(node, text);
-
-    case 'compound_node_call':
-      return printCompoundNodeCall(node, text, path, print);
-
-    case 'property_block':
-      return printPropertyBlock(node, text);
-
-    case 'argument':
-      return printArgument(node, text);
-
-    case 'precondition':
-      return printPrecondition(node, text);
-
-    case 'decorator':
-      return printDecorator(node, text);
-
-    case 'children_block':
-      return printChildrenBlock(node, text, path, print);
-
-    case 'comment':
-    case 'line_comment':
-    case 'block_comment':
-      // Regular comments - return raw text
-      return getText(node, text);
-
-    case 'outer_doc':
-    case 'inner_doc':
-      // Doc comments - already handled by parent nodes, return raw text
-      return getText(node, text);
-
-    default:
-      // Return raw text for unknown nodes
-      return getText(node, text);
-  }
-}
-
-function printProgram(
-  node: BtDslNode,
-  text: string,
-  path: AstPath<BtDslNode>,
-  print: PrintFn,
-): PrettierDoc {
-  const parts: PrettierDoc[] = [];
-
-  // Collect all top-level elements INCLUDING COMMENTS
-  const allItems: BtDslNode[] = [];
-  const innerDocs: BtDslNode[] = [];
-
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'inner_doc') {
-      innerDocs.push(child);
-    } else {
-      // Include everything: imports, declares, vars, trees, AND comments
-      allItems.push(child);
-    }
-  }
-
-  // Print inner docs first
-  if (innerDocs.length > 0) {
-    parts.push(
-      joinDocs(
-        hardline,
-        innerDocs.map((n) => getText(n, text)),
-      ),
-    );
-  }
-
-  // Print all items in their original order
-  if (allItems.length > 0) {
-    const printedItems = allItems.map((item) => printNode(item, text, path, print));
-    const itemsDoc = joinWithPreservedBlankLines(printedItems, allItems);
-
-    if (parts.length > 0) {
-      parts.push(hardline, hardline, itemsDoc);
-    } else {
-      parts.push(itemsDoc);
-    }
-  }
-
-  // Ensure final newline
-  if (parts.length === 0) return hardline;
-  return concat([concat(parts), hardline]);
-}
-
-function printImportStmt(node: BtDslNode, text: string): PrettierDoc {
-  const pathNode = getChild(node, 'path');
-  const pathText = pathNode ? printString(getText(pathNode, text)) : '""';
-  const semi = hasTrailingSemicolon(node, text) ? ';' : '';
-  const parts: PrettierDoc[] = ['import ', pathText, semi];
-
-  // Append any trailing comments that were absorbed into this node
-  const trailingComments = collectTrailingComments(node, text);
-  if (trailingComments.length > 0) {
-    parts.push(hardline, joinDocs(hardline, trailingComments));
-  }
-  return concat(parts);
-}
-
-function printExternTypeStmt(node: BtDslNode, text: string): PrettierDoc {
-  const parts: PrettierDoc[] = [];
-  const outerDocs = collectOuterDocs(node, text);
-  if (outerDocs.length > 0) {
-    parts.push(joinDocs(hardline, outerDocs), hardline);
-  }
-
-  const name = getChild(node, 'name');
-  const nameText = name ? getText(name, text) : '';
-  parts.push('extern type ', nameText, ';');
-  return concat(parts);
-}
-
-function printTypeAliasStmt(node: BtDslNode, text: string): PrettierDoc {
-  const parts: PrettierDoc[] = [];
-  const outerDocs = collectOuterDocs(node, text);
-  if (outerDocs.length > 0) {
-    parts.push(joinDocs(hardline, outerDocs), hardline);
-  }
-
-  const name = getChild(node, 'name');
-  const value = getChild(node, 'value');
-  const nameText = name ? getText(name, text) : '';
-  const valueText = value ? getText(value, text) : '';
-  parts.push('type ', nameText, ' = ', valueText, ';');
-  return concat(parts);
-}
-
-function printExternStmt(node: BtDslNode, text: string): PrettierDoc {
-  const parts: PrettierDoc[] = [];
-
-  const outerDocs = collectOuterDocs(node, text);
-  if (outerDocs.length > 0) {
-    parts.push(joinDocs(hardline, outerDocs), hardline);
-  }
-
-  // Optional behavior_attr as its own line (common style in docs)
-  const behavior = getAllNamedChildren(node).find((c) => c.type === 'behavior_attr');
-  if (behavior) {
-    parts.push(getText(behavior, text), hardline);
-  }
-
-  const def = getChild(node, 'def');
-  if (!def) {
-    parts.push('extern ;');
-    return concat(parts);
-  }
-
-  parts.push('extern ', printExternDef(def, text));
-  return concat(parts);
-}
-
-function printExternDef(node: BtDslNode, text: string): PrettierDoc {
-  // extern_def is a choice of sequences. Most keywords are anonymous tokens,
-  // so we derive the category from the raw text.
-  const raw = getText(node, text).trim();
-  const kindMatch = /^(action|subtree|condition|control|decorator)\b/.exec(raw);
-  const kind = kindMatch?.[1] ?? '';
-
-  const name = getChild(node, 'name');
-  const nameText = name ? getText(name, text) : '';
-
-  // Collect ports
-  const ports: BtDslNode[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'extern_port_list') {
-      for (const port of getAllNamedChildren(child)) {
-        if (port.type === 'extern_port') {
-          ports.push(port);
-        }
+    for (const port of decl.ports) {
+      if (port.range.start == null || port.range.end == null) continue;
+      if (cs >= port.range.start && cs <= port.range.end) {
+        // Prettier's util API is intentionally loose; keep the cast local.
+        type AddTrailingCommentArgs = Parameters<typeof util.addTrailingComment>;
+        util.addTrailingComment(
+          port as AddTrailingCommentArgs[0],
+          comment as AddTrailingCommentArgs[1],
+        );
+        return true;
       }
     }
   }
 
-  const printedPorts = ports.map((p) => printExternPort(p, text));
+  return false;
+}
 
-  // Reference syntax requires parentheses for all extern declarations, even
-  // when there are zero ports (e.g. `extern control Sequence();`).
-  // Only fall back to a minimal print if we couldn't determine the kind.
-  const needsParens = kind !== '';
-  if (!needsParens) {
-    return concat([raw, ';']);
+function hasTrailingCommentOnSameLine(text: string, offset: number): boolean {
+  // Diagnostics for missing semicolons often point at the *next* token (possibly on the next line).
+  // We therefore scan backwards from `offset` to the previous non-whitespace character and inspect
+  // that character's line.
+  let i = Math.min(Math.max(0, offset - 1), Math.max(0, text.length - 1));
+  while (i > 0 && /\s/.test(text[i] ?? '')) i--;
+
+  const lineStart = text.lastIndexOf('\n', i) + 1;
+  const lineEnd = text.indexOf('\n', lineStart);
+  const end = lineEnd === -1 ? text.length : lineEnd;
+  const lineText = text.slice(lineStart, end);
+  return lineText.includes('//') || lineText.includes('/*');
+}
+
+function isRecoverableMissingSemicolonError(d: DiagnosticJson, text: string): boolean {
+  if (d.severity !== 'Error') return false;
+  const msg = d.message ?? '';
+  const isMissingSemicolon =
+    msg === "expected ';' after import" ||
+    msg === "expected ';' after global var" ||
+    msg === "expected ';' after global const";
+  if (!isMissingSemicolon) return false;
+
+  // Prefer the start offset (often points at the next declaration's first token).
+  // We then scan backwards to the line that actually missed the semicolon.
+  const anchor = d.range.start ?? d.range.end ?? 0;
+  return hasTrailingCommentOnSameLine(text, anchor);
+}
+
+function markVerbatimFlags(program: ProgramJson, text: string): void {
+  const diags = program.diagnostics;
+
+  const errors = diags.filter((d) => d.severity === 'Error');
+  const hasErrors = errors.length > 0;
+
+  // Generally, when the core parser reports an error, we fall back to fully lossless output.
+  // Exception: a missing semicolon *before a trailing comment on the same line* is easy to
+  // fix without risking token loss, and is required by the trailing-comment tests.
+  if (hasErrors) {
+    const allRecoverable = errors.every((d) => isRecoverableMissingSemicolonError(d, text));
+    if (!allRecoverable) {
+      program.verbatim = true;
+      program.comments = [];
+      for (const decl of program.decls) {
+        (decl as { verbatim?: boolean }).verbatim = true;
+      }
+      return;
+    }
   }
 
-  return group(
-    concat([
-      kind,
-      ' ',
-      nameText,
-      '(',
-      ports.length === 0
-        ? ''
-        : indent(concat([softline, joinDocs(concat([',', line]), printedPorts)])),
-      ports.length === 0 ? '' : softline,
-      ')',
-      ';',
-    ]),
+  // If the core returns null ranges for any nodes/comments, Prettier cannot reliably attach
+  // comments. Prefer a safe lossless output instead of throwing.
+  if (hasNullRangeDeep(program)) {
+    program.verbatim = true;
+    program.comments = [];
+    for (const d of program.decls) {
+      (d as { verbatim?: boolean }).verbatim = true;
+    }
+    return;
+  }
+
+  const markStmt = (s: StmtJson): void => {
+    const verbatim = hasErrorInside(s.range, diags) || containsUnknownOrMissing(s);
+    if (verbatim) {
+      (s as { verbatim?: boolean }).verbatim = true;
+      return;
+    }
+
+    if (s.type === 'NodeStmt') {
+      for (const child of s.children) {
+        markStmt(child);
+      }
+    }
+  };
+
+  for (const d of program.decls) {
+    const verbatim = hasErrorInside(d.range, diags) || containsUnknownOrMissing(d);
+    if (verbatim) {
+      (d as { verbatim?: boolean }).verbatim = true;
+      continue;
+    }
+
+    if (d.type === 'TreeDecl') {
+      for (const s of d.body) {
+        markStmt(s);
+      }
+    }
+  }
+
+  // If we will print a node verbatim, avoid double-printing comments that fall inside it.
+  const verbatimRanges: Range[] = [];
+  for (const d of program.decls) {
+    if ((d as { verbatim?: boolean }).verbatim) verbatimRanges.push(d.range);
+    if (d.type === 'TreeDecl') {
+      const collectStmt = (s: StmtJson): void => {
+        if ((s as { verbatim?: boolean }).verbatim) verbatimRanges.push(s.range);
+        if (s.type === 'NodeStmt') for (const c of s.children) collectStmt(c);
+      };
+      for (const s of d.body) collectStmt(s);
+    }
+  }
+
+  for (const c of program.comments) {
+    const cs = c.range.start;
+    const ce = c.range.end;
+    if (cs == null || ce == null) continue;
+    const insideVerbatim = verbatimRanges.some((r) => {
+      if (r.start == null || r.end == null) return false;
+      return cs >= r.start && ce <= r.end;
+    });
+    // Note: Prettier resets `comment.printed` internally, so this is only a best-effort hint.
+    // We keep it for tooling/debugging, but do not rely on it for correctness.
+    if (insideVerbatim) c.printed = true;
+  }
+}
+
+function escapeJsonString(s: string): string {
+  return JSON.stringify(s);
+}
+
+function precedence(e: ExprJson): number {
+  if (e.type !== 'BinaryExpr') {
+    if (e.type === 'UnaryExpr') return 10;
+    if (e.type === 'CastExpr') return 11;
+    if (e.type === 'IndexExpr') return 12;
+    return 13;
+  }
+
+  switch (e.op) {
+    case '||':
+      return 1;
+    case '&&':
+      return 2;
+    case '|':
+      return 3;
+    case '^':
+      return 4;
+    case '&':
+      return 5;
+    case '==':
+    case '!=':
+      return 6;
+    case '<':
+    case '<=':
+    case '>':
+    case '>=':
+      return 7;
+    case '+':
+    case '-':
+      return 8;
+    case '*':
+    case '/':
+    case '%':
+      return 9;
+    default:
+      return 8;
+  }
+}
+
+type BtDslAnyNode =
+  | ProgramJson
+  | DeclJson
+  | StmtJson
+  | ExprJson
+  | TypeJson
+  | ParamDeclJson
+  | ExternPortJson
+  | PreconditionJson
+  | ArgumentJson
+  | BtDslComment
+  | null
+  | undefined;
+
+type PrettierPrintFn = (path: AstPath<BtDslAnyNode>) => Doc;
+
+function isRange(value: unknown): value is Range {
+  if (!isRecord(value)) return false;
+  return (
+    (value.start === null || typeof value.start === 'number') &&
+    (value.end === null || typeof value.end === 'number')
   );
 }
 
-function printExternPort(node: BtDslNode, text: string): PrettierDoc {
-  const parts: PrettierDoc[] = [];
-  const outerDocs = collectOuterDocs(node, text);
-  if (outerDocs.length > 0) {
-    parts.push(joinDocs(hardline, outerDocs), hardline);
-  }
-
-  const direction = findFirstChildOfType(node, 'port_direction');
-  const name = getChild(node, 'name');
-  const type = getChild(node, 'type');
-  const def = getChild(node, 'default');
-
-  if (direction) {
-    parts.push(getText(direction, text), ' ');
-  }
-  parts.push(name ? getText(name, text) : '', ': ', type ? getText(type, text) : '');
-  if (def) {
-    parts.push(' = ', getText(def, text));
-  }
-  return concat(parts);
+function isBtDslComment(value: unknown): value is BtDslComment {
+  if (!isRecord(value)) return false;
+  const t = value.type;
+  return (
+    (t === 'CommentLine' || t === 'CommentBlock') &&
+    typeof value.raw === 'string' &&
+    typeof value.value === 'string' &&
+    isRange(value.range)
+  );
 }
 
-function printGlobalBlackboardDecl(node: BtDslNode, text: string): PrettierDoc {
-  return printVarDeclLike(node, text, 'init');
+function isProgramJson(value: unknown): value is ProgramJson {
+  return isRecord(value) && value.type === 'Program' && isRange(value.range);
 }
 
-function printGlobalConstDecl(node: BtDslNode, text: string): PrettierDoc {
-  return printConstDeclLike(node, text);
+function printVerbatim(node: { range: Range; verbatim?: boolean }, text: string): PrettierDoc {
+  if (!node.verbatim) return '';
+  const s = rs(node.range);
+  const e = re(node.range);
+  return text.slice(s, e).trimEnd();
 }
 
-function printTreeDef(
-  node: BtDslNode,
-  text: string,
-  path: AstPath<BtDslNode>,
-  print: PrintFn,
+function printTypePath(
+  path: AstPath<TypeJson>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
 ): PrettierDoc {
-  const parts: PrettierDoc[] = [];
+  const t = path.node;
+  switch (t.type) {
+    case 'TypeExpr':
+      return group([
+        path.call((p) => printTypePath(p as AstPath<TypeJson>, options, print), 'base'),
+        t.nullable ? '?' : '',
+      ]);
+    case 'InferType':
+      return '_';
+    case 'PrimaryType':
+      return t.size ? `${t.name}<${t.size}>` : t.name;
+    case 'DynamicArrayType':
+      return group([
+        'vec<',
+        path.call((p) => printTypePath(p as AstPath<TypeJson>, options, print), 'elementType'),
+        '>',
+      ]);
+    case 'StaticArrayType':
+      return group([
+        '[',
+        path.call((p) => printTypePath(p as AstPath<TypeJson>, options, print), 'elementType'),
+        '; ',
+        t.isBounded ? '<=' : '',
+        t.size,
+        ']',
+      ]);
+    default:
+      return '<unknown_type>';
+  }
+}
 
-  const outerDocs = collectOuterDocs(node, text);
-  if (outerDocs.length > 0) {
-    parts.push(joinDocs(hardline, outerDocs), hardline);
+function printExprPath(
+  path: AstPath<ExprJson>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+  parentPrec = 0,
+): PrettierDoc {
+  const e = path.node;
+  if ((e as { verbatim?: boolean }).verbatim) {
+    return printVerbatim(e as { range: Range; verbatim?: boolean }, options.originalText);
   }
 
-  const name = getChild(node, 'name');
-  const nameText = name ? getText(name, text) : '';
+  const selfPrec = precedence(e);
+  const needsParens = selfPrec < parentPrec;
 
-  // Get params from param_list
-  const params: BtDslNode[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'param_list') {
-      for (const param of getAllNamedChildren(child)) {
-        if (param.type === 'param_decl') {
-          params.push(param);
-        }
-      }
-    }
-  }
-
-  const paramsDoc =
-    params.length === 0
-      ? concat(['(', ')'])
-      : group(
-          concat([
-            '(',
-            indent(
-              concat([
-                softline,
-                joinDocs(
-                  concat([',', line]),
-                  params.map((p) => printParamDecl(p, text)),
-                ),
-              ]),
-            ),
-            softline,
-            ')',
-          ]),
+  const inner: PrettierDoc = (() => {
+    switch (e.type) {
+      case 'MissingExpr':
+        return '<missing_expr>';
+      case 'IntLiteralExpr':
+        return String(e.value);
+      case 'FloatLiteralExpr':
+        return String(e.value);
+      case 'StringLiteralExpr':
+        return escapeJsonString(e.value);
+      case 'BoolLiteralExpr':
+        return e.value ? 'true' : 'false';
+      case 'NullLiteralExpr':
+        return 'null';
+      case 'VarRefExpr':
+        return e.name;
+      case 'UnaryExpr':
+        return group([
+          e.op,
+          path.call(
+            (p) => printExprPath(p as AstPath<ExprJson>, options, print, selfPrec),
+            'operand',
+          ),
+        ]);
+      case 'BinaryExpr':
+        return group([
+          path.call((p) => printExprPath(p as AstPath<ExprJson>, options, print, selfPrec), 'lhs'),
+          ' ',
+          e.op,
+          ' ',
+          // left-associative: rhs uses +1
+          path.call(
+            (p) => printExprPath(p as AstPath<ExprJson>, options, print, selfPrec + 1),
+            'rhs',
+          ),
+        ]);
+      case 'IndexExpr':
+        return group([
+          path.call((p) => printExprPath(p as AstPath<ExprJson>, options, print, selfPrec), 'base'),
+          '[',
+          path.call((p) => printExprPath(p as AstPath<ExprJson>, options, print, 0), 'index'),
+          ']',
+        ]);
+      case 'CastExpr':
+        return group([
+          path.call((p) => printExprPath(p as AstPath<ExprJson>, options, print, selfPrec), 'expr'),
+          ' as ',
+          path.call((p) => printTypePath(p as AstPath<TypeJson>, options, print), 'targetType'),
+        ]);
+      case 'ArrayLiteralExpr': {
+        const elems = path.map(
+          (p) => printExprPath(p as AstPath<ExprJson>, options, print, 0),
+          'elements',
         );
-
-  const body = getChild(node, 'body');
-  const bodyDoc = body ? printNode(body, text, path, print) : '';
-
-  parts.push(group(concat(['tree ', nameText, paramsDoc, ' ', bodyDoc])));
-
-  return concat(parts);
-}
-
-function printParamDecl(node: BtDslNode, text: string): PrettierDoc {
-  // Find port_direction child node (not a named field)
-  let direction: BtDslNode | null = null;
-  for (let i = 0; i < node.childCount; i++) {
-    const child = node.child(i);
-    if (child?.type === 'port_direction') {
-      direction = child;
-      break;
+        return group(['[', joinDocs(', ', elems), ']']);
+      }
+      case 'ArrayRepeatExpr':
+        return group([
+          '[',
+          path.call((p) => printExprPath(p as AstPath<ExprJson>, options, print, 0), 'value'),
+          '; ',
+          path.call((p) => printExprPath(p as AstPath<ExprJson>, options, print, 0), 'count'),
+          ']',
+        ]);
+      case 'VecMacroExpr':
+        return group([
+          'vec!',
+          path.call((p) => printExprPath(p as AstPath<ExprJson>, options, print, 0), 'inner'),
+        ]);
+      default:
+        return '<unknown_expr>';
     }
-  }
+  })();
 
-  const name = getChild(node, 'name');
-  const type = getChild(node, 'type');
-  const def = getChild(node, 'default');
-
-  const parts: PrettierDoc[] = [];
-
-  if (direction) {
-    parts.push(getText(direction, text), ' ');
-  }
-
-  if (name) {
-    parts.push(getText(name, text));
-  }
-
-  if (type) {
-    parts.push(': ', getText(type, text));
-  }
-
-  if (def) {
-    parts.push(' = ', getText(def, text));
-  }
-
-  return concat(parts);
+  return needsParens ? group(['(', inner, ')']) : inner;
 }
 
-function printStatement(
-  node: BtDslNode,
-  text: string,
-  path: AstPath<BtDslNode>,
-  print: PrintFn,
+// Helper: Check if there's a blank line after the node in the original source
+function hasBlankLineAfter(text: string, node: { range: Range }): boolean {
+  const endPos = node.range.end ?? 0;
+  // Find the end of the current line
+  let pos = endPos;
+  while (pos < text.length && text[pos] !== '\n') {
+    pos++;
+  }
+  if (pos >= text.length) return false;
+  pos++; // Skip the newline
+
+  // Skip whitespace on the next line
+  while (pos < text.length && (text[pos] === ' ' || text[pos] === '\t')) {
+    pos++;
+  }
+
+  // Check if the next line is empty (i.e., another newline)
+  return pos < text.length && text[pos] === '\n';
+}
+
+function printStmtBlockPath(
+  path: AstPath<{ range: Range; body?: StmtJson[]; children?: StmtJson[] }>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+  prop: 'body' | 'children',
 ): PrettierDoc {
-  // statement := simple_stmt [';'] | block_stmt
-  const inner = findFirstNamedDescendantOfAny(node, [
-    'compound_node_call',
-    'leaf_node_call',
-    'assignment_stmt',
-    'blackboard_decl',
-    'local_const_decl',
-  ]);
-  if (!inner) {
+  const list = path.node[prop];
+  if (!list || list.length === 0) {
+    return group(['{', '}']);
+  }
+
+  // Build docs with preserved blank lines
+  const docs: PrettierDoc[] = [];
+  path.each((childPath: AstPath<unknown>, index: number) => {
+    const printed = print(childPath as unknown as AstPath<BtDslAnyNode>);
+    docs.push(printed);
+
+    // Add extra hardline if there was a blank line after this statement in the original source
+    const childNode = childPath.node as { range: Range };
+    if (index < list.length - 1 && hasBlankLineAfter(options.originalText, childNode)) {
+      docs.push(hardline, hardline);
+    } else if (index < list.length - 1) {
+      docs.push(hardline);
+    }
+  }, prop);
+
+  // Force expansion when block has content
+  return group(['{', indent([hardline, docs]), hardline, '}'], {
+    shouldBreak: true,
+  });
+}
+
+type PrinterFn = (
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+) => PrettierDoc;
+
+// Individual printer functions for each node type
+function printProgram(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as ProgramJson;
+  const decls = node.decls;
+
+  if (decls.length === 0) {
     return '';
   }
 
-  if (inner.type === 'compound_node_call') {
-    return printCompoundNodeCall(inner, text, path, print);
-  }
+  // Build docs with preserved blank lines
+  const docs: PrettierDoc[] = [];
+  path.each((childPath: AstPath<unknown>, index: number) => {
+    const printed = print(childPath as unknown as AstPath<BtDslAnyNode>);
+    docs.push(printed);
 
-  const innerDoc = printNode(inner, text, path, print);
-  const raw = getText(node, text);
-  const hasSemicolon = raw.trimEnd().endsWith(';');
-  return hasSemicolon ? concat([innerDoc, ';']) : innerDoc;
-}
-
-function printBlackboardDecl(node: BtDslNode, text: string): PrettierDoc {
-  return printVarDeclLike(node, text, 'init');
-}
-
-function printLocalConstDecl(node: BtDslNode, text: string): PrettierDoc {
-  return printConstDeclLike(node, text);
-}
-
-function printAssignmentStmt(node: BtDslNode, text: string): PrettierDoc {
-  const parts: PrettierDoc[] = [];
-
-  const outerDocs = collectOuterDocs(node, text);
-  if (outerDocs.length > 0) {
-    parts.push(joinDocs(hardline, outerDocs), hardline);
-  }
-
-  const preconds = collectPreconditions(node, text);
-  if (preconds.length > 0) {
-    parts.push(joinDocs(hardline, preconds), hardline);
-  }
-
-  const target = getChild(node, 'target');
-  const op = getChild(node, 'op');
-  const value = getChild(node, 'value');
-
-  const targetText = target ? getText(target, text) : '';
-  const opText = op ? getText(op, text) : '=';
-  const valueText = value ? getText(value, text) : '';
-
-  parts.push(concat([targetText, ' ', opText, ' ', valueText]));
-  return concat(parts);
-}
-
-function printLeafNodeCall(node: BtDslNode, text: string): PrettierDoc {
-  const parts: PrettierDoc[] = [];
-
-  const outerDocs = collectOuterDocs(node, text);
-  if (outerDocs.length > 0) {
-    parts.push(joinDocs(hardline, outerDocs), hardline);
-  }
-
-  const decorators = collectDecorators(node, text);
-  if (decorators.length > 0) {
-    parts.push(joinDocs(hardline, decorators), hardline);
-  }
-
-  const preconds = collectPreconditions(node, text);
-  if (preconds.length > 0) {
-    parts.push(joinDocs(hardline, preconds), hardline);
-  }
-
-  const name = getChild(node, 'name');
-  const args = getChild(node, 'args');
-
-  parts.push(name ? getText(name, text) : '', args ? printPropertyBlock(args, text) : '()');
-  return concat(parts);
-}
-
-function printCompoundNodeCall(
-  node: BtDslNode,
-  text: string,
-  path: AstPath<BtDslNode>,
-  print: PrintFn,
-): PrettierDoc {
-  const parts: PrettierDoc[] = [];
-
-  const outerDocs = collectOuterDocs(node, text);
-  if (outerDocs.length > 0) {
-    parts.push(joinDocs(hardline, outerDocs), hardline);
-  }
-
-  const decorators = collectDecorators(node, text);
-  if (decorators.length > 0) {
-    parts.push(joinDocs(hardline, decorators), hardline);
-  }
-
-  const preconds = collectPreconditions(node, text);
-  if (preconds.length > 0) {
-    parts.push(joinDocs(hardline, preconds), hardline);
-  }
-
-  const name = getChild(node, 'name');
-  parts.push(name ? getText(name, text) : '');
-
-  const body = getChild(node, 'body');
-  if (!body) {
-    return concat(parts);
-  }
-
-  // node_body_with_children := (property_block children_block) | children_block
-  const prop = getAllNamedChildren(body).find((c) => c.type === 'property_block');
-  const children = getAllNamedChildren(body).find((c) => c.type === 'children_block');
-
-  if (prop) {
-    parts.push(printPropertyBlock(prop, text));
-  }
-  if (children) {
-    parts.push(' ', printChildrenBlock(children, text, path, print));
-  }
-
-  return concat(parts);
-}
-
-function printPropertyBlock(node: BtDslNode, text: string): PrettierDoc {
-  // Get arguments from argument_list
-  const args: BtDslNode[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'argument_list') {
-      for (const arg of getAllNamedChildren(child)) {
-        if (arg.type === 'argument') {
-          args.push(arg);
-        }
-      }
+    // Add extra hardline if there was a blank line after this declaration in the original source
+    const childNode = childPath.node as { range: Range };
+    if (index < decls.length - 1 && hasBlankLineAfter(options.originalText, childNode)) {
+      docs.push(hardline, hardline);
+    } else if (index < decls.length - 1) {
+      docs.push(hardline);
     }
-  }
+  }, 'decls');
 
-  if (args.length === 0) {
-    return concat(['(', ')']);
-  }
+  return group(docs);
+}
 
-  const printedArgs = args.map((a) => printArgument(a, text));
-  return group(
-    concat([
-      '(',
-      indent(concat([softline, joinDocs(concat([',', line]), printedArgs)])),
-      softline,
-      ')',
+function printImportDecl(
+  path: AstPath<BtDslAnyNode>,
+  _options: ParserOptions<ProgramJson>,
+  _print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<DeclJson, { type: 'ImportDecl' }>;
+  return group(['import ', escapeJsonString(node.path), ';']);
+}
+
+function printExternTypeDecl(
+  path: AstPath<BtDslAnyNode>,
+  _options: ParserOptions<ProgramJson>,
+  _print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<DeclJson, { type: 'ExternTypeDecl' }>;
+  return group(['extern type ', node.name, ';']);
+}
+
+function printTypeAliasDecl(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<DeclJson, { type: 'TypeAliasDecl' }>;
+  return group([
+    'type ',
+    node.name,
+    ' = ',
+    path.call(
+      (p) => printTypePath(p as unknown as AstPath<TypeJson>, options, print),
+      'aliasedType',
+    ),
+    ';',
+  ]);
+}
+
+function printGlobalVarDecl(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<DeclJson, { type: 'GlobalVarDecl' }>;
+  const parts: PrettierDoc[] = ['var ', node.name];
+  if (node.typeExpr)
+    parts.push(
+      ': ',
+      path.call(
+        (p) => printTypePath(p as unknown as AstPath<TypeJson>, options, print),
+        'typeExpr',
+      ),
+    );
+  if (node.initialValue)
+    parts.push(
+      ' = ',
+      path.call(
+        (p) => printExprPath(p as unknown as AstPath<ExprJson>, options, print, 0),
+        'initialValue',
+      ),
+    );
+  parts.push(';');
+  return group(parts);
+}
+
+function printGlobalConstDecl(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<DeclJson, { type: 'GlobalConstDecl' }>;
+  const parts: PrettierDoc[] = ['const ', node.name];
+  if (node.typeExpr)
+    parts.push(
+      ': ',
+      path.call(
+        (p) => printTypePath(p as unknown as AstPath<TypeJson>, options, print),
+        'typeExpr',
+      ),
+    );
+  parts.push(
+    ' = ',
+    path.call((p) => printExprPath(p as unknown as AstPath<ExprJson>, options, print, 0), 'value'),
+    ';',
+  );
+  return group(parts);
+}
+
+function printExternDecl(
+  path: AstPath<BtDslAnyNode>,
+  _options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<DeclJson, { type: 'ExternDecl' }>;
+  const parts: PrettierDoc[] = [];
+  if (node.behaviorAttr) {
+    parts.push(
+      path.call((p) => print(p as unknown as AstPath<BtDslAnyNode>), 'behaviorAttr'),
+      hardline,
+    );
+  }
+  const header = group(['extern ', node.category, ' ', node.name]);
+  const ports = Array.isArray(node.ports)
+    ? path.map((p) => print(p as unknown as AstPath<BtDslAnyNode>), 'ports')
+    : [];
+  const portList = printParamLikeList(ports);
+  parts.push(group([header, portList, ';']));
+  return group(parts);
+}
+
+function printTreeDecl(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<DeclJson, { type: 'TreeDecl' }>;
+  const params = Array.isArray(node.params)
+    ? path.map((p) => print(p as unknown as AstPath<BtDslAnyNode>), 'params')
+    : [];
+  const header = group(['tree ', node.name, printParamLikeList(params), ' ']);
+  const block = printStmtBlockPath(
+    path as unknown as AstPath<{ range: Range; body: StmtJson[] }>,
+    options,
+    print,
+    'body',
+  );
+  return group([header, block]);
+}
+
+function printBehaviorAttr(
+  path: AstPath<BtDslAnyNode>,
+  _options: ParserOptions<ProgramJson>,
+  _print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as unknown as BehaviorAttrJson;
+  return group([
+    '#[behavior(',
+    node.dataPolicy,
+    node.flowPolicy ? [', ', node.flowPolicy] : '',
+    ')]',
+  ]);
+}
+
+function printExternPort(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as ExternPortJson;
+  const seg: PrettierDoc[] = [];
+  if (node.direction) seg.push(node.direction, ' ');
+  seg.push(
+    node.name,
+    ': ',
+    path.call(
+      (pp) => printTypePath(pp as unknown as AstPath<TypeJson>, options, print),
+      'typeExpr',
+    ),
+  );
+  if (node.defaultValue)
+    seg.push(
+      ' = ',
+      path.call(
+        (pp) => printExprPath(pp as unknown as AstPath<ExprJson>, options, print, 0),
+        'defaultValue',
+      ),
+    );
+  return group(seg);
+}
+
+function printParamDecl(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as ParamDeclJson;
+  const seg: PrettierDoc[] = [];
+  if (node.direction) seg.push(node.direction, ' ');
+  seg.push(
+    node.name,
+    ': ',
+    path.call(
+      (pp) => printTypePath(pp as unknown as AstPath<TypeJson>, options, print),
+      'typeExpr',
+    ),
+  );
+  if (node.defaultValue)
+    seg.push(
+      ' = ',
+      path.call(
+        (pp) => printExprPath(pp as unknown as AstPath<ExprJson>, options, print, 0),
+        'defaultValue',
+      ),
+    );
+  return group(seg);
+}
+
+function printPrecondition(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as PreconditionJson;
+  return group([
+    '@',
+    node.kind,
+    '(',
+    path.call(
+      (pp) => printExprPath(pp as unknown as AstPath<ExprJson>, options, print, 0),
+      'condition',
+    ),
+    ')',
+  ]);
+}
+
+function printArgument(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as ArgumentJson;
+  const parts: PrettierDoc[] = [node.name, ': '];
+  if (node.direction) parts.push(node.direction, ' ');
+  if (node.inlineDecl) {
+    parts.push('out var ', node.inlineDecl.name);
+    return group(parts);
+  }
+  if (node.valueExpr) {
+    parts.push(
+      path.call(
+        (pp) => printExprPath(pp as unknown as AstPath<ExprJson>, options, print, 0),
+        'valueExpr',
+      ),
+    );
+  } else {
+    parts.push('<missing_expr>');
+  }
+  return group(parts);
+}
+
+function printBlackboardDeclStmt(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<StmtJson, { type: 'BlackboardDeclStmt' }>;
+  const parts: PrettierDoc[] = ['var ', node.name];
+  if (node.typeExpr)
+    parts.push(
+      ': ',
+      path.call(
+        (p) => printTypePath(p as unknown as AstPath<TypeJson>, options, print),
+        'typeExpr',
+      ),
+    );
+  if (node.initialValue)
+    parts.push(
+      ' = ',
+      path.call(
+        (p) => printExprPath(p as unknown as AstPath<ExprJson>, options, print, 0),
+        'initialValue',
+      ),
+    );
+  parts.push(';');
+  return group(parts);
+}
+
+function printConstDeclStmt(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<StmtJson, { type: 'ConstDeclStmt' }>;
+  const parts: PrettierDoc[] = ['const ', node.name];
+  if (node.typeExpr)
+    parts.push(
+      ': ',
+      path.call(
+        (p) => printTypePath(p as unknown as AstPath<TypeJson>, options, print),
+        'typeExpr',
+      ),
+    );
+  parts.push(
+    ' = ',
+    path.call((p) => printExprPath(p as unknown as AstPath<ExprJson>, options, print, 0), 'value'),
+    ';',
+  );
+  return group(parts);
+}
+
+function printAssignmentStmt(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
+): PrettierDoc {
+  const node = path.node as Extract<StmtJson, { type: 'AssignmentStmt' }>;
+  const lines: PrettierDoc[] = [];
+  const precs = Array.isArray(node.preconditions)
+    ? path.map((p) => print(p as unknown as AstPath<BtDslAnyNode>), 'preconditions')
+    : [];
+  for (const pd of precs) {
+    lines.push(pd, hardline);
+  }
+  const idx = Array.isArray(node.indices)
+    ? path.map(
+        (p) => ['[', printExprPath(p as unknown as AstPath<ExprJson>, options, print, 0), ']'],
+        'indices',
+      )
+    : [];
+  lines.push(
+    group([
+      node.target,
+      ...idx.flat(),
+      ' ',
+      node.op,
+      ' ',
+      path.call(
+        (p) => printExprPath(p as unknown as AstPath<ExprJson>, options, print, 0),
+        'value',
+      ),
+      ';',
     ]),
   );
+  return group(lines);
 }
 
-function printArgument(node: BtDslNode, text: string): PrettierDoc {
-  const name = getChild(node, 'name');
-  const value = getChild(node, 'value');
-
-  if (!name) {
-    // Positional argument
-    return value ? printArgumentExpr(value, text) : '';
-  }
-
-  // Named argument
-  const nameText = getText(name, text);
-  const valueText = value ? printArgumentExpr(value, text) : '';
-
-  return concat([nameText, ': ', valueText]);
-}
-
-function printArgumentExpr(node: BtDslNode, text: string): PrettierDoc {
-  // argument_expr := 'out' inline_blackboard_decl | [port_direction] expression
-  const inlineDecl = getChild(node, 'inline_decl');
-  if (inlineDecl) {
-    const name = getChild(inlineDecl, 'name');
-    return concat(['out var ', name ? getText(name, text) : '']);
-  }
-
-  const direction = findFirstChildOfType(node, 'port_direction');
-  const value = getChild(node, 'value');
-  const valueText = value ? getText(value, text) : '';
-  if (direction) {
-    return concat([getText(direction, text), ' ', valueText]);
-  }
-  return valueText;
-}
-
-function printPrecondition(node: BtDslNode, text: string): PrettierDoc {
-  const kind = getChild(node, 'kind');
-  const cond = getChild(node, 'cond');
-  const kindText = kind ? getText(kind, text) : '';
-  const condText = cond ? getText(cond, text) : '';
-  return concat(['@', kindText, '(', condText, ')']);
-}
-
-function printDecorator(node: BtDslNode, text: string): PrettierDoc {
-  const name = getChild(node, 'name');
-  const args = getChild(node, 'args');
-  const nameText = name ? getText(name, text) : '';
-  const argsDoc = args ? printPropertyBlock(args, text) : concat(['(', ')']);
-  return concat(['@', nameText, argsDoc]);
-}
-
-function printChildrenBlock(
-  node: BtDslNode,
-  text: string,
-  path: AstPath<BtDslNode>,
-  print: PrintFn,
+function printNodeStmt(
+  path: AstPath<BtDslAnyNode>,
+  options: ParserOptions<ProgramJson>,
+  print: PrettierPrintFn,
 ): PrettierDoc {
-  return printStatementBlock(node, text, path, print);
+  const node = path.node as Extract<StmtJson, { type: 'NodeStmt' }>;
+  const lines: PrettierDoc[] = [];
+  const precs = Array.isArray(node.preconditions)
+    ? path.map((p) => print(p as unknown as AstPath<BtDslAnyNode>), 'preconditions')
+    : [];
+  for (const pd of precs) {
+    lines.push(pd, hardline);
+  }
+
+  const head: PrettierDoc[] = [node.nodeName];
+  if (node.hasPropertyBlock) {
+    const args = Array.isArray(node.args)
+      ? path.map((p) => print(p as unknown as AstPath<BtDslAnyNode>), 'args')
+      : [];
+    head.push(printParamLikeList(args));
+  }
+
+  if (!node.hasChildrenBlock) {
+    head.push(';');
+    lines.push(group(head));
+    return group(lines);
+  }
+
+  const block = printStmtBlockPath(
+    path as unknown as AstPath<{ range: Range; children: StmtJson[] }>,
+    options,
+    print,
+    'children',
+  );
+  lines.push(group([...head, ' ', block]));
+  return group(lines);
 }
 
-function printStatementBlock(
-  node: BtDslNode,
-  text: string,
-  path: AstPath<BtDslNode>,
-  print: PrintFn,
-): PrettierDoc {
-  // tree_body / children_block := '{' { statement } '}'
-  // Include comment nodes as well (they come from `extras`).
-  const children = getAllNamedChildren(node);
-  if (children.length === 0) {
-    return concat(['{', '}']);
-  }
+// Printer map for all node types
+const nodePrinters: Record<string, PrinterFn> = {
+  Program: printProgram,
+  ImportDecl: printImportDecl,
+  ExternTypeDecl: printExternTypeDecl,
+  TypeAliasDecl: printTypeAliasDecl,
+  GlobalVarDecl: printGlobalVarDecl,
+  GlobalConstDecl: printGlobalConstDecl,
+  ExternDecl: printExternDecl,
+  TreeDecl: printTreeDecl,
+  BehaviorAttr: printBehaviorAttr,
+  ExternPort: printExternPort,
+  ParamDecl: printParamDecl,
+  Precondition: printPrecondition,
+  Argument: printArgument,
+  BlackboardDeclStmt: printBlackboardDeclStmt,
+  ConstDeclStmt: printConstDeclStmt,
+  AssignmentStmt: printAssignmentStmt,
+  NodeStmt: printNodeStmt,
+  // Expression types - delegate to printExprPath
+  MissingExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  IntLiteralExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  FloatLiteralExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  StringLiteralExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  BoolLiteralExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  NullLiteralExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  VarRefExpr: (path, options, print) => printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  UnaryExpr: (path, options, print) => printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  BinaryExpr: (path, options, print) => printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  IndexExpr: (path, options, print) => printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  CastExpr: (path, options, print) => printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  ArrayLiteralExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  ArrayRepeatExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  VecMacroExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  UnknownExpr: (path, options, print) =>
+    printExprPath(path as AstPath<ExprJson>, options, print, 0),
+  // Type types - delegate to printTypePath
+  TypeExpr: (path, options, print) => printTypePath(path as AstPath<TypeJson>, options, print),
+  InferType: (path, options, print) => printTypePath(path as AstPath<TypeJson>, options, print),
+  PrimaryType: (path, options, print) => printTypePath(path as AstPath<TypeJson>, options, print),
+  DynamicArrayType: (path, options, print) =>
+    printTypePath(path as AstPath<TypeJson>, options, print),
+  StaticArrayType: (path, options, print) =>
+    printTypePath(path as AstPath<TypeJson>, options, print),
+  UnknownType: (path, options, print) => printTypePath(path as AstPath<TypeJson>, options, print),
+};
 
-  const printedChildren = children.map((c) => printNode(c, text, path, print));
-  const childrenDoc = joinWithPreservedBlankLines(printedChildren, children);
-  return group(concat(['{', indent(concat([hardline, childrenDoc])), hardline, '}']));
+function printParamLikeList(items: PrettierDoc[]): PrettierDoc {
+  if (items.length === 0) return group(['(', ')']);
+  return group([
+    '(',
+    indent([softline, joinDocs([',', line], items), ifBreak(',', '')]),
+    softline,
+    ')',
+  ]);
 }
 
-function collectOuterDocs(node: BtDslNode, text: string): string[] {
-  const docs: string[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'outer_doc') {
-      docs.push(getText(child, text));
-    }
-  }
-  return docs;
-}
-
-function collectDecorators(node: BtDslNode, text: string): PrettierDoc[] {
-  const decorators: PrettierDoc[] = [];
-  for (const child of getAllNamedChildren(node)) {
-    if (child.type === 'decorator') {
-      decorators.push(printDecorator(child, text));
-    }
-  }
-  return decorators;
-}
-
-function collectPreconditions(node: BtDslNode, text: string): PrettierDoc[] {
-  const list = getAllNamedChildren(node).find((c) => c.type === 'precondition_list');
-  if (!list) return [];
-  const preconds: PrettierDoc[] = [];
-  for (const child of getAllNamedChildren(list)) {
-    if (child.type === 'precondition') {
-      preconds.push(printPrecondition(child, text));
-    }
-  }
-  return preconds;
-}
-
-function printVarDeclLike(node: BtDslNode, text: string, initField: 'init'): PrettierDoc {
-  const name = getChild(node, 'name');
-  const type = getChild(node, 'type');
-  const init = getChild(node, initField);
-
-  const parts: PrettierDoc[] = ['var ', name ? getText(name, text) : ''];
-  if (type) {
-    parts.push(': ', getText(type, text));
-  }
-  if (init) {
-    parts.push(' = ', getText(init, text));
-  }
-  if (hasTrailingSemicolon(node, text)) {
-    parts.push(';');
-  }
-
-  // Append any trailing comments that were absorbed into this node
-  const trailingComments = collectTrailingComments(node, text);
-  if (trailingComments.length > 0) {
-    parts.push(hardline, joinDocs(hardline, trailingComments));
-  }
-  return concat(parts);
-}
-
-function printConstDeclLike(node: BtDslNode, text: string): PrettierDoc {
-  const name = getChild(node, 'name');
-  const type = getChild(node, 'type');
-  const value = getChild(node, 'value');
-
-  const parts: PrettierDoc[] = ['const ', name ? getText(name, text) : ''];
-  if (type) {
-    parts.push(': ', getText(type, text));
-  }
-  parts.push(' = ', value ? getText(value, text) : '');
-  if (hasTrailingSemicolon(node, text)) {
-    parts.push(';');
-  }
-
-  // Append any trailing comments that were absorbed into this node
-  const trailingComments = collectTrailingComments(node, text);
-  if (trailingComments.length > 0) {
-    parts.push(hardline, joinDocs(hardline, trailingComments));
-  }
-  return concat(parts);
-}
-
-function findFirstChildOfType(node: BtDslNode, type: string): BtDslNode | null {
-  for (let i = 0; i < node.childCount; i++) {
-    const child = node.child(i);
-    if (child?.type === type) {
-      return child;
-    }
-  }
-  return null;
-}
-
-function findFirstNamedDescendantOfAny(node: BtDslNode, types: string[]): BtDslNode | null {
-  // BFS across named nodes.
-  const queue: BtDslNode[] = [node];
-  while (queue.length > 0) {
-    const cur = queue.shift();
-    if (!cur) continue;
-    for (const child of getAllNamedChildren(cur)) {
-      if (types.includes(child.type)) {
-        return child;
-      }
-      queue.push(child);
-    }
-  }
-  return null;
-}
-
-const btDslPrettierPlugin: Plugin<BtDslNode> = {
+const btDslPrettierPlugin: Plugin<ProgramJson> = {
   languages: [
     {
       name: 'BT DSL',
@@ -900,28 +1248,160 @@ const btDslPrettierPlugin: Plugin<BtDslNode> = {
   ],
   parsers: {
     'bt-dsl': {
-      astFormat: 'bt-dsl-ast',
-      parse: async (text: string, _options: ParserOptions<BtDslNode>): Promise<BtDslNode> => {
-        const parser = await initParser();
-        const tree = parser.parse(text);
-        const root: BtDslNode = tree.rootNode;
+      astFormat: 'bt-dsl-core-ast',
+      parse: (text: string): ProgramJson => {
+        try {
+          const jsonText = coreWasm.parseToAstJson(text);
+          const rawBytes = JSON.parse(jsonText) as {
+            type?: unknown;
+            range?: unknown;
+            decls?: unknown;
+            comments?: unknown;
+            btDslComments?: unknown;
+            diagnostics?: unknown;
+            [k: string]: unknown;
+          };
 
-        // Don't extract comments separately - they're already in the AST!
-        // tree-sitter includes comment nodes as named children
+          const byteToIndex = createByteOffsetToIndex(text);
+          const rawUnknown = convertRangesDeep(rawBytes, byteToIndex);
+          const raw = isRecord(rawUnknown) ? rawUnknown : ({} as Record<string, unknown>);
 
-        return root;
+          const program: ProgramJson = {
+            type: 'Program',
+            range: normalizeRange(raw.range as Range | null | undefined, text.length),
+            decls: Array.isArray(raw.decls) ? (raw.decls as unknown as DeclJson[]) : [],
+            comments: Array.isArray(raw.btDslComments)
+              ? (raw.btDslComments as unknown as CommentJson[]).map(toBtDslComment)
+              : Array.isArray(raw.comments)
+                ? (raw.comments as unknown as CommentJson[]).map(toBtDslComment)
+                : [],
+            diagnostics: Array.isArray(raw.diagnostics)
+              ? (raw.diagnostics as unknown as DiagnosticJson[])
+              : [],
+          };
+
+          markVerbatimFlags(program, text);
+          return program;
+        } catch (e) {
+          // If the core parser crashes (e.g. on unsupported unicode identifiers),
+          // fall back to a "lossless" AST that preserves the original text.
+          const msg = e instanceof Error ? e.message : String(e);
+          const all: Range = { start: 0, end: text.length };
+          const unknownDecl: DeclJson = { type: 'UnknownDecl', range: all, verbatim: true };
+          const diag: DiagnosticJson = {
+            severity: 'Error',
+            range: all,
+            message: `Core parser failed: ${msg}`,
+          };
+
+          return {
+            type: 'Program',
+            range: all,
+            decls: [unknownDecl],
+            comments: [],
+            diagnostics: [diag],
+            verbatim: true,
+          };
+        }
       },
-      locStart: (node: BtDslNode): number => node.startIndex,
-      locEnd: (node: BtDslNode): number => node.endIndex,
+      locStart: (node: { range: Range }): number => rs(node.range),
+      locEnd: (node: { range: Range }): number => re(node.range),
     },
   },
   printers: {
-    'bt-dsl-ast': {
-      print: (path: AstPath<BtDslNode>, options: ParserOptions<BtDslNode>, print: PrintFn): Doc => {
+    'bt-dsl-core-ast': {
+      // Prettier's public type definitions model `print` as if it only ever sees the root AST.
+      // In practice it prints every node kind, so we intentionally loosen types here.
+      print: (path: AstPath<unknown>, options: unknown, print: unknown): Doc => {
         const node = path.node;
-        return printNode(node, options.originalText, path, print);
+        if (node == null) return '';
+
+        const typedOptions = options as ParserOptions<ProgramJson> & { originalText: string };
+        const typedPrint = print as PrettierPrintFn;
+
+        // Comments are printed by Prettier via `printComment`.
+        if (isBtDslComment(node)) {
+          return node.raw;
+        }
+
+        // Verbatim nodes (with errors)
+        if (isRecord(node) && node.verbatim === true && isRange(node.range)) {
+          return printVerbatim({ range: node.range, verbatim: true }, typedOptions.originalText);
+        }
+
+        const nodeType = isRecord(node) && typeof node.type === 'string' ? node.type : null;
+        if (!nodeType) return '';
+
+        // Use printer map
+        const printer = nodePrinters[nodeType];
+        if (printer) {
+          return printer(path as unknown as AstPath<BtDslAnyNode>, typedOptions, typedPrint);
+        }
+
+        // Fallback for unknown node types
+        return '';
       },
-    },
+      printComment: (commentPath: AstPath<unknown>): Doc => {
+        const c = commentPath.node;
+        return isBtDslComment(c) ? c.raw : '';
+      },
+      handleComments: {
+        ownLine: (comment: unknown, text: string, _options: unknown, ast: unknown): boolean => {
+          // Most comments can be handled by Prettier's default attachment.
+          // This one is a known edge case: a comment at the end of an extern argument list
+          // (right before ')') can remain unattached and trip "Comment was not printed".
+          if (isProgramJson(ast) && isBtDslComment(comment)) {
+            return attachCommentToExternPortIfInside(ast, comment, text);
+          }
+          return false;
+        },
+        endOfLine: (comment: unknown, text: string, _options: unknown, ast: unknown): boolean => {
+          if (isProgramJson(ast) && isBtDslComment(comment)) {
+            return attachCommentToExternPortIfInside(ast, comment, text);
+          }
+          return false;
+        },
+        remaining: (comment: unknown, text: string, _options: unknown, ast: unknown): boolean => {
+          if (isProgramJson(ast) && isBtDslComment(comment)) {
+            return attachCommentToExternPortIfInside(ast, comment, text);
+          }
+          return false;
+        },
+      },
+      canAttachComment: (node: unknown): boolean => {
+        if (!isRecord(node)) return false;
+        const t = node.type;
+        if (t === 'CommentLine' || t === 'CommentBlock') return false;
+        return 'range' in node;
+      },
+      isBlockComment: (node: unknown): boolean =>
+        isBtDslComment(node) && node.type === 'CommentBlock',
+      getCommentChildNodes: (node: unknown) => {
+        if (!isRecord(node)) return [];
+        if (isProgramJson(node)) return node.decls;
+        const t = node.type;
+
+        // Let Prettier handle most node types automatically through path.map/path.call
+        // Only handle critical cases that require explicit traversal
+        if (t === 'TreeDecl') {
+          const d = node as { params?: unknown[]; body?: unknown[] };
+          return [...(d.params ?? []), ...(d.body ?? [])];
+        }
+        if (t === 'NodeStmt') {
+          const n = node as { preconditions?: unknown[]; args?: unknown[]; children?: unknown[] };
+          return [...(n.preconditions ?? []), ...(n.args ?? []), ...(n.children ?? [])];
+        }
+        if (t === 'ExternDecl') {
+          const e = node as { behaviorAttr?: unknown; ports?: unknown[] };
+          const parts = [...(e.ports ?? [])];
+          if (e.behaviorAttr) parts.unshift(e.behaviorAttr);
+          return parts;
+        }
+
+        // For other nodes, Prettier will automatically traverse through path.map/path.call
+        return [];
+      },
+    } as unknown as Printer<ProgramJson>,
   },
 };
 

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import { formatBtDslText, setTreeSitterWasmPath } from '@bt-dsl/formatter';
+import { formatBtDslText, setCoreWasmPath } from '@bt-dsl/formatter';
 
 export function registerBtDslFormattingProvider(context: vscode.ExtensionContext): void {
   const selector: vscode.DocumentSelector = [
@@ -8,9 +8,9 @@ export function registerBtDslFormattingProvider(context: vscode.ExtensionContext
     { scheme: 'untitled', language: 'bt-dsl' },
   ];
 
-  // Configure tree-sitter WASM path for the formatter (CJS environment)
-  const treeSitterWasmPath = path.join(context.extensionPath, 'out', 'tree-sitter-bt_dsl.wasm');
-  setTreeSitterWasmPath(treeSitterWasmPath);
+  // Configure core WASM bundle path for the formatter.
+  // The extension build copies `formatter_wasm.{js,wasm}` into `out/`.
+  setCoreWasmPath(path.join(context.extensionPath, 'out'));
 
   context.subscriptions.push(
     vscode.languages.registerDocumentFormattingEditProvider(selector, {
