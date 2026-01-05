@@ -284,9 +284,9 @@ void InitializationChecker::transfer_block(
     const auto * node = dyn_cast<NodeStmt>(stmt);
     if (node) {
       if (report_errors) check_node_args(node, state);
-      check_stmt(stmt, state);  // Updates state
+      check_stmt(stmt, state, report_errors);  // Updates state
     } else {
-      check_stmt(stmt, state);
+      check_stmt(stmt, state, report_errors);
     }
   }
 }
@@ -328,20 +328,93 @@ void InitializationChecker::check_node_args(const NodeStmt * node, const InitSta
 
     const PortDirection dir = arg->direction.value_or(PortDirection::In);
 
-    if (dir == PortDirection::In || dir == PortDirection::Ref || dir == PortDirection::Mut) {
+    if (dir == PortDirection::In) {
       // Must be Init
-      auto it = state.find(var_name);
-      if (it == state.end() || it->second == InitState::Uninit) {
-        report_error(
-          arg->get_range(), std::string("Variable '") + std::string(var_name) +
-                              "' may be uninitialized when passed to '" +
-                              std::string(to_string(dir)) + "' port");
+      check_expr(arg->valueExpr, state);
+    } else if (dir == PortDirection::Ref || dir == PortDirection::Mut) {
+      // Ref/Mut must also be Init at call site
+      const std::string_view name = get_var_name_from_expr(arg->valueExpr);
+      if (!name.empty()) {
+        auto it = state.find(name);
+        if (it == state.end() || it->second == InitState::Uninit) {
+          report_error(
+            arg->get_range(), std::string("Variable '") + std::string(name) +
+                                "' may be uninitialized when passed to '" +
+                                std::string(to_string(dir)) + "' port");
+        }
       }
     }
   }
 }
 
-void InitializationChecker::check_stmt(const Stmt * stmt, InitStateMap & state)
+void InitializationChecker::check_expr(
+  const Expr * expr, const InitStateMap & state, bool report_errors)
+{
+  if (!expr) return;
+
+  switch (expr->get_kind()) {
+    case NodeKind::VarRef: {
+      const auto * var_ref = cast<VarRefExpr>(expr);
+      // If symbol is invalid (e.g. undeclared), skip init check to avoid redundant errors.
+      if (!var_ref->resolvedSymbol) {
+        break;
+      }
+      auto it = state.find(var_ref->name);
+      if (it == state.end() || it->second == InitState::Uninit) {
+        if (report_errors) {
+          report_error(
+            var_ref->get_range(),
+            std::string("Variable '") + std::string(var_ref->name) + "' may be uninitialized");
+        }
+      }
+      break;
+    }
+    case NodeKind::IndexExpr: {
+      const auto * idx = cast<IndexExpr>(expr);
+      check_expr(idx->base, state, report_errors);
+      check_expr(idx->index, state, report_errors);
+      break;
+    }
+    case NodeKind::BinaryExpr: {
+      const auto * bin = cast<BinaryExpr>(expr);
+      check_expr(bin->lhs, state, report_errors);
+      check_expr(bin->rhs, state, report_errors);
+      break;
+    }
+    case NodeKind::UnaryExpr: {
+      const auto * un = cast<UnaryExpr>(expr);
+      check_expr(un->operand, state, report_errors);
+      break;
+    }
+    case NodeKind::CastExpr: {
+      const auto * cast_expr = cast<CastExpr>(expr);
+      check_expr(cast_expr->expr, state, report_errors);
+      break;
+    }
+    case NodeKind::ArrayLiteralExpr: {
+      const auto * arr = cast<ArrayLiteralExpr>(expr);
+      for (const auto * elem : arr->elements) {
+        check_expr(elem, state, report_errors);
+      }
+      break;
+    }
+    case NodeKind::ArrayRepeatExpr: {
+      const auto * rep = cast<ArrayRepeatExpr>(expr);
+      check_expr(rep->value, state, report_errors);
+      check_expr(rep->count, state, report_errors);
+      break;
+    }
+    case NodeKind::VecMacroExpr: {
+      const auto * vec = cast<VecMacroExpr>(expr);
+      check_expr(vec->inner, state, report_errors);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+void InitializationChecker::check_stmt(const Stmt * stmt, InitStateMap & state, bool report_errors)
 {
   if (stmt == nullptr) return;
 
@@ -364,6 +437,12 @@ void InitializationChecker::check_stmt(const Stmt * stmt, InitStateMap & state)
 
     case NodeKind::AssignmentStmt: {
       const auto * assign = cast<AssignmentStmt>(stmt);
+      if (assign->value) {
+        check_expr(assign->value, state, report_errors);
+      }
+      for (const auto * idx : assign->indices) {
+        if (idx) check_expr(idx, state, report_errors);
+      }
       if (!assign->target.empty()) {
         state[assign->target] = InitState::Init;
       }
@@ -373,6 +452,7 @@ void InitializationChecker::check_stmt(const Stmt * stmt, InitStateMap & state)
     case NodeKind::BlackboardDeclStmt: {
       const auto * decl = cast<BlackboardDeclStmt>(stmt);
       if (decl->initialValue) {
+        check_expr(decl->initialValue, state, report_errors);
         state[decl->name] = InitState::Init;
       } else {
         state[decl->name] = InitState::Uninit;
@@ -382,6 +462,9 @@ void InitializationChecker::check_stmt(const Stmt * stmt, InitStateMap & state)
 
     case NodeKind::ConstDeclStmt: {
       const auto * decl = cast<ConstDeclStmt>(stmt);
+      if (decl->value) {
+        check_expr(decl->value, state, report_errors);
+      }
       state[decl->name] = InitState::Init;
       break;
     }
@@ -408,7 +491,7 @@ void InitializationChecker::report_error(SourceRange range, std::string_view mes
   hasErrors_ = true;
   errorCount_++;
   if (diags_) {
-    diags_->error(range, message);
+    diags_->report_error(range, std::string(message));
   }
 }
 

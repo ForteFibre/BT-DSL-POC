@@ -13,7 +13,7 @@
 #include <string>
 
 #include "bt_dsl/ast/ast.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -22,14 +22,14 @@ namespace
 
 bool parses_ok(const std::string & src)
 {
-  auto unit = parse_source(src);
-  return unit && unit->diags.empty();
+  const auto unit = test_support::parse(src);
+  return unit.program != nullptr && !unit.diags.has_errors();
 }
 
 bool parses_with_error(const std::string & src)
 {
-  auto unit = parse_source(src);
-  return !unit || !unit->diags.empty();
+  const auto unit = test_support::parse(src);
+  return unit.program == nullptr || unit.diags.has_errors();
 }
 
 }  // namespace

@@ -5,7 +5,7 @@
 
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/basic/casting.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 static bt_dsl::NodeStmt * first_node_stmt(gsl::span<bt_dsl::Stmt *> body)
 {
@@ -34,11 +34,10 @@ TEST(AstChildrenBlocks, NestedChildren)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * seq = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * seq = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(seq, nullptr);
   EXPECT_EQ(seq->nodeName, "Sequence");
   ASSERT_TRUE(seq->hasChildrenBlock);
@@ -78,11 +77,10 @@ TEST(AstChildrenBlocks, AssignmentInChildren)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::TreeDecl * t = unit->program->trees()[0];
+  bt_dsl::TreeDecl * t = unit.program->trees()[0];
   bt_dsl::NodeStmt * seq = nullptr;
   for (auto * s : t->body) {
     if (auto * n = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(s)) {
@@ -115,11 +113,10 @@ TEST(AstChildrenBlocks, EmptyChildrenBlock)
     "  Sequence {}\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * seq = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * seq = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(seq, nullptr);
   ASSERT_TRUE(seq->hasChildrenBlock);
   EXPECT_TRUE(seq->children.empty());
@@ -137,11 +134,10 @@ TEST(AstChildrenBlocks, LeafNodeWithSemicolon)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * seq = first_node_stmt(unit->program->trees()[0]->body);
+  bt_dsl::NodeStmt * seq = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_NE(seq, nullptr);
   ASSERT_EQ(seq->children.size(), 1U);
 
@@ -167,11 +163,10 @@ TEST(AstChildrenBlocks, DeeplyNestedChildren)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  auto * a = first_node_stmt(unit->program->trees()[0]->body);
+  auto * a = first_node_stmt(unit.program->trees()[0]->body);
   ASSERT_TRUE(a != nullptr && a->nodeName == "A");
 
   auto * b = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(a->children[0]);

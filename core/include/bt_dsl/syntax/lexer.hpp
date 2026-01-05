@@ -12,7 +12,7 @@ namespace bt_dsl::syntax
 class Lexer
 {
 public:
-  explicit Lexer(std::string_view src) : src_(src) {}
+  Lexer(FileId file_id, std::string_view src) : file_id_(file_id), src_(src) {}
 
   [[nodiscard]] std::vector<Token> lex_all();
 
@@ -36,6 +36,12 @@ private:
   [[nodiscard]] Token lex_number();
   [[nodiscard]] Token lex_string();
 
+  [[nodiscard]] SourceRange make_range(uint32_t start, uint32_t end) const noexcept
+  {
+    return {file_id_, start, end};
+  }
+
+  FileId file_id_;
   std::string_view src_;
   size_t pos_ = 0;
 };

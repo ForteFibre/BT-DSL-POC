@@ -12,7 +12,7 @@
 #include <string>
 
 #include "bt_dsl/ast/ast.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -22,25 +22,25 @@ namespace
 // Helper to check if parsing succeeds without errors
 bool parses_ok(const std::string & src)
 {
-  auto unit = parse_source(src);
-  return unit && unit->diags.empty();
+  const auto unit = test_support::parse(src);
+  return unit.program != nullptr && !unit.diags.has_errors();
 }
 
 // Helper to check if parsing fails with errors
 bool parses_with_error(const std::string & src)
 {
-  auto unit = parse_source(src);
-  return !unit || !unit->diags.empty();
+  const auto unit = test_support::parse(src);
+  return unit.program == nullptr || unit.diags.has_errors();
 }
 
 // Helper to get parsed program
-Program * get_program(std::unique_ptr<ParsedUnit> & unit, const std::string & src)
+Program * get_program(test_support::TestParseUnit & unit, const std::string & src)
 {
-  unit = parse_source(src);
-  if (!unit || !unit->diags.empty()) {
+  unit = test_support::parse(src);
+  if (unit.program == nullptr || unit.diags.has_errors()) {
     return nullptr;
   }
-  return unit->program;
+  return unit.program;
 }
 
 }  // namespace
@@ -108,7 +108,7 @@ TEST(RefLexicalStructure, KeywordsAsPartOfIdentifierOk)
 
 TEST(RefLexicalStructure, IntegerLiteralDecimal)
 {
-  std::unique_ptr<ParsedUnit> unit;
+  test_support::TestParseUnit unit;
   auto * prog = get_program(unit, "const X = 42;");
   ASSERT_NE(prog, nullptr);
   const auto consts = prog->global_consts();

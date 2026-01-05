@@ -55,11 +55,18 @@ std::string_view slice(std::string_view src, SourceRange r)
 /// This is the main entry point for the Prettier plugin.
 std::string parse_to_ast_json(const std::string & source_text)
 {
-  SourceManager source{std::string{source_text}};
-  const std::string_view src = source.get_source();
+  bt_dsl::SourceRegistry sources;
+  const bt_dsl::FileId file_id = sources.register_file("<wasm>.bt", std::string{source_text});
+  const bt_dsl::SourceFile * source = sources.get_file(file_id);
+  if (source == nullptr) {
+    // Should be unreachable, but keep the failure mode deterministic.
+    return json{{"btDslComments", json::array()}, {"diagnostics", json::array()}}.dump();
+  }
+
+  const std::string_view src = source->content();
 
   // Lex (keep comments so JS can preserve them).
-  Lexer lex{src};
+  Lexer lex{file_id, src};
   const auto all_tokens = lex.lex_all();
 
   json comments = json::array();
@@ -67,10 +74,11 @@ std::string parse_to_ast_json(const std::string & source_text)
     if (
       t.kind == TokenKind::DocLine || t.kind == TokenKind::DocModule ||
       t.kind == TokenKind::LineComment || t.kind == TokenKind::BlockComment) {
-      comments.push_back(json{
-        {"kind", std::string(bt_dsl::syntax::to_string(t.kind))},
-        {"range", j_range(t.range)},
-        {"text", std::string(slice(src, t.range))}});
+      comments.push_back(
+        json{
+          {"kind", std::string(bt_dsl::syntax::to_string(t.kind))},
+          {"range", j_range(t.range)},
+          {"text", std::string(slice(src, t.range))}});
     }
   }
 
@@ -85,7 +93,7 @@ std::string parse_to_ast_json(const std::string & source_text)
 
   AstContext ast;
   DiagnosticBag diags;
-  Parser parser(ast, source, diags, std::move(parser_tokens));
+  Parser parser(ast, file_id, *source, diags, std::move(parser_tokens));
   Program * program = parser.parse_program();
 
   // Use the AST JSON serialization
@@ -109,8 +117,12 @@ std::string parse_to_ast_json(const std::string & source_text)
         break;
     }
 
-    diagnostics.push_back(json{
-      {"severity", sev}, {"range", j_range(d.range)}, {"message", d.message}, {"code", d.code}});
+    diagnostics.push_back(
+      json{
+        {"severity", sev},
+        {"range", j_range(d.primary_range())},
+        {"message", d.message},
+        {"code", d.code}});
   }
 
   // Merge: use AST JSON as base, add comments and diagnostics

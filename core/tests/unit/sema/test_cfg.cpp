@@ -14,7 +14,7 @@
 #include "bt_dsl/sema/resolution/symbol_table.hpp"
 #include "bt_dsl/sema/resolution/symbol_table_builder.hpp"
 #include "bt_dsl/sema/types/type_table.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -24,7 +24,7 @@ using namespace bt_dsl;
 
 struct BuiltCfg
 {
-  std::unique_ptr<ParsedUnit> unit;
+  ModuleInfo module;
   std::unique_ptr<CFG> cfg;
 };
 
@@ -32,22 +32,25 @@ struct BuiltCfg
 static BuiltCfg build_cfg(const std::string & src)
 {
   BuiltCfg out;
-  out.unit = parse_source(src);
-  if (out.unit == nullptr || !out.unit->diags.empty()) {
+  auto parsed = test_support::parse(src);
+  if (parsed.program == nullptr || parsed.diags.has_errors()) {
     std::cerr << "Parse failed\n";
     return out;
   }
 
-  Program * program = out.unit->program;
+  out.module.file_id = parsed.file_id;
+  out.module.ast = std::move(parsed.ast);
+  out.module.parse_diags = std::move(parsed.diags);
+  out.module.program = parsed.program;
+
+  Program * program = out.module.program;
   if (program == nullptr || program->trees().empty()) {
     std::cerr << "No tree found\n";
     return out;
   }
 
   // Basic semantic analysis required for node resolution
-  ModuleInfo module;
-  module.program = program;
-  module.parsedUnit = std::move(out.unit);
+  ModuleInfo & module = out.module;
   module.types.register_builtins();
   module.values.build_from_program(*module.program);
 
@@ -73,7 +76,6 @@ static BuiltCfg build_cfg(const std::string & src)
   // Build CFG for the first tree
   CFGBuilder cfg_builder(module.nodes);
   out.cfg = cfg_builder.build(module.program->trees()[0]);
-  out.unit = std::move(module.parsedUnit);
   return out;
 }
 

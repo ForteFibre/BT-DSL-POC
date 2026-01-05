@@ -22,8 +22,10 @@ bool is_assignable(const Type * target, const Type * source)
   // Error types are assignable anywhere (error recovery)
   if (source->is_error() || target->is_error()) return true;
 
-  // Placeholder types are tentatively assignable (will be resolved later)
-  if (source->is_placeholder()) return true;
+  // Unknown placeholders are tentatively assignable (will be resolved later).
+  // NOTE: literal placeholder types ({integer}/{float}/{null}) are *not* treated as
+  // universally assignable; they must satisfy the regular compatibility rules.
+  if (source->kind == TypeKind::Unknown || target->kind == TypeKind::Unknown) return true;
 
   // Non-nullable can be assigned to nullable of same base
   if (target->is_nullable()) {
@@ -159,6 +161,65 @@ bool are_comparable(const Type * lhs, const Type * rhs)
   if (rhs->kind == TypeKind::NullLiteral && lhs->is_nullable()) return true;
 
   return false;
+}
+
+std::string to_string(const Type * type)
+{
+  if (!type) return "null";
+
+  switch (type->kind) {
+    case TypeKind::Int8:
+      return "int8";
+    case TypeKind::Int16:
+      return "int16";
+    case TypeKind::Int32:
+      return "int32";
+    case TypeKind::Int64:
+      return "int64";
+    case TypeKind::UInt8:
+      return "uint8";
+    case TypeKind::UInt16:
+      return "uint16";
+    case TypeKind::UInt32:
+      return "uint32";
+    case TypeKind::UInt64:
+      return "uint64";
+    case TypeKind::Float32:
+      return "float32";
+    case TypeKind::Float64:
+      return "float64";
+    case TypeKind::Bool:
+      return "bool";
+    case TypeKind::String:
+      return "string";
+    case TypeKind::BoundedString:
+      return "string<" + std::to_string(type->size) + ">";
+
+    case TypeKind::StaticArray:
+      return "[" + to_string(type->element_type) + "; " + std::to_string(type->size) + "]";
+    case TypeKind::BoundedArray:
+      return "[" + to_string(type->element_type) + "; <=" + std::to_string(type->size) + "]";
+    case TypeKind::DynamicArray:
+      return "vec<" + to_string(type->element_type) + ">";
+
+    case TypeKind::Nullable:
+      return to_string(type->base_type) + "?";
+
+    case TypeKind::Extern:
+      return std::string(type->name);
+
+    case TypeKind::IntegerLiteral:
+      return "int32 (literal)";
+    case TypeKind::FloatLiteral:
+      return "float64 (literal)";
+    case TypeKind::NullLiteral:
+      return "null";
+    case TypeKind::Unknown:
+      return "<unknown>";
+    case TypeKind::Error:
+      return "<error>";
+  }
+  return "<unknown>";
 }
 
 // ============================================================================

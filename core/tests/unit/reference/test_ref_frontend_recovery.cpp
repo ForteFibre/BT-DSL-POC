@@ -3,46 +3,19 @@
 
 #include <gtest/gtest.h>
 
-#include <memory>
 #include <string>
 
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/basic/casting.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
-namespace
-{
-
-Program * parse_ok(std::unique_ptr<ParsedUnit> & unit, const std::string & src)
-{
-  unit = parse_source(src);
-  if (!unit || !unit->diags.empty()) {
-    return nullptr;
-  }
-  return unit->program;
-}
-
-Program * parse_with_errors(std::unique_ptr<ParsedUnit> & unit, const std::string & src)
-{
-  unit = parse_source(src);
-  if (!unit) {
-    return nullptr;
-  }
-  // We expect at least one diagnostic.
-  if (unit->diags.empty()) {
-    return nullptr;
-  }
-  return unit->program;
-}
-
-}  // namespace
-
 TEST(RefFrontendRecovery, MissingSemicolonDoesNotStopParsingNextDecl)
 {
-  std::unique_ptr<ParsedUnit> unit;
-  Program * p = parse_with_errors(unit, "const A = 1\nconst B = 2;\n");
+  auto unit = bt_dsl::test_support::parse("const A = 1\nconst B = 2;\n");
+  EXPECT_FALSE(unit.diags.empty());
+  Program * p = unit.program;
   ASSERT_NE(p, nullptr);
 
   const auto consts = p->global_consts();
@@ -55,8 +28,9 @@ TEST(RefFrontendRecovery, MissingSemicolonDoesNotStopParsingNextDecl)
 
 TEST(RefFrontendRecovery, MissingExpressionDoesNotStopParsingNextDecl)
 {
-  std::unique_ptr<ParsedUnit> unit;
-  Program * p = parse_with_errors(unit, "const A = ; const B = 2;\n");
+  auto unit = bt_dsl::test_support::parse("const A = ; const B = 2;\n");
+  EXPECT_FALSE(unit.diags.empty());
+  Program * p = unit.program;
   ASSERT_NE(p, nullptr);
 
   const auto consts = p->global_consts();
@@ -69,8 +43,9 @@ TEST(RefFrontendRecovery, MissingExpressionDoesNotStopParsingNextDecl)
 
 TEST(RefFrontendRecovery, UnexpectedTokenInTreeBodySynchronizesToNextStmt)
 {
-  std::unique_ptr<ParsedUnit> unit;
-  Program * p = parse_with_errors(unit, "tree T() { $; var y: int32; }\n");
+  auto unit = bt_dsl::test_support::parse("tree T() { $; var y: int32; }\n");
+  EXPECT_FALSE(unit.diags.empty());
+  Program * p = unit.program;
   ASSERT_NE(p, nullptr);
   const auto trees = p->trees();
   ASSERT_EQ(trees.size(), 1U);
@@ -92,15 +67,17 @@ TEST(RefFrontendRecovery, UnexpectedTokenInTreeBodySynchronizesToNextStmt)
 
 TEST(RefFrontendRecovery, KeywordAsIdentifierProducesDiagnostic)
 {
-  std::unique_ptr<ParsedUnit> unit;
-  Program * p = parse_with_errors(unit, "var import: int32;\n");
+  auto unit = bt_dsl::test_support::parse("var import: int32;\n");
+  EXPECT_FALSE(unit.diags.empty());
+  Program * p = unit.program;
   ASSERT_NE(p, nullptr);
 }
 
 TEST(RefFrontendRecovery, ValidInputStillParsesOk)
 {
-  std::unique_ptr<ParsedUnit> unit;
-  Program * p = parse_ok(unit, "const X = 1; tree T() { var y: int32; }\n");
+  auto unit = bt_dsl::test_support::parse("const X = 1; tree T() { var y: int32; }\n");
+  EXPECT_TRUE(unit.diags.empty());
+  Program * p = unit.program;
   ASSERT_NE(p, nullptr);
   ASSERT_EQ(p->global_consts().size(), 1U);
   ASSERT_EQ(p->trees().size(), 1U);

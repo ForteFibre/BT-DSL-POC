@@ -217,7 +217,9 @@ void NameResolver::visit_var_ref_expr(VarRefExpr * node)
   // Otherwise, try imported modules (no forward-reference rule across modules).
   const Symbol * sym = lookup_value(node->name, current_scope_, node->get_range());
   if (!sym) {
-    report_error(node->get_range(), "use of undeclared identifier");
+    report_error(
+      node->get_range(),
+      std::string("use of undeclared identifier '") + std::string(node->name) + "'");
     return;
   }
   node->resolvedSymbol = sym;
@@ -272,7 +274,8 @@ void NameResolver::visit_primary_type(PrimaryType * node)
 {
   const TypeSymbol * sym = lookup_type(node->name, node->get_range());
   if (!sym) {
-    report_error(node->get_range(), "use of undeclared type");
+    report_error(
+      node->get_range(), std::string("use of undeclared type '") + std::string(node->name) + "'");
     return;
   }
   node->resolvedType = sym;
@@ -302,7 +305,9 @@ void NameResolver::visit_node_stmt(NodeStmt * node)
   // Resolve node name
   const NodeSymbol * sym = lookup_node(node->nodeName, node->get_range());
   if (!sym) {
-    report_error(node->get_range(), "use of undeclared node");
+    report_error(
+      node->get_range(),
+      std::string("use of undeclared node '") + std::string(node->nodeName) + "'");
   } else {
     node->resolvedNode = sym;
   }
@@ -342,7 +347,9 @@ void NameResolver::visit_assignment_stmt(AssignmentStmt * node)
   } else {
     const Symbol * imported = lookup_value(node->target, current_scope_, node->get_range());
     if (!imported) {
-      report_error(node->get_range(), "use of undeclared identifier");
+      report_error(
+        node->get_range(),
+        std::string("use of undeclared identifier '") + std::string(node->target) + "'");
     } else {
       node->resolvedTarget = imported;
     }
@@ -492,7 +499,7 @@ void NameResolver::report_error(SourceRange range, std::string_view message)
   error_count_++;
 
   if (diags_) {
-    diags_->error(range, message);
+    diags_->report_error(range, std::string(message));
   }
 }
 

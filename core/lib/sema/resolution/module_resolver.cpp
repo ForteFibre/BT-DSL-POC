@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "bt_dsl/sema/resolution/symbol_table_builder.hpp"
 #include "bt_dsl/syntax/frontend.hpp"
 
 namespace bt_dsl
@@ -41,7 +42,9 @@ bool ModuleResolver::resolve(const std::filesystem::path & entry_point)
     return false;
   }
 
-  return !has_errors_;
+  // Return true if the module was successfully processed (even if it has parsing errors).
+  // This allows partial semantic analysis to proceed.
+  return graph_.has_module(abs_path);
 }
 
 // ============================================================================
@@ -67,11 +70,9 @@ bool ModuleResolver::process_module(
   // Mark as visited
   visited.insert(path_str);
 
-  // Add module to graph
-  ModuleInfo * module = graph_.add_module(path);
-
-  // Parse the file
-  if (!parse_file(path, *module)) {
+  // Parse the file (registers it into graph_.sources() and creates the module)
+  ModuleInfo * module = parse_file(path);
+  if (!module) {
     return false;
   }
 
@@ -135,7 +136,9 @@ bool ModuleResolver::process_module(
     }
   }
 
-  return !has_errors_;
+  // Return true if we have a valid AST, even with parse errors.
+  // This allows partial semantic analysis to report additional issues.
+  return module->program != nullptr;
 }
 
 // ============================================================================
@@ -215,42 +218,49 @@ std::optional<std::filesystem::path> ModuleResolver::resolve_import_path(
 // File Parsing
 // ============================================================================
 
-bool ModuleResolver::parse_file(const std::filesystem::path & path, ModuleInfo & module)
+ModuleInfo * ModuleResolver::parse_file(const std::filesystem::path & path)
 {
   // Read file contents
   std::ifstream file(path);
   if (!file.is_open()) {
     report_error(path, "cannot open file");
-    return false;
+    return nullptr;
   }
 
   std::stringstream buffer;
   buffer << file.rdbuf();
   std::string source = buffer.str();
 
-  // Parse using frontend
-  auto unit = parse_source(std::move(source));
-  if (!unit) {
-    report_error(path, "parse failed");
-    return false;
+  // Ensure module exists and owns a fresh AST context
+  const FileId file_id = graph_.sources().register_file(path, "");
+  ModuleInfo * module = graph_.add_module(file_id);
+  if (!module) {
+    report_error(path, "internal error: failed to create module");
+    return nullptr;
   }
+
+  module->ast = std::make_unique<AstContext>();
+  module->parse_diags = DiagnosticBag{};
+
+  // Parse using frontend
+  const ParseOutput out =
+    parse_source(graph_.sources(), path, std::move(source), *module->ast, module->parse_diags);
+  module->program = out.program;
 
   // Check for parse errors
-  if (!unit->diags.empty()) {
+  if (!module->parse_diags.empty()) {
     if (diags_) {
-      diags_->merge(unit->diags);
+      for (const auto & diag : module->parse_diags) {
+        diags_->add(diag);
+      }
     }
-    if (unit->diags.has_errors()) {
+    if (module->parse_diags.has_errors()) {
       has_errors_ = true;
-      error_count_ += unit->diags.errors().size();
+      error_count_ += module->parse_diags.errors().size();
     }
   }
 
-  // Transfer ownership
-  module.program = unit->program;
-  module.parsedUnit = std::move(unit);
-
-  return module.program != nullptr;
+  return module;
 }
 
 // ============================================================================
@@ -264,59 +274,22 @@ bool ModuleResolver::register_declarations(ModuleInfo & module)
   }
 
   bool success = true;
-  const Program & program = *module.program;
 
   // Register built-in types
   module.types.register_builtins();
 
-  // Register extern types
-  for (const auto * ext_type : program.extern_types()) {
-    TypeSymbol sym;
-    sym.name = ext_type->name;
-    sym.decl = ext_type;
-    sym.is_builtin = false;
-    if (!module.types.define(sym)) {
-      report_error(ext_type->get_range(), "redefinition of type");
-      success = false;
-    }
+  // Use SymbolTableBuilder to register all declarations.
+  // This avoids duplicating logic and error reporting, as SymbolTableBuilder
+  // provides detailed redefinition errors.
+  //
+  // Note: Compiler::run_semantic_analysis also runs SymbolTableBuilder, but
+  // since SymbolTableBuilder handles existing symbols idempotently if they point
+  // to the same declaration, running it here is safe and ensures symbols are
+  // available during module resolution (e.g. for imports).
+  SymbolTableBuilder builder(module.values, module.types, module.nodes, diags_);
+  if (!builder.build(*module.program)) {
+    success = false;
   }
-
-  // Register type aliases
-  for (const auto * alias : program.type_aliases()) {
-    TypeSymbol sym;
-    sym.name = alias->name;
-    sym.decl = alias;
-    sym.is_builtin = false;
-    if (!module.types.define(sym)) {
-      report_error(alias->get_range(), "redefinition of type");
-      success = false;
-    }
-  }
-
-  // Register extern nodes
-  for (const auto * ext : program.externs()) {
-    NodeSymbol sym;
-    sym.name = ext->name;
-    sym.decl = ext;
-    if (!module.nodes.define(sym)) {
-      report_error(ext->get_range(), "redefinition of node");
-      success = false;
-    }
-  }
-
-  // Register trees
-  for (const auto * tree : program.trees()) {
-    NodeSymbol sym;
-    sym.name = tree->name;
-    sym.decl = tree;
-    if (!module.nodes.define(sym)) {
-      report_error(tree->get_range(), "redefinition of node");
-      success = false;
-    }
-  }
-
-  // Build value symbol table
-  module.values.build_from_program(program);
 
   return success;
 }
@@ -331,7 +304,7 @@ void ModuleResolver::report_error(SourceRange range, std::string_view message)
   error_count_++;
 
   if (diags_) {
-    diags_->error(range, message);
+    diags_->report_error(range, std::string(message));
   }
 }
 
@@ -341,8 +314,8 @@ void ModuleResolver::report_error(const std::filesystem::path & file, std::strin
   error_count_++;
 
   if (diags_) {
-    const std::string full_message = file.string() + ": " + std::string(message);
-    diags_->error({}, full_message);
+    diags_->report_error(SourceRange{}, std::string(message))
+      .with_secondary_label(SourceRange{}, file.string());
   }
 }
 

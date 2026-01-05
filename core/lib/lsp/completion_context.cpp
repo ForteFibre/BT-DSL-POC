@@ -54,7 +54,9 @@ std::optional<CompletionContext> classify_completion_context(
 
   byte_offset = clamp_byte_offset(byte_offset, text.size());
 
-  bt_dsl::syntax::Lexer lex(text);
+  // Completion context classification is purely offset-based.
+  // Use a dummy-but-valid FileId so SourceRange is considered valid.
+  bt_dsl::syntax::Lexer lex(bt_dsl::FileId{0}, text);
   const std::vector<bt_dsl::syntax::Token> toks = lex.lex_all();
 
   std::vector<OpenBrace> brace_stack;

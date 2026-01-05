@@ -11,13 +11,86 @@ namespace bt_dsl::syntax
 namespace
 {
 
+[[nodiscard]] bool is_common_unsupported_keyword(std::string_view ident) noexcept
+{
+  // Intentionally *not* treated as reserved identifiers everywhere;
+  // we only special-case them in statement / top-level positions to provide
+  // more helpful diagnostics.
+  static const std::string_view k_unsupported[] = {
+    "let", "def", "func", "class", "if", "else", "while", "for", "return", "switch", "match"};
+  return std::any_of(std::begin(k_unsupported), std::end(k_unsupported), [&](std::string_view k) {
+    return ident == k;
+  });
+}
+
+[[nodiscard]] std::string unsupported_keyword_message(std::string_view ident, bool top_level)
+{
+  if (ident == "let") {
+    return "unsupported keyword 'let'";
+  }
+  if (ident == "def" || ident == "func") {
+    return std::string("unsupported keyword '") + std::string(ident) +
+           "' (BT-DSL does not support function declarations)";
+  }
+  if (ident == "class") {
+    return "unsupported keyword 'class' (BT-DSL does not support class declarations)";
+  }
+  if (ident == "if" || ident == "else") {
+    return "unsupported imperative control flow '" + std::string(ident) + "'";
+  }
+  if (ident == "while" || ident == "for") {
+    return "unsupported imperative loop '" + std::string(ident) + "'";
+  }
+  if (ident == "return") {
+    return "unsupported keyword 'return'";
+  }
+  (void)top_level;
+  return std::string("unsupported keyword '") + std::string(ident) + "'";
+}
+
+[[nodiscard]] std::string unsupported_keyword_hint(std::string_view ident, bool top_level)
+{
+  if (ident == "let") {
+    return "Use 'var' (mutable) or 'const' (immutable) instead.";
+  }
+  if (ident == "def" || ident == "func") {
+    if (top_level) {
+      return "Use 'tree' to define a behavior tree, or 'extern' to declare nodes.";
+    }
+    return "BT-DSL does not have functions; inside a tree body use node calls, 'var', 'const', or "
+           "assignments.";
+  }
+  if (ident == "class") {
+    if (top_level) {
+      return "Use 'extern type' for external types, or 'type' for type aliases.";
+    }
+    return "Use type names and 'type' aliases; classes are not part of BT-DSL.";
+  }
+  if (ident == "if" || ident == "else") {
+    return "BT-DSL is declarative. Use Sequence/Selector nodes for control flow, or decorators "
+           "like "
+           "ForceSuccess/ForceFailure.";
+  }
+  if (ident == "while" || ident == "for") {
+    return "BT-DSL does not support imperative loops. Use the Repeat decorator, RunWhile "
+           "precondition, or behavior tree structure to control execution loops.";
+  }
+  if (ident == "return") {
+    return "Behavior trees return status (Success/Failure/Running) automatically based on child "
+           "execution.";
+  }
+  if (ident == "switch" || ident == "match") {
+    return "Use a Selector node with condition checks to implement branching logic.";
+  }
+  return "";
+}
+
 SourceRange join_ranges(SourceRange a, SourceRange b)
 {
   if (a.is_invalid()) return b;
   if (b.is_invalid()) return a;
-  const uint32_t s = a.get_begin().get_offset();
-  const uint32_t e = b.get_end().get_offset();
-  return {s, e};
+  // Ranges are expected to be in the same file.
+  return {a.get_begin(), b.get_end()};
 }
 
 void append_utf8(std::string & out, uint32_t cp)
@@ -76,19 +149,87 @@ bool Parser::match(TokenKind k)
   return false;
 }
 
-bool Parser::expect(TokenKind k, std::string_view what)
+bool Parser::expect(TokenKind k, std::string_view what, RecoverySet recovery)
 {
   if (match(k)) {
     return true;
   }
-  error_at(cur(), std::string("expected ") + std::string(what));
+
+  // Improved error location for missing semicolons:
+  // If we expect a semicolon but find a token on a new line, report it at the end of the previous line.
+  if (k == TokenKind::Semicolon && idx_ > 0) {
+    const Token & prev = tokens_[idx_ - 1];
+    const Token & curr = cur();
+    // Only if we haven't reached EOF (or check valid ranges)
+    if (prev.range.is_valid() && curr.range.is_valid()) {
+      auto prev_lc = source_.get_line_column(prev.range.get_end().offset());
+      auto curr_lc = source_.get_line_column(curr.range.get_begin().offset());
+      if (curr_lc.line > prev_lc.line) {
+        diags_
+          .report_error(prev.range, std::string("expected ") + std::string(what), "expected `;`")
+          .with_fixit(prev.range, ";");
+        goto recovery;
+      }
+    }
+  }
+
+  // Provide help message for missing semicolons
+  if (k == TokenKind::Semicolon) {
+    diags_.report_error(cur().range, std::string("expected ") + std::string(what), "expected `;`")
+      .with_fixit(cur().range, ";");
+  } else {
+    error_at(cur(), std::string("expected ") + std::string(what));
+  }
+
+recovery:
+  if (recovery != RecoverySet::None) {
+    while (!at_eof()) {
+      if (at(k)) {
+        return true;
+      }
+
+      const TokenKind kind = cur().kind;
+
+      // Common stop tokens
+      if (
+        kind == TokenKind::Semicolon &&
+        (recovery & RecoverySet::Statement || recovery & RecoverySet::Block ||
+         recovery & RecoverySet::Argument)) {
+        return false;
+      }
+      if (
+        kind == TokenKind::RBrace &&
+        (recovery & RecoverySet::Block || recovery & RecoverySet::Argument)) {
+        return false;
+      }
+      if (kind == TokenKind::RParen && (recovery & RecoverySet::Argument)) {
+        return false;
+      }
+      if (kind == TokenKind::LBrace && (recovery & RecoverySet::Argument)) {
+        // If we see a {, we might have missed the closing ) of args.
+        // Stop consuming so valid block can be parsed.
+        return false;
+      }
+
+      // Stop at new statement keywords if recovering statement/block
+      if (
+        (recovery & RecoverySet::Statement || recovery & RecoverySet::Block) &&
+        (is_kw("var", cur()) || is_kw("const", cur()) || is_kw("type", cur()) ||
+         is_kw("tree", cur()) || is_kw("import", cur()) || is_kw("extern", cur()))) {
+        return false;
+      }
+
+      advance();
+    }
+  }
+
   return false;
 }
 
 void Parser::error_at(const Token & t, std::string_view msg)
 {
   // Point at current token if possible; otherwise at end-of-file.
-  diags_.error(t.range, msg);
+  diags_.report_error(t.range, std::string(msg));
 }
 
 void Parser::synchronize_to_stmt()
@@ -107,6 +248,49 @@ void Parser::synchronize_to_stmt()
       is_kw("tree", cur()) || is_kw("import", cur()) || is_kw("extern", cur())) {
       return;
     }
+    advance();
+  }
+}
+
+void Parser::synchronize_skip_block()
+{
+  // Skip balanced {} blocks to reduce cascading errors.
+  // Useful when encountering unsupported control flow like `if (...) { ... }`.
+  int brace_depth = 0;
+
+  while (!at_eof()) {
+    if (at(TokenKind::LBrace)) {
+      ++brace_depth;
+      advance();
+      continue;
+    }
+
+    if (at(TokenKind::RBrace)) {
+      if (brace_depth > 0) {
+        --brace_depth;
+        advance();
+        if (brace_depth == 0) {
+          // Successfully consumed balanced block
+          return;
+        }
+        continue;
+      }
+      // Unmatched '}' - stop without consuming
+      return;
+    }
+
+    if (brace_depth == 0) {
+      // Not inside a block - use normal statement sync
+      if (match(TokenKind::Semicolon)) {
+        return;
+      }
+      if (
+        is_kw("var", cur()) || is_kw("const", cur()) || is_kw("type", cur()) ||
+        is_kw("tree", cur()) || is_kw("import", cur()) || is_kw("extern", cur())) {
+        return;
+      }
+    }
+
     advance();
   }
 }
@@ -248,7 +432,8 @@ std::vector<Precondition *> Parser::collect_preconditions()
 
 Program * Parser::parse_program()
 {
-  auto * prog = ast_.create<Program>(SourceRange(0, static_cast<uint32_t>(source_.size())));
+  auto * prog =
+    ast_.create<Program>(SourceRange(file_id_, 0, static_cast<uint32_t>(source_.size())));
 
   // Module docs at the very beginning
   {
@@ -266,9 +451,16 @@ Program * Parser::parse_program()
       continue;
     }
 
-    // Attribute-prefixed top-level decls (currently only #[behavior(...)] extern ...)
+    // Attribute-prefixed top-level decls
     if (at(TokenKind::Hash)) {
-      decls.push_back(parse_extern_decl(docs));
+      auto * attr = parse_behavior_attr_opt();
+      if (is_kw("extern", cur())) {
+        decls.push_back(parse_extern_decl(docs, attr));
+      } else {
+        error_at(cur(), "unexpected attribute on this declaration (only valid on extern)");
+        // Continue to main loop to parse the underlying declaration (e.g. tree)
+        // treating the attribute as if it was ignored.
+      }
       continue;
     }
 
@@ -303,12 +495,25 @@ Program * Parser::parse_program()
       continue;
     }
 
+    // Helpful diagnostics for common-but-unsupported keywords.
+    if (cur().kind == TokenKind::Identifier && is_common_unsupported_keyword(cur().text)) {
+      const Token & t = cur();
+      const std::string hint = unsupported_keyword_hint(t.text, /*top_level=*/true);
+      diags_.report_error(t.range, unsupported_keyword_message(t.text, /*top_level=*/true))
+        .with_help(hint);
+      advance();
+      // Use block-aware recovery to skip any associated {} block.
+      synchronize_skip_block();
+      continue;
+    }
+
     // Unexpected token at top level.
     if (!docs.empty()) {
       // If docs exist but no decl follows, keep going.
     }
     error_at(cur(), "unexpected token at top-level");
     advance();
+    synchronize_to_stmt();
   }
 
   prog->decls = ast_.copy_to_arena(decls);
@@ -324,7 +529,8 @@ ImportDecl * Parser::parse_import_decl(const std::vector<std::string_view> & /*d
   const Token & path_tok = cur();
   if (!expect(TokenKind::StringLiteral, "string literal import path")) {
     synchronize_to_stmt();
-    return ast_.create<ImportDecl>(ast_.intern(""), SourceRange(path_tok.begin(), path_tok.end()));
+    return ast_.create<ImportDecl>(
+      ast_.intern(""), SourceRange(file_id_, path_tok.begin(), path_tok.end()));
   }
 
   const std::string unescaped = unescape_string(path_tok.text, path_tok);
@@ -489,9 +695,13 @@ BehaviorAttr * Parser::parse_behavior_attr_opt()
   return a;
 }
 
-ExternDecl * Parser::parse_extern_decl(const std::vector<std::string_view> & docs)
+ExternDecl * Parser::parse_extern_decl(
+  const std::vector<std::string_view> & docs, BehaviorAttr * pre_attr)
 {
-  BehaviorAttr * attr = parse_behavior_attr_opt();
+  BehaviorAttr * attr = pre_attr;
+  if (attr == nullptr) {
+    attr = parse_behavior_attr_opt();
+  }
 
   const Token & kw = cur();
   expect(TokenKind::Identifier, "extern");
@@ -567,25 +777,60 @@ TreeDecl * Parser::parse_tree_decl(const std::vector<std::string_view> & docs)
     ast_.create<TreeDecl>(ast_.intern(name_tok.text), join_ranges(kw.range, name_tok.range));
   t->docs = ast_.copy_to_arena(docs);
 
-  expect(TokenKind::LParen, "'(' after tree name");
-  std::vector<ParamDecl *> params;
-  if (!at(TokenKind::RParen)) {
-    while (true) {
-      params.push_back(parse_param_decl());
-      if (match(TokenKind::Comma)) {
-        if (at(TokenKind::RParen)) break;
-        continue;
+  // Tree parameter list is mandatory, but we can recover nicely when it's missing.
+  // Example: `tree Main { ... }` -> suggest `tree Main() { ... }` and continue.
+  const bool has_parens = match(TokenKind::LParen);
+  if (!has_parens) {
+    if (at(TokenKind::LBrace)) {
+      error_at(cur(), "tree parameters '()' are required after the tree name");
+      diags_.report_hint(cur().range, "Write: tree Main() { ... }");
+      // Treat as empty parameter list and continue.
+    } else {
+      expect(TokenKind::LParen, "'(' after tree name");
+      // Try to recover to '{' to avoid cascading errors.
+      while (!at_eof() && !at(TokenKind::LBrace) && !at(TokenKind::Semicolon)) {
+        // If we see a clear new top-level decl start, stop.
+        if (
+          is_kw("import", cur()) || is_kw("extern", cur()) || is_kw("type", cur()) ||
+          is_kw("var", cur()) || is_kw("const", cur()) || is_kw("tree", cur())) {
+          break;
+        }
+        advance();
       }
-      break;
     }
   }
-  expect(TokenKind::RParen, "')' after tree params");
+  std::vector<ParamDecl *> params;
+  if (has_parens) {
+    if (!at(TokenKind::RParen)) {
+      while (true) {
+        params.push_back(parse_param_decl());
+        if (match(TokenKind::Comma)) {
+          if (at(TokenKind::RParen)) break;
+          continue;
+        }
+        break;
+      }
+    }
+    expect(TokenKind::RParen, "')' after tree params");
+  }
 
   expect(TokenKind::LBrace, "'{' to start tree body");
 
   // Body
   std::vector<Stmt *> body;
   while (!at_eof() && !at(TokenKind::RBrace)) {
+    // Check for top-level keyword recovery (missing '}')
+    const Token & tok = cur();
+    if (
+      is_kw("tree", tok) || is_kw("import", tok) || is_kw("extern", tok) || is_kw("type", tok) ||
+      (is_kw("const", tok) && is_kw("var", cur(2)))) {  // heuristic mostly for pure top-level
+      // Just check the definitive top-level ones.
+      // const and var are valid in bodies, so don't recover on them easily unless we are sure.
+    }
+    if (is_kw("tree", tok) || is_kw("import", tok) || is_kw("extern", tok) || is_kw("type", tok)) {
+      break;
+    }
+
     Stmt * st = parse_stmt();
     if (st != nullptr) {
       body.push_back(st);
@@ -605,6 +850,18 @@ Stmt * Parser::parse_stmt()
 {
   const auto docs = collect_line_docs();
   const auto preconds = collect_preconditions();
+
+  // More helpful messages for common unsupported keywords used as statement starters.
+  if (cur().kind == TokenKind::Identifier && is_common_unsupported_keyword(cur().text)) {
+    const Token & t = cur();
+    const std::string hint = unsupported_keyword_hint(t.text, /*top_level=*/false);
+    diags_.report_error(t.range, unsupported_keyword_message(t.text, /*top_level=*/false))
+      .with_help(hint);
+    advance();
+    // Use block-aware recovery to skip any associated {} block.
+    synchronize_skip_block();
+    return nullptr;
+  }
 
   if (is_kw("var", cur())) {
     return parse_var_stmt(docs, preconds);
@@ -653,6 +910,10 @@ Stmt * Parser::parse_stmt()
   }
 
   error_at(cur(), "expected statement");
+  // Ensure progress before recovery to avoid repeating the same error.
+  if (!at_eof()) {
+    advance();
+  }
   synchronize_to_stmt();
   return nullptr;
 }
@@ -782,7 +1043,7 @@ NodeStmt * Parser::parse_node_stmt(
         break;
       }
     }
-    expect(TokenKind::RParen, "')' after args");
+    expect(TokenKind::RParen, "')' after args", RecoverySet::Argument);
   }
 
   st->args = ast_.copy_to_arena(args);
@@ -793,6 +1054,13 @@ NodeStmt * Parser::parse_node_stmt(
 
     std::vector<Stmt *> children;
     while (!at_eof() && !at(TokenKind::RBrace)) {
+      // Check for top-level keyword recovery (missing '}')
+      const Token & t = cur();
+      if (is_kw("tree", t) || is_kw("import", t) || is_kw("extern", t) || is_kw("type", t)) {
+        error_at(t, "expected '}' to end children block");
+        break;
+      }
+
       Stmt * child = parse_stmt();
       if (child) {
         children.push_back(child);
@@ -1266,7 +1534,15 @@ Expr * Parser::parse_primary()
   }
 
   error_at(t, "expected expression");
-  advance();
+
+  // Improved recovery: if we see a likely synchronization token,
+  // do NOT consume it. This prevents cascading errors where the
+  // statement terminator (;) or block closer (}) is eaten by the expression parser.
+  if (
+    t.kind != TokenKind::Semicolon && t.kind != TokenKind::RBrace && t.kind != TokenKind::RParen) {
+    advance();
+  }
+
   return ast_.create<MissingExpr>(t.range);
 }
 

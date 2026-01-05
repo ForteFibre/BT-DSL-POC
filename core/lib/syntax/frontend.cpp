@@ -7,12 +7,21 @@
 namespace bt_dsl
 {
 
-std::unique_ptr<ParsedUnit> parse_source(std::string source_text)
+ParseOutput parse_source(
+  SourceRegistry & sources, const std::filesystem::path & path, std::string source_text,
+  AstContext & ast, DiagnosticBag & diags)
 {
-  auto unit = std::make_unique<ParsedUnit>();
-  unit->source = SourceManager(std::move(source_text));
+  ParseOutput out;
+  out.file_id = sources.register_file(path, "");
+  sources.update_content(out.file_id, std::move(source_text));
+  const SourceFile * source = sources.get_file(out.file_id);
+  if (!source) {
+    diags.report_error(
+      SourceRange{out.file_id, 0, 0}, "internal error: failed to register source file");
+    return out;
+  }
 
-  bt_dsl::syntax::Lexer lex(unit->source.get_source());
+  bt_dsl::syntax::Lexer lex(out.file_id, source->content());
   auto tokens = lex.lex_all();
 
   // The lexer can emit non-doc comment tokens so tools (e.g. formatter) can
@@ -26,9 +35,9 @@ std::unique_ptr<ParsedUnit> parse_source(std::string source_text)
     parser_tokens.push_back(t);
   }
 
-  bt_dsl::syntax::Parser parser(unit->ast, unit->source, unit->diags, std::move(parser_tokens));
-  unit->program = parser.parse_program();
-  return unit;
+  bt_dsl::syntax::Parser parser(ast, out.file_id, *source, diags, std::move(parser_tokens));
+  out.program = parser.parse_program();
+  return out;
 }
 
 }  // namespace bt_dsl

@@ -5,6 +5,7 @@
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/basic/casting.hpp"
 #include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 static bt_dsl::BlackboardDeclStmt * first_var_decl(gsl::span<bt_dsl::Stmt *> body)
 {
@@ -39,11 +40,10 @@ TEST(AstExpressions, BinaryExpression)
     "  Sequence {}\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::TreeDecl * t = unit->program->trees()[0];
+  bt_dsl::TreeDecl * t = unit.program->trees()[0];
   ASSERT_GE(t->body.size(), 2U);
 
   auto * decl = first_var_decl(t->body);
@@ -73,11 +73,10 @@ TEST(AstExpressions, UnaryExpression)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * seq = find_node_stmt(unit->program->trees()[0]->body, "Sequence");
+  bt_dsl::NodeStmt * seq = find_node_stmt(unit.program->trees()[0]->body, "Sequence");
   ASSERT_NE(seq, nullptr);
   ASSERT_FALSE(seq->children.empty());
 
@@ -102,11 +101,10 @@ TEST(AstExpressions, ComparisonExpression)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::NodeStmt * seq = find_node_stmt(unit->program->trees()[0]->body, "Sequence");
+  bt_dsl::NodeStmt * seq = find_node_stmt(unit.program->trees()[0]->body, "Sequence");
   ASSERT_NE(seq, nullptr);
 
   auto * assign = bt_dsl::dyn_cast<bt_dsl::AssignmentStmt>(seq->children[0]);
@@ -141,9 +139,8 @@ TEST(AstExpressions, RejectChainedComparison)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  EXPECT_FALSE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  EXPECT_FALSE(unit.diags.empty());
 }
 
 // ============================================================================
@@ -159,9 +156,8 @@ TEST(AstExpressions, RejectChainedEquality)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  EXPECT_FALSE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  EXPECT_FALSE(unit.diags.empty());
 }
 
 // ============================================================================
@@ -174,11 +170,10 @@ TEST(AstExpressions, IndexExpression)
     "  Action(x: arr[0]);\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  auto * tree = unit->program->trees()[0];
+  auto * tree = unit.program->trees()[0];
   auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(tree->body[0]);
   ASSERT_NE(node, nullptr);
   ASSERT_EQ(node->args.size(), 1U);
@@ -199,11 +194,10 @@ TEST(AstExpressions, CastExpression)
     "  Action(x: 1 as int32);\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  auto * tree = unit->program->trees()[0];
+  auto * tree = unit.program->trees()[0];
   auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(tree->body[0]);
   ASSERT_NE(node, nullptr);
 
@@ -223,11 +217,10 @@ TEST(AstExpressions, NegativeNumber)
     "  Action(x: -42);\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  auto * tree = unit->program->trees()[0];
+  auto * tree = unit.program->trees()[0];
   auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(tree->body[0]);
   ASSERT_NE(node, nullptr);
 

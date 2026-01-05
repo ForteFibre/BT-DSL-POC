@@ -14,11 +14,30 @@
 namespace bt_dsl::syntax
 {
 
+enum class RecoverySet : uint32_t {
+  None = 0,
+  Statement = 1 << 0,  // ;
+  Block = 1 << 1,      // } or ;
+  Argument = 1 << 2,   // ) or ; or {
+};
+
+inline RecoverySet operator|(RecoverySet a, RecoverySet b)
+{
+  return static_cast<RecoverySet>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+}
+
+inline bool operator&(RecoverySet a, RecoverySet b)
+{
+  return (static_cast<uint32_t>(a) & static_cast<uint32_t>(b)) != 0;
+}
+
 class Parser
 {
 public:
-  Parser(AstContext & ast, SourceManager & source, DiagnosticBag & diags, std::vector<Token> tokens)
-  : ast_(ast), source_(source), diags_(diags), tokens_(std::move(tokens))
+  Parser(
+    AstContext & ast, FileId file_id, const SourceFile & source, DiagnosticBag & diags,
+    std::vector<Token> tokens)
+  : ast_(ast), file_id_(file_id), source_(source), diags_(diags), tokens_(std::move(tokens))
   {
   }
 
@@ -32,10 +51,11 @@ private:
 
   const Token & advance();
   bool match(TokenKind k);
-  bool expect(TokenKind k, std::string_view what);
+  bool expect(TokenKind k, std::string_view what, RecoverySet recovery = RecoverySet::None);
 
   void error_at(const Token & t, std::string_view msg);
   void synchronize_to_stmt();
+  void synchronize_skip_block();  // Skip balanced {} block during error recovery
 
   // Small scanners
   [[nodiscard]] static bool is_kw(std::string_view kw, const Token & t);
@@ -55,7 +75,8 @@ private:
   [[nodiscard]] GlobalVarDecl * parse_global_var_decl(const std::vector<std::string_view> & docs);
   [[nodiscard]] GlobalConstDecl * parse_global_const_decl(
     const std::vector<std::string_view> & docs);
-  [[nodiscard]] ExternDecl * parse_extern_decl(const std::vector<std::string_view> & docs);
+  [[nodiscard]] ExternDecl * parse_extern_decl(
+    const std::vector<std::string_view> & docs, BehaviorAttr * pre_attr = nullptr);
   [[nodiscard]] BehaviorAttr * parse_behavior_attr_opt();
   [[nodiscard]] TreeDecl * parse_tree_decl(const std::vector<std::string_view> & docs);
 
@@ -102,7 +123,8 @@ private:
   [[nodiscard]] std::string unescape_string(std::string_view raw, const Token & tok_for_diag);
 
   AstContext & ast_;
-  SourceManager & source_;
+  FileId file_id_;
+  const SourceFile & source_;
   DiagnosticBag & diags_;
   std::vector<Token> tokens_;
   size_t idx_ = 0;

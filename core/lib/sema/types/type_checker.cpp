@@ -20,6 +20,12 @@ namespace bt_dsl
 namespace
 {
 
+[[nodiscard]] constexpr PortDirection port_direction_or_default(
+  const std::optional<PortDirection> & dir) noexcept
+{
+  return dir.value_or(PortDirection::In);
+}
+
 [[nodiscard]] bool contains_unknown(const Type * t) noexcept
 {
   if (!t) return true;
@@ -233,7 +239,7 @@ void warn_unused_write_params(const TreeDecl * tree, DiagnosticBag * diags)
   for (const auto * param : tree->params) {
     if (!param) continue;
     if (writable.count(param) && !used.count(param)) {
-      diags->warning(
+      diags->report_warning(
         param->get_range(), std::string("Parameter '") + std::string(param->name) +
                               "' is declared as mut/out but never used for write access");
     }
@@ -664,7 +670,9 @@ const Type * TypeChecker::infer_binary_expr(BinaryExpr * node, const Type * /*ex
       }
       const Type * common = common_numeric_type(types_, lhs_type, rhs_type);
       if (!common) {
-        report_error(node->get_range(), "incompatible operand types for arithmetic operation");
+        report_error(
+          node->get_range(), std::string("incompatible operand types for arithmetic operation: '") +
+                               to_string(lhs_type) + "' and '" + to_string(rhs_type) + "'");
         return types_.error_type();
       }
       return common;
@@ -1028,6 +1036,7 @@ void TypeChecker::check_node_stmt(NodeStmt * node)
     }
 
     // Spec 6.4.2: direction consistency (reference matrix).
+    bool dir_mismatch_error = false;
     if (has_signature) {
       const DirDiagKind m = check_dir_matrix(arg_dir, port_dir);
       if (m == DirDiagKind::Error) {
@@ -1035,15 +1044,23 @@ void TypeChecker::check_node_stmt(NodeStmt * node)
           arg->get_range(), std::string("Direction mismatch: port '") + std::string(arg->name) +
                               "' is '" + std::string(to_string(port_dir)) + "' but argument is '" +
                               std::string(to_string(arg_dir)) + "'.");
+        dir_mismatch_error = true;
       } else if (m == DirDiagKind::Warning) {
         if (diags_) {
-          diags_->warning(
+          diags_->report_warning(
             arg->get_range(), std::string("Direction is more permissive than required: port '") +
                                 std::string(arg->name) + "' is '" +
                                 std::string(to_string(port_dir)) + "' but argument is '" +
                                 std::string(to_string(arg_dir)) + "'.");
         }
       }
+    }
+
+    if (dir_mismatch_error) {
+      // Direction issues are typically the primary root-cause; avoid piling on type mismatch
+      // noise for the same argument.
+      check_expr(arg->valueExpr);
+      continue;
     }
 
     // Spec 6.4.1: use the port signature type as expected type where meaningful.
@@ -1055,8 +1072,9 @@ void TypeChecker::check_node_stmt(NodeStmt * node)
         const Type * expr_type = check_expr_with_expected(arg->valueExpr, expected_type);
         if (!is_assignable_for_port_check(expected_type, expr_type)) {
           report_error(
-            arg->get_range(), std::string("Type mismatch: port '") + std::string(arg->name) +
-                                "' expects a value assignable to the declared port type");
+            arg->get_range(), std::string("Type mismatch: cannot assign '") + to_string(expr_type) +
+                                "' to port '" + std::string(arg->name) + "' of type '" +
+                                to_string(expected_type) + "'");
         }
       } else {
         // For out/ref/mut, the signature can constrain the lvalue variable type.
@@ -1093,15 +1111,73 @@ void TypeChecker::check_node_stmt(NodeStmt * node)
           }
           if (!ok) {
             report_error(
-              arg->get_range(), std::string("Type mismatch: argument for port '") +
-                                  std::string(arg->name) +
-                                  "' is incompatible with the declared port type");
+              arg->get_range(), std::string("Type mismatch: argument of type '") +
+                                  to_string(lv_type) + "' is incompatible with port '" +
+                                  std::string(arg->name) + "' of type '" +
+                                  to_string(expected_type) + "'");
           }
         }
       }
     } else {
       // No signature/type: still type-check the expression.
       check_expr(arg->valueExpr);
+    }
+  }
+
+  // Check for missing required ports/parameters
+  if (node->resolvedNode && node->resolvedNode->decl) {
+    const AstNode * decl = node->resolvedNode->decl;
+
+    // Gather provided argument names
+    std::unordered_set<std::string_view> provided_args;
+    provided_args.reserve(node->args.size());
+    for (const auto * arg : node->args) {
+      if (arg) provided_args.insert(arg->name);
+    }
+
+    auto check_missing = [&](
+                           std::string_view p_name, PortDirection dir, const Expr * default_val,
+                           std::string_view kind) {
+      if (provided_args.find(p_name) != provided_args.end()) {
+        return;
+      }
+
+      // Spec 6.4.5 (Argument omission rules)
+      // - in: optional iff it has a default
+      // - out: always optional (result discarded)
+      // - ref/mut: always required
+      const bool required = [&]() {
+        switch (dir) {
+          case PortDirection::In:
+            return default_val == nullptr;
+          case PortDirection::Out:
+            return false;
+          case PortDirection::Ref:
+          case PortDirection::Mut:
+            return true;
+        }
+        return true;
+      }();
+
+      if (required) {
+        report_error(
+          node->get_range(),
+          std::string("missing required ") + std::string(kind) + " '" + std::string(p_name) + "'");
+      }
+    };
+
+    if (const auto * ext = dyn_cast<ExternDecl>(decl)) {
+      for (const auto * p : ext->ports) {
+        if (!p) continue;
+        const PortDirection dir = port_direction_or_default(p->direction);
+        check_missing(p->name, dir, p->defaultValue, "port");
+      }
+    } else if (const auto * tree = dyn_cast<TreeDecl>(decl)) {
+      for (const auto * p : tree->params) {
+        if (!p) continue;
+        const PortDirection dir = port_direction_or_default(p->direction);
+        check_missing(p->name, dir, p->defaultValue, "parameter");
+      }
     }
   }
 
@@ -1171,7 +1247,9 @@ void TypeChecker::check_assignment_stmt(AssignmentStmt * node)
   // Verify assignment compatibility
   if (target_type && value_type && !is_assignable(target_type, value_type)) {
     const SourceRange rhs_range = node->value ? node->value->get_range() : node->get_range();
-    report_error(rhs_range, "type mismatch in assignment");
+    report_error(
+      rhs_range, std::string("type mismatch in assignment: cannot assign '") +
+                   to_string(value_type) + "' to '" + to_string(target_type) + "'");
   }
 }
 
@@ -1199,7 +1277,10 @@ void TypeChecker::check_blackboard_decl_stmt(BlackboardDeclStmt * node)
     }
 
     if (declared_type && !declared_is_infer && !is_assignable(declared_type, init_type)) {
-      report_error(node->initialValue->get_range(), "initializer type mismatch");
+      report_error(
+        node->initialValue->get_range(),
+        std::string("initializer type mismatch: cannot initialize '") + to_string(declared_type) +
+          "' with '" + to_string(init_type) + "'");
     }
 
     // var inference: no declared type or wildcard declared type.
@@ -1234,7 +1315,10 @@ void TypeChecker::check_const_decl_stmt(ConstDeclStmt * node)
   }
 
   if (declared_type && !is_assignable(declared_type, value_type)) {
-    report_error(node->value->get_range(), "const initializer type mismatch");
+    report_error(
+      node->value->get_range(),
+      std::string("const initializer type mismatch: cannot initialize '") +
+        to_string(declared_type) + "' with '" + to_string(value_type) + "'");
   }
 }
 
@@ -1297,7 +1381,10 @@ void TypeChecker::check_global_var_decl(GlobalVarDecl * decl)
         report_error(decl->initialValue->get_range(), "initializer type mismatch");
       }
     } else if (declared_type && !is_assignable(declared_type, init_type)) {
-      report_error(decl->initialValue->get_range(), "initializer type mismatch");
+      report_error(
+        decl->initialValue->get_range(),
+        std::string("initializer type mismatch: cannot initialize '") + to_string(declared_type) +
+          "' with '" + to_string(init_type) + "'");
     }
   }
 }
@@ -1317,7 +1404,10 @@ void TypeChecker::check_global_const_decl(GlobalConstDecl * decl)
   }
 
   if (declared_type && !is_assignable(declared_type, value_type)) {
-    report_error(decl->value->get_range(), "const initializer type mismatch");
+    report_error(
+      decl->value->get_range(),
+      std::string("const initializer type mismatch: cannot initialize '") +
+        to_string(declared_type) + "' with '" + to_string(value_type) + "'");
   }
 }
 
@@ -1427,11 +1517,21 @@ const Type * TypeChecker::resolve_type(const TypeNode * node)
               return types_.error_type();
             }
 
-            for (const auto * in_stack : alias_stack) {
-              if (in_stack == alias_decl) {
-                report_error(primary->get_range(), "circular type alias is not allowed");
-                return types_.error_type();
+            // Detect and report alias cycles once with a helpful chain: A -> B -> A.
+            for (size_t i = 0; i < alias_stack.size(); ++i) {
+              if (alias_stack[i] != alias_decl) continue;
+
+              const TypeAliasDecl * anchor = alias_stack[i];
+              if (reported_alias_cycles_.insert(anchor).second) {
+                std::string msg = "circular type alias is not allowed: ";
+                for (size_t j = i; j < alias_stack.size(); ++j) {
+                  msg += std::string(alias_stack[j]->name);
+                  msg += " -> ";
+                }
+                msg += std::string(alias_decl->name);
+                report_error(primary->get_range(), msg);
               }
+              return types_.error_type();
             }
 
             alias_stack.push_back(alias_decl);
@@ -1522,7 +1622,12 @@ void TypeChecker::unify_infer_vars(const Symbol * a, const Symbol * b, SourceRan
 
   const Type * merged = unify_inference_types(types_, ta, tb);
   if (!merged || merged->is_error()) {
-    report_error(where, "conflicting type constraints");
+    const bool suppress = (ta && ta->is_error()) || (tb && tb->is_error());
+    if (!suppress) {
+      report_error(
+        where, std::string("conflicting type constraints: cannot unify '") + to_string(ta) +
+                 "' with '" + to_string(tb) + "'");
+    }
     merged = types_.error_type();
   }
 
@@ -1636,7 +1741,13 @@ void TypeChecker::constrain_var_type(
   const Type * merged = unify_inference_types(types_, current, normalized);
 
   if (!merged || merged->is_error()) {
-    report_error(where, "conflicting type constraints");
+    const bool suppress =
+      (current && current->is_error()) || (normalized && normalized->is_error());
+    if (!suppress) {
+      report_error(
+        where, std::string("conflicting type constraints: cannot unify '") + to_string(current) +
+                 "' with '" + to_string(normalized) + "'");
+    }
     merged = types_.error_type();
   }
 
@@ -1752,7 +1863,7 @@ void TypeChecker::report_error(SourceRange range, std::string_view message)
   ++error_count_;
 
   if (diags_) {
-    diags_->error(range, message);
+    diags_->report_error(range, std::string(message));
   }
 }
 

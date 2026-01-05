@@ -14,7 +14,7 @@
 #include "bt_dsl/sema/types/type.hpp"
 #include "bt_dsl/sema/types/type_checker.hpp"
 #include "bt_dsl/sema/types/type_table.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -34,24 +34,24 @@ static void expect_not_contains(const std::string & haystack, const std::string 
 
 struct SingleModulePipeline
 {
-  std::unique_ptr<ParsedUnit> unit;
   ModuleInfo module;
   TypeContext types;
   DiagnosticBag diags;
 
   bool parse(const std::string & src)
   {
-    unit = parse_source(src);
-    if (!unit) {
-      return false;
-    }
-    if (!unit->diags.empty()) {
-      diags = unit->diags;
+    auto parsed = bt_dsl::test_support::parse(src);
+    if (!parsed.diags.empty()) {
+      diags = parsed.diags;
       return false;
     }
 
-    module.program = unit->program;
-    module.parsedUnit = std::move(unit);
+    module = ModuleInfo{};
+    module.file_id = parsed.file_id;
+    module.ast = std::move(parsed.ast);
+    module.parse_diags = std::move(parsed.diags);
+    module.program = parsed.program;
+
     module.types.register_builtins();
     module.values.build_from_program(*module.program);
 
@@ -91,7 +91,10 @@ struct SingleModulePipeline
       return false;
     }
 
-    ConstEvaluator eval(module.parsedUnit->ast, types, module.values, &diags);
+    if (!module.ast) {
+      return false;
+    }
+    ConstEvaluator eval(*module.ast, types, module.values, &diags);
     if (!eval.evaluate_program(*module.program)) {
       return false;
     }
@@ -520,7 +523,8 @@ TEST(CodegenXmlGenerator, ManglesImportedTreeIdsAndSubtreeReferences)
   for (ModuleInfo * m : graph.get_all_modules()) {
     NameResolver nr(*m, &diags);
     ASSERT_TRUE(nr.resolve());
-    ConstEvaluator ce(m->parsedUnit->ast, types, m->values, &diags);
+    ASSERT_NE(m->ast, nullptr);
+    ConstEvaluator ce(*m->ast, types, m->values, &diags);
     ASSERT_TRUE(ce.evaluate_program(*m->program));
     TypeChecker tc(types, m->types, m->values, &diags);
     ASSERT_TRUE(tc.check(*m->program));

@@ -15,7 +15,7 @@
 #include "bt_dsl/basic/casting.hpp"
 #include "bt_dsl/sema/resolution/name_resolver.hpp"
 #include "bt_dsl/sema/resolution/symbol_table_builder.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -23,13 +23,13 @@ using namespace bt_dsl;
 // Test Helper
 // ============================================================================
 
-static ModuleInfo create_test_module(ParsedUnit & unit)
+static ModuleInfo create_test_module(Program & program)
 {
   ModuleInfo module;
-  module.program = unit.program;
+  module.program = &program;
   module.types.register_builtins();
 
-  for (const auto * ext_type : unit.program->extern_types()) {
+  for (const auto * ext_type : program.extern_types()) {
     TypeSymbol sym;
     sym.name = ext_type->name;
     sym.decl = ext_type;
@@ -37,23 +37,23 @@ static ModuleInfo create_test_module(ParsedUnit & unit)
     module.types.define(sym);
   }
 
-  for (const auto * ext : unit.program->externs()) {
+  for (const auto * ext : program.externs()) {
     NodeSymbol sym;
     sym.name = ext->name;
     sym.decl = ext;
     module.nodes.define(sym);
   }
-  for (const auto * tree : unit.program->trees()) {
+  for (const auto * tree : program.trees()) {
     NodeSymbol sym;
     sym.name = tree->name;
     sym.decl = tree;
     module.nodes.define(sym);
   }
 
-  module.values.build_from_program(*unit.program);
+  module.values.build_from_program(program);
 
   SymbolTableBuilder builder(module.values, module.types, module.nodes);
-  builder.build(*unit.program);
+  builder.build(program);
 
   return module;
 }
@@ -67,14 +67,13 @@ TEST(SemaNameResolver, ResolveBuiltinType)
   const std::string src = R"(
     var x: int = 42;
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  ASSERT_FALSE(unit.diags.has_errors());
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
   ASSERT_EQ(program->global_vars().size(), 1U);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -98,15 +97,14 @@ TEST(SemaNameResolver, ResolveExternType)
     extern type Pose;
     var pos: Pose;
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  ASSERT_FALSE(unit.diags.has_errors());
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
   ASSERT_EQ(program->extern_types().size(), 1U);
   ASSERT_EQ(program->global_vars().size(), 1U);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -133,15 +131,14 @@ TEST(SemaNameResolver, ResolveExternNode)
       Say(message: "hello");
     }
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  ASSERT_FALSE(unit.diags.has_errors());
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
   ASSERT_EQ(program->externs().size(), 1U);
   ASSERT_EQ(program->trees().size(), 1U);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -165,14 +162,13 @@ TEST(SemaNameResolver, ResolveTreeCall)
       Helper();
     }
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  ASSERT_FALSE(unit.diags.has_errors());
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
   ASSERT_EQ(program->trees().size(), 2U);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -200,15 +196,14 @@ TEST(SemaNameResolver, ResolveGlobalVar)
       counter = 1;
     }
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  ASSERT_FALSE(unit.diags.has_errors());
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
   ASSERT_EQ(program->global_vars().size(), 1U);
   ASSERT_EQ(program->trees().size(), 1U);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -232,14 +227,13 @@ TEST(SemaNameResolver, ResolveParameter)
       Log(value: x);
     }
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  ASSERT_FALSE(unit.diags.has_errors());
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
   ASSERT_EQ(program->trees().size(), 1U);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -269,12 +263,11 @@ TEST(SemaNameResolver, ErrorUndeclaredType)
   const std::string src = R"(
     var x: UnknownType = 0;
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -290,12 +283,11 @@ TEST(SemaNameResolver, ErrorUndeclaredNode)
       UnknownNode();
     }
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -312,12 +304,11 @@ TEST(SemaNameResolver, ErrorUndeclaredVariable)
       Log(value: unknownVar);
     }
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -332,9 +323,8 @@ TEST(SemaNameResolver, ErrorDuplicateTree)
     tree Foo() {}
     tree Foo() {}
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
   ASSERT_EQ(program->trees().size(), 2U);
 
@@ -363,12 +353,11 @@ TEST(SemaNameResolver, DiagnosticBagCollectsErrors)
   const std::string src = R"(
     var x: UnknownType = 0;
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   DiagnosticBag diags;
   NameResolver resolver(module, &diags);
@@ -405,13 +394,12 @@ TEST(SemaNameResolver, BlockScopeIsolation)
       }
     }
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  ASSERT_FALSE(unit.diags.has_errors());
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -433,13 +421,12 @@ TEST(SemaNameResolver, InlineBlackboardDecl)
       }
     }
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  ASSERT_FALSE(unit.diags.has_errors());
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
 
-  ModuleInfo module = create_test_module(*unit);
+  ModuleInfo module = create_test_module(*program);
 
   NameResolver resolver(module);
   const bool ok = resolver.resolve();
@@ -472,9 +459,8 @@ TEST(SemaNameResolver, ErrorShadowingInBlock)
       }
     }
   )";
-  auto unit = parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  Program * program = unit->program;
+  const auto unit = test_support::parse(src);
+  Program * program = unit.program;
   ASSERT_NE(program, nullptr);
 
   // Shadowing is detected by SymbolTableBuilder, not NameResolver

@@ -16,7 +16,7 @@
 #include "bt_dsl/sema/resolution/symbol_table.hpp"
 #include "bt_dsl/sema/resolution/symbol_table_builder.hpp"
 #include "bt_dsl/sema/types/type_table.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -30,26 +30,27 @@ static bool check_null_safety(const std::string & src, DiagnosticBag & diags)
 {
   const bool debug = test_debug_enabled();
 
-  ModuleInfo module;
-  module.parsedUnit = parse_source(src);
-  if (module.parsedUnit == nullptr || !module.parsedUnit->diags.empty()) {
-    if (module.parsedUnit != nullptr) {
-      diags.merge(module.parsedUnit->diags);
-      if (debug) {
-        std::cout << "DEBUG: Parser failed. Diags=" << diags.size() << "\n";
-        for (const auto & d : diags.all()) {
-          std::cerr << "Diagnostic: " << d.message << "\n";
-        }
+  auto parsed = test_support::parse(src);
+  if (parsed.program == nullptr || parsed.diags.has_errors()) {
+    diags.merge(parsed.diags);
+    if (debug) {
+      std::cout << "DEBUG: Parser failed. Diags=" << diags.size() << "\n";
+      for (const auto & d : diags.all()) {
+        std::cerr << "Diagnostic: " << d.message << "\n";
       }
     }
     return false;
   }
 
-  Program * program = module.parsedUnit->program;
+  Program * program = parsed.program;
   if (program == nullptr) {
     return false;
   }
 
+  ModuleInfo module;
+  module.file_id = parsed.file_id;
+  module.ast = std::move(parsed.ast);
+  module.parse_diags = std::move(parsed.diags);
   module.program = program;
 
   // Set up symbol tables
@@ -125,14 +126,12 @@ static bool check_null_safety(const std::string & src, DiagnosticBag & diags)
     std::cout << "DIAGNOSTICS DUMP START\n" << std::flush;
     for (const auto & d : diags.all()) {
       std::string_view code;
-      if (d.range.is_valid()) {
-        // Safeguard against out of bounds
-        if (d.range.get_end().get_offset() <= module.parsedUnit->source.size()) {
-          code = module.parsedUnit->source.get_source_slice(d.range);
-        }
+      const auto r = d.primary_range();
+      if (r.is_valid()) {
+        code = parsed.sources.get_slice(r);
       }
-      std::cout << "Diagnostic: [" << d.message << "] Range: " << d.range.get_begin().get_offset()
-                << "-" << d.range.get_end().get_offset() << " Code: [" << code << "]\n"
+      std::cout << "Diagnostic: [" << d.message << "] Range: " << r.get_begin().get_offset() << "-"
+                << r.get_end().get_offset() << " Code: [" << code << "]\n"
                 << std::flush;
     }
     std::cout << "DIAGNOSTICS DUMP END\n" << std::flush;
@@ -179,7 +178,7 @@ TEST(SemaNullCheckerV2, NullAssignmentError)
   const std::string src = R"(
     extern action Use(value: string);
     tree Main() {
-      var x: string = null;
+      var x = null;
       Use(value: x);
     }
   )";

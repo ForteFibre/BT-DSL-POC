@@ -5,7 +5,7 @@
 
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/basic/casting.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 // ============================================================================
 // Test: ParseSoldierAILike
@@ -42,11 +42,10 @@ TEST(AstComplexExamples, SoldierAI)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::Program * p = unit->program;
+  bt_dsl::Program * p = unit.program;
   ASSERT_NE(p, nullptr);
 
   // Inner docs
@@ -91,11 +90,10 @@ TEST(AstComplexExamples, SourceRangesArePopulated)
     "  Action();\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  bt_dsl::Program * p = unit->program;
+  bt_dsl::Program * p = unit.program;
   ASSERT_NE(p, nullptr);
 
   // Check source ranges are populated
@@ -126,11 +124,10 @@ TEST(AstComplexExamples, ComplexExpressionsInArgs)
     "  );\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  auto * tree = unit->program->trees()[0];
+  auto * tree = unit.program->trees()[0];
   auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(tree->body[0]);
   ASSERT_NE(node, nullptr);
   ASSERT_EQ(node->args.size(), 3U);
@@ -170,11 +167,10 @@ TEST(AstComplexExamples, AllAssignOps)
     "  }\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
-  ASSERT_TRUE(unit->diags.empty());
+  auto unit = bt_dsl::test_support::parse(src);
+  ASSERT_TRUE(unit.diags.empty());
 
-  auto * tree = unit->program->trees()[0];
+  auto * tree = unit.program->trees()[0];
   bt_dsl::NodeStmt * seq = nullptr;
   for (auto * s : tree->body) {
     if (auto * n = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(s)) {

@@ -5,7 +5,7 @@
 
 #include "bt_dsl/ast/ast.hpp"
 #include "bt_dsl/basic/casting.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 static const bt_dsl::TreeDecl * first_tree(const bt_dsl::Program * p)
 {
@@ -29,17 +29,16 @@ TEST(AstParser, PortedBasic)
     "  FindEnemy();\n"
     "}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
+  auto unit = bt_dsl::test_support::parse(src);
 
-  if (!unit->diags.empty()) {
-    for (const auto & d : unit->diags.all()) {
+  if (!unit.diags.empty()) {
+    for (const auto & d : unit.diags.all()) {
       std::cerr << "diag: " << d.message << "\n";
     }
   }
-  ASSERT_TRUE(unit->diags.empty());
+  ASSERT_TRUE(unit.diags.empty());
 
-  const bt_dsl::Program * p = unit->program;
+  const bt_dsl::Program * p = unit.program;
   ASSERT_NE(p, nullptr);
 
   // Import

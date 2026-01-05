@@ -12,7 +12,7 @@
 #include "bt_dsl/sema/analysis/null_checker.hpp"
 #include "bt_dsl/sema/resolution/name_resolver.hpp"
 #include "bt_dsl/sema/resolution/symbol_table_builder.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 using namespace bt_dsl;
 
@@ -25,13 +25,13 @@ static bool test_debug_enabled() { return std::getenv("BT_DSL_TEST_DEBUG") != nu
 /**
  * Creates a ModuleInfo for a single-file test case.
  */
-static ModuleInfo create_test_module(ParsedUnit & unit, DiagnosticBag * diags = nullptr)
+static ModuleInfo create_test_module(Program & program, DiagnosticBag * diags = nullptr)
 {
   ModuleInfo module;
-  module.program = unit.program;
+  module.program = &program;
   module.types.register_builtins();
 
-  for (const auto * ext_type : unit.program->extern_types()) {
+  for (const auto * ext_type : program.extern_types()) {
     TypeSymbol sym;
     sym.name = ext_type->name;
     sym.decl = ext_type;
@@ -39,23 +39,23 @@ static ModuleInfo create_test_module(ParsedUnit & unit, DiagnosticBag * diags = 
     module.types.define(sym);
   }
 
-  for (const auto * ext : unit.program->externs()) {
+  for (const auto * ext : program.externs()) {
     NodeSymbol sym;
     sym.name = ext->name;
     sym.decl = ext;
     module.nodes.define(sym);
   }
-  for (const auto * tree : unit.program->trees()) {
+  for (const auto * tree : program.trees()) {
     NodeSymbol sym;
     sym.name = tree->name;
     sym.decl = tree;
     module.nodes.define(sym);
   }
 
-  module.values.build_from_program(*unit.program);
+  module.values.build_from_program(program);
 
   SymbolTableBuilder builder(module.values, module.types, module.nodes, diags);
-  builder.build(*unit.program);
+  builder.build(program);
 
   return module;
 }
@@ -64,28 +64,29 @@ static bool check_null_safety(const std::string & src, DiagnosticBag & diags)
 {
   const bool debug = test_debug_enabled();
 
-  auto unit = parse_source(src);
-  if (unit == nullptr || !unit->diags.empty()) {
-    if (unit != nullptr) {
-      diags.merge(unit->diags);
-      if (debug) {
-        std::cout << "DEBUG: Parser failed. Diags=" << diags.size() << "\n";
-        for (const auto & d : diags.all()) {
-          std::cerr << "Diagnostic: " << d.message << "\n";
-        }
+  auto parsed = test_support::parse(src);
+  if (parsed.program == nullptr || parsed.diags.has_errors()) {
+    diags.merge(parsed.diags);
+    if (debug) {
+      std::cout << "DEBUG: Parser failed. Diags=" << diags.size() << "\n";
+      for (const auto & d : diags.all()) {
+        std::cerr << "Diagnostic: " << d.message << "\n";
       }
     }
     return false;
   }
 
-  Program * program = unit->program;
+  Program * program = parsed.program;
   if (program == nullptr) {
     return false;
   }
 
   if (debug) std::cout << "DEBUG: Parser OK\n";
 
-  ModuleInfo module = create_test_module(*unit, &diags);
+  ModuleInfo module = create_test_module(*program, &diags);
+  module.file_id = parsed.file_id;
+  module.ast = std::move(parsed.ast);
+  module.parse_diags = std::move(parsed.diags);
   if (debug) std::cout << "DEBUG: SymbolTableBuilder OK\n";
 
   // Run name resolution
@@ -97,13 +98,12 @@ static bool check_null_safety(const std::string & src, DiagnosticBag & diags)
       std::cout << "DIAGNOSTICS DUMP START (NameResolver)\n" << std::flush;
       for (const auto & d : diags.all()) {
         std::string_view code;
-        if (d.range.is_valid()) {
-          if (d.range.get_end().get_offset() <= unit->source.size()) {
-            code = unit->source.get_source_slice(d.range);
-          }
+        const auto r = d.primary_range();
+        if (r.is_valid()) {
+          code = parsed.sources.get_slice(r);
         }
-        std::cout << "Diagnostic: [" << d.message << "] Range: " << d.range.get_begin().get_offset()
-                  << "-" << d.range.get_end().get_offset() << " Code: [" << code << "]\n"
+        std::cout << "Diagnostic: [" << d.message << "] Range: " << r.get_begin().get_offset()
+                  << "-" << r.get_end().get_offset() << " Code: [" << code << "]\n"
                   << std::flush;
       }
       std::cout << "DIAGNOSTICS DUMP END\n" << std::flush;
@@ -130,14 +130,12 @@ static bool check_null_safety(const std::string & src, DiagnosticBag & diags)
     std::cout << "DIAGNOSTICS DUMP START\n" << std::flush;
     for (const auto & d : diags.all()) {
       std::string_view code;
-      if (d.range.is_valid()) {
-        // Safeguard against out of bounds
-        if (d.range.get_end().get_offset() <= unit->source.size()) {
-          code = unit->source.get_source_slice(d.range);
-        }
+      const auto r = d.primary_range();
+      if (r.is_valid()) {
+        code = parsed.sources.get_slice(r);
       }
-      std::cout << "Diagnostic: [" << d.message << "] Range: " << d.range.get_begin().get_offset()
-                << "-" << d.range.get_end().get_offset() << " Code: [" << code << "]\n"
+      std::cout << "Diagnostic: [" << d.message << "] Range: " << r.get_begin().get_offset() << "-"
+                << r.get_end().get_offset() << " Code: [" << code << "]\n"
                 << std::flush;
     }
     std::cout << "DIAGNOSTICS DUMP END\n" << std::flush;
@@ -169,7 +167,7 @@ TEST(SemaNullChecker, NullAssignmentError)
   const std::string src = R"(
     extern action Use(value: string);
     tree Main() {
-      var x: string = null;
+      var x: string? = null;
       Use(value: x);
     }
   )";
@@ -189,7 +187,7 @@ TEST(SemaNullChecker, GuardPromotion)
     extern condition Guard(cond: bool);
     
     tree Main() {
-      var x: string = null;
+      var x = null;
       @guard(x != null) Use(value: x);
     }
   )";
@@ -206,7 +204,7 @@ TEST(SemaNullChecker, GuardPromotionElse)
   const std::string src = R"(
     extern action Use(value: string);
     tree Main() {
-      var x: string = null;
+      var x = null;
       @guard(x == null) Use(value: x);
     }
   )";
@@ -223,8 +221,8 @@ TEST(SemaNullChecker, GuardPromotionConjunction)
     extern action UseBoth(a: string, b: string);
 
     tree Main() {
-      var x: string = null;
-      var y: string = null;
+      var x: string? = null;
+      var y: string? = null;
 
       @guard(x != null && y != null) UseBoth(a: x, b: y);
     }
@@ -243,7 +241,7 @@ TEST(SemaNullChecker, GuardPromotionNegation)
     extern action Use(value: string);
 
     tree Main() {
-      var x: string = null;
+      var x: string? = null;
       @guard(!(x == null)) Use(value: x);
     }
   )";
@@ -262,8 +260,8 @@ TEST(SemaNullChecker, GuardConservativeNotAnd)
     extern action Use(value: string);
 
     tree Main() {
-      var x: string = null;
-      var y: string = null;
+      var x: string? = null;
+      var y: string? = null;
 
       @guard(!(x != null && y != null)) Use(value: x);
     }

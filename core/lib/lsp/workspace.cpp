@@ -44,7 +44,7 @@ namespace fs = std::filesystem;
 
 bool contains_byte(const bt_dsl::SourceRange & r, uint32_t byte)
 {
-  return r.contains(bt_dsl::SourceLocation(byte));
+  return r.contains(bt_dsl::SourceLocation(r.file_id(), byte));
 }
 
 uint32_t clamp_byte_offset(uint32_t off, size_t text_size)
@@ -171,7 +171,7 @@ bt_dsl::SourceRange narrow_to_identifier(
 
   const uint32_t sb = start + static_cast<uint32_t>(pos);
   const uint32_t eb = sb + static_cast<uint32_t>(ident.size());
-  return {sb, eb};
+  return {decl_range.file_id(), sb, eb};
 }
 
 // -----------------------------
@@ -687,6 +687,8 @@ struct Workspace::Impl
     bt_dsl::DiagnosticBag sema_diags;
   };
 
+  bt_dsl::SourceRegistry sources;
+
   std::unordered_map<std::string, Document> docs;
 
   Document * get_doc(std::string_view uri)
@@ -707,23 +709,24 @@ struct Workspace::Impl
     return &it->second;
   }
 
-  static void ensure_parsed(Document & d)
+  void ensure_parsed(Document & d)
   {
-    if (d.module.parsedUnit) {
+    if (d.module.program != nullptr && d.module.ast) {
       return;
     }
 
-    d.module.parsedUnit = bt_dsl::parse_source(d.text);
+    // Re-parse into a fresh AST context.
+    d.module.ast = std::make_unique<bt_dsl::AstContext>();
+    d.module.parse_diags = bt_dsl::DiagnosticBag{};
 
-    if (auto p = file_uri_to_path(d.uri)) {
-      d.module.parsedUnit->source.set_file_path(*p);
-      d.module.absolutePath = *p;
-    }
-
-    d.module.program = d.module.parsedUnit->program;
+    const fs::path path = file_uri_to_path(d.uri).value_or(fs::path{d.uri});
+    const bt_dsl::ParseOutput out =
+      bt_dsl::parse_source(sources, path, d.text, *d.module.ast, d.module.parse_diags);
+    d.module.file_id = out.file_id;
+    d.module.program = out.program;
   }
 
-  static void ensure_indexed(Document & d)
+  void ensure_indexed(Document & d)
   {
     ensure_parsed(d);
     if (d.indexed) {
@@ -837,7 +840,7 @@ struct Workspace::Impl
     d.analyzed_import_hash = h;
   }
 
-  static std::vector<std::string> direct_import_uris(Document & d, std::string_view stdlib_uri)
+  std::vector<std::string> direct_import_uris(Document & d, std::string_view stdlib_uri)
   {
     std::vector<std::string> out;
     std::unordered_set<std::string> seen;
@@ -907,7 +910,7 @@ struct Workspace::Impl
           item["source"] = "import";
           item["message"] = std::move(msg);
           item["severity"] = "Error";
-          const auto fr = doc->module.parsedUnit->source.get_full_range(imp->get_range());
+          const auto fr = sources.get_full_range(imp->get_range());
           item["range"] = range_to_json(fr);
           out["items"].push_back(std::move(item));
         };
@@ -972,7 +975,7 @@ struct Workspace::Impl
     }
 
     // Parse/build diagnostics
-    for (const auto & d0 : doc->module.parsedUnit->diags.all()) {
+    for (const auto & d0 : doc->module.parse_diags.all()) {
       json item;
       item["source"] = "parser";
       item["message"] = d0.message;
@@ -980,13 +983,13 @@ struct Workspace::Impl
       if (!d0.code.empty()) {
         item["code"] = d0.code;
       }
-      const auto fr = doc->module.parsedUnit->source.get_full_range(d0.range);
+      const auto fr = sources.get_full_range(d0.primary_range());
       item["range"] = range_to_json(fr);
       out["items"].push_back(std::move(item));
     }
 
     const bool has_parse_error = std::any_of(
-      doc->module.parsedUnit->diags.all().begin(), doc->module.parsedUnit->diags.all().end(),
+      doc->module.parse_diags.all().begin(), doc->module.parse_diags.all().end(),
       [](const bt_dsl::Diagnostic & d0) { return d0.severity == bt_dsl::Severity::Error; });
 
     if (!has_parse_error) {
@@ -999,7 +1002,7 @@ struct Workspace::Impl
         if (!d0.code.empty()) {
           item["code"] = d0.code;
         }
-        const auto fr = doc->module.parsedUnit->source.get_full_range(d0.range);
+        const auto fr = sources.get_full_range(d0.primary_range());
         item["range"] = range_to_json(fr);
         out["items"].push_back(std::move(item));
       }
@@ -1107,7 +1110,6 @@ struct Workspace::Impl
       }
 
       const bt_dsl::NodeSymbol * sym = doc->module.nodes.lookup(*ctx.callable_name);
-      const Document * decl_doc = doc;
       if (sym == nullptr) {
         // Prefer URIs explicitly provided by the host; this is more robust than
         // relying on d.module.imports being populated/cached.
@@ -1120,7 +1122,6 @@ struct Workspace::Impl
           const bt_dsl::NodeSymbol * imported = imp_doc->module.nodes.lookup(*ctx.callable_name);
           if (imported != nullptr && bt_dsl::ModuleInfo::is_public(imported->name)) {
             sym = imported;
-            decl_doc = imp_doc;
             break;
           }
         }
@@ -1140,7 +1141,7 @@ struct Workspace::Impl
           if (p->type != nullptr) {
             // TypeExpr's printed name is not trivially available here; fallback to slice.
             const auto tr = p->type->get_range();
-            const auto slice = decl_doc->module.parsedUnit->source.get_source_slice(tr);
+            const auto slice = sources.get_slice(tr);
             ps.type = std::string(slice);
           }
           ports.push_back(std::move(ps));
@@ -1157,7 +1158,7 @@ struct Workspace::Impl
           ps.type = "";
           if (param->type != nullptr) {
             const auto tr = param->type->get_range();
-            ps.type = std::string(decl_doc->module.parsedUnit->source.get_source_slice(tr));
+            ps.type = std::string(sources.get_slice(tr));
           }
           ports.push_back(std::move(ps));
         }
@@ -1323,13 +1324,12 @@ struct Workspace::Impl
       }
 
       out["contents"] = md;
-      out["range"] = range_to_json(doc->module.parsedUnit->source.get_full_range(r));
+      out["range"] = range_to_json(sources.get_full_range(r));
       return out;
     }
 
     if (auto w = word_at(doc->text, byte_offset)) {
       const bt_dsl::NodeSymbol * sym = doc->module.nodes.lookup(*w);
-      const Document * decl_doc = doc;
       if (sym == nullptr) {
         // Prefer URIs explicitly provided by the host.
         for (const auto & imp_uri : imported_uris) {
@@ -1341,7 +1341,6 @@ struct Workspace::Impl
           const bt_dsl::NodeSymbol * imported = imp_doc->module.nodes.lookup(*w);
           if (imported != nullptr && bt_dsl::ModuleInfo::is_public(imported->name)) {
             sym = imported;
-            decl_doc = imp_doc;
             break;
           }
         }
@@ -1360,9 +1359,7 @@ struct Workspace::Impl
               const std::string dir =
                 p->direction ? std::string(bt_dsl::to_string(*p->direction)) : "";
               const std::string ty =
-                p->type ? std::string(decl_doc->module.parsedUnit->source.get_source_slice(
-                            p->type->get_range()))
-                        : "";
+                p->type ? std::string(sources.get_slice(p->type->get_range())) : "";
               md += "\n- `" + format_port(dir, p->name, ty) + "`";
             }
           }
@@ -1375,9 +1372,7 @@ struct Workspace::Impl
               const std::string dir =
                 p->direction ? std::string(bt_dsl::to_string(*p->direction)) : "";
               const std::string ty =
-                p->type ? std::string(decl_doc->module.parsedUnit->source.get_source_slice(
-                            p->type->get_range()))
-                        : "";
+                p->type ? std::string(sources.get_slice(p->type->get_range())) : "";
               md += "\n- `" + format_port(dir, p->name, ty) + "`";
             }
           }
@@ -1385,8 +1380,8 @@ struct Workspace::Impl
 
         out["contents"] = md;
         const auto wr = word_range_at(doc->text, byte_offset);
-        out["range"] = range_to_json(doc->module.parsedUnit->source.get_full_range(
-          bt_dsl::SourceRange(wr.startByte, wr.endByte)));
+        out["range"] = range_to_json(sources.get_full_range(
+          bt_dsl::SourceRange(doc->module.file_id, wr.startByte, wr.endByte)));
         return out;
       }
 
@@ -1413,8 +1408,8 @@ struct Workspace::Impl
 
         out["contents"] = md;
         const auto wr = word_range_at(doc->text, byte_offset);
-        out["range"] = range_to_json(doc->module.parsedUnit->source.get_full_range(
-          bt_dsl::SourceRange(wr.startByte, wr.endByte)));
+        out["range"] = range_to_json(sources.get_full_range(
+          bt_dsl::SourceRange(doc->module.file_id, wr.startByte, wr.endByte)));
         return out;
       }
     }
@@ -1472,7 +1467,7 @@ struct Workspace::Impl
       // If the target doc is in-memory, compute line/col.
       if (auto * tdoc = get_doc(target_uri)) {
         ensure_parsed(*tdoc);
-        fr = tdoc->module.parsedUnit->source.get_full_range(narrowed);
+        fr = sources.get_full_range(narrowed);
       }
 
       loc["range"] = range_to_json(fr);
@@ -1562,8 +1557,8 @@ struct Workspace::Impl
       json s;
       s["name"] = std::move(name);
       s["kind"] = std::move(kind);
-      s["range"] = range_to_json(doc->module.parsedUnit->source.get_full_range(range));
-      s["selectionRange"] = range_to_json(doc->module.parsedUnit->source.get_full_range(range));
+      s["range"] = range_to_json(sources.get_full_range(range));
+      s["selectionRange"] = range_to_json(sources.get_full_range(range));
       out["symbols"].push_back(std::move(s));
     };
 
@@ -1619,7 +1614,7 @@ struct Workspace::Impl
 
     auto push_item = [&](bt_dsl::SourceRange r, std::string kind) {
       json item;
-      item["range"] = range_to_json(doc->module.parsedUnit->source.get_full_range(r));
+      item["range"] = range_to_json(sources.get_full_range(r));
       item["kind"] = std::move(kind);
       out["items"].push_back(std::move(item));
     };
@@ -1819,7 +1814,7 @@ struct Workspace::Impl
         json t;
         t["type"] = std::move(type);
         t["modifiers"] = mods;
-        t["range"] = range_to_json(doc->module.parsedUnit->source.get_full_range(r));
+        t["range"] = range_to_json(sources.get_full_range(r));
         out["tokens"].push_back(std::move(t));
       };
 

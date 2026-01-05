@@ -231,7 +231,7 @@ void TreeRecursionChecker::report_error(SourceRange range, std::string_view mess
   hasErrors_ = true;
   ++errorCount_;
   if (diags_) {
-    diags_->error(range, message);
+    diags_->report_error(range, std::string(message));
   }
 }
 

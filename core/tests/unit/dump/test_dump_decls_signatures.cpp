@@ -4,7 +4,7 @@
 #include <string>
 
 #include "bt_dsl/ast/ast_dumper.hpp"
-#include "bt_dsl/syntax/frontend.hpp"
+#include "bt_dsl/test_support/parse_helpers.hpp"
 
 TEST(DumpAst, DeclarationSignatures)
 {
@@ -18,18 +18,17 @@ TEST(DumpAst, DeclarationSignatures)
     "\n"
     "tree Main(in target: Pose, out ok: bool) {}\n";
 
-  auto unit = bt_dsl::parse_source(src);
-  ASSERT_NE(unit, nullptr);
+  auto unit = bt_dsl::test_support::parse(src);
 
   // No diagnostics expected for this input.
-  if (!unit->diags.empty()) {
-    for (const auto & d : unit->diags.all()) {
+  if (!unit.diags.empty()) {
+    for (const auto & d : unit.diags.all()) {
       std::cerr << "diag: " << d.message << "\n";
     }
   }
-  ASSERT_TRUE(unit->diags.empty());
+  ASSERT_TRUE(unit.diags.empty());
 
-  const std::string got = bt_dsl::dump_to_string(unit->program);
+  const std::string got = bt_dsl::dump_to_string(unit.program);
 
   const std::string expected =
     "Program\n"

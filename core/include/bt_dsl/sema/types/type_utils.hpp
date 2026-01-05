@@ -4,6 +4,8 @@
 //
 #pragma once
 
+#include <string>
+
 #include "bt_dsl/sema/types/type.hpp"
 
 namespace bt_dsl
@@ -59,6 +61,14 @@ class DynamicArrayType;
  * Used for == and != operators (§3.3.7).
  */
 [[nodiscard]] bool are_comparable(const Type * lhs, const Type * rhs);
+
+/**
+ * Convert a Type to its string representation.
+ *
+ * @param type The type to convert
+ * @return String representation of the type (e.g. "int32", "vec<int32>")
+ */
+[[nodiscard]] std::string to_string(const Type * type);
 
 // ============================================================================
 // Common Type Computation
