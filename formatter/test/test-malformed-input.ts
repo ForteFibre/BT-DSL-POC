@@ -1,16 +1,4 @@
-/**
- * Test suite for formatter behavior on malformed/broken input.
- *
- * Requirements:
- * 1. The formatter does NOT need to pretty-print broken/invalid syntax
- * 2. The formatter MUST format valid portions as much as possible
- * 3. Characters MUST NEVER be silently deleted (critical bug)
- *
- * Each test verifies that:
- * - All characters from the input are preserved in the output
- * - Valid portions are formatted correctly (where verifiable)
- */
-
+import { test, describe } from 'node:test';
 import { formatBtDslText } from '../src/index.js';
 
 // Helper: assert that non-whitespace characters are preserved EXACTLY.
@@ -844,55 +832,106 @@ just random tokens here and there
 // RUN ALL TESTS
 // ============================================================================
 
-const allTestCases: TestCase[] = [
-  ...externTestCases,
-  ...treeTestCases,
-  ...stmtTestCases,
-  ...exprTestCases,
-  ...typeTestCases,
-  ...globalTestCases,
-  ...commentTestCases,
-  ...nodeTestCases,
-  ...unicodeTestCases,
-  ...edgeCaseTestCases,
-];
+describe('Malformed Input Handling', () => {
 
-let passed = 0;
-let failed = 0;
-const failures: { name: string; error: Error }[] = [];
+  describe('Extern declarations', () => {
+    for (const tc of externTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
 
-console.log(`Running ${String(allTestCases.length)} malformed input tests...\n`);
+  describe('Tree declarations', () => {
+    for (const tc of treeTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
 
-for (const tc of allTestCases) {
-  try {
-    const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+  describe('Statements', () => {
+    for (const tc of stmtTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
 
-    // Critical: non-whitespace must be preserved exactly
-    assertNoNonWhitespaceChange(tc.input, output, tc.name);
+  describe('Expressions', () => {
+    for (const tc of exprTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
 
-    // Verify required tokens are preserved
-    assertPreserved(output, tc.mustPreserve, tc.name);
+  describe('Type expressions', () => {
+    for (const tc of typeTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
 
-    passed++;
-    console.log(`✓ ${tc.name}`);
-  } catch (error) {
-    failed++;
-    const err = error instanceof Error ? error : new Error(String(error));
-    failures.push({ name: tc.name, error: err });
-    console.log(`✗ ${tc.name}: ${err.message}`);
-  }
-}
+  describe('Global declarations', () => {
+    for (const tc of globalTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
 
-console.log(`\n${'='.repeat(60)}`);
-console.log(`Results: ${String(passed)} passed, ${String(failed)} failed`);
+  describe('Comments in broken code', () => {
+    for (const tc of commentTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
 
-if (failures.length > 0) {
-  console.log('\nFailures:');
-  for (const f of failures) {
-    console.log(`\n--- ${f.name} ---`);
-    console.log(f.error.message);
-  }
-  process.exit(1);
-}
+  describe('Node invocations', () => {
+    for (const tc of nodeTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
 
-console.log('\ntest-malformed-input: ALL TESTS PASSED');
+  describe('Unicode and special characters', () => {
+    for (const tc of unicodeTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
+
+  describe('Edge cases and stress tests', () => {
+    for (const tc of edgeCaseTestCases) {
+      test(tc.name, async () => {
+        const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
+        assertNoNonWhitespaceChange(tc.input, output, tc.name);
+        assertPreserved(output, tc.mustPreserve, tc.name);
+      });
+    }
+  });
+
+});

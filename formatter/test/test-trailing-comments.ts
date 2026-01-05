@@ -1,5 +1,6 @@
-import { formatBtDslText } from '../src/index.js';
+import { test, describe } from 'node:test';
 import assert from 'node:assert';
+import { formatBtDslText } from '../src/index.js';
 
 interface TestCase {
   name: string;
@@ -148,46 +149,30 @@ tree Main() {
   },
 ];
 
-let passed = 0;
-let failed = 0;
+describe('Trailing Comments Preservation', () => {
+  for (const testCase of testCases) {
+    test(testCase.name, async () => {
+      const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
 
-for (const testCase of testCases) {
-  try {
-    const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
-
-    if (testCase.expected) {
-      assert.strictEqual(formatted, testCase.expected, `Output does not match expected`);
-    } else {
-      // Verify the comment text still exists on the expected line
-      const inputLines = testCase.input.split('\n');
-      const outputLines = formatted.split('\n');
-      for (const inputLine of inputLines) {
-        const regex = /;\s*(\/\/.*)/;
-        const trailingMatch = regex.exec(inputLine);
-        if (trailingMatch) {
-          const comment = trailingMatch[1];
-          if (comment !== undefined) {
-            // Check that the comment appears on a line with a semicolon in output
-            const found = outputLines.some((line) => line.includes(';') && line.includes(comment));
-            assert(found, `Trailing comment "${comment}" was separated from its statement`);
+      if (testCase.expected) {
+        assert.strictEqual(formatted, testCase.expected, `Output does not match expected`);
+      } else {
+        // Verify the comment text still exists on the expected line
+        const inputLines = testCase.input.split('\n');
+        const outputLines = formatted.split('\n');
+        for (const inputLine of inputLines) {
+          const regex = /;\s*(\/\/.*)/;
+          const trailingMatch = regex.exec(inputLine);
+          if (trailingMatch) {
+            const comment = trailingMatch[1];
+            if (comment !== undefined) {
+              // Check that the comment appears on a line with a semicolon in output
+              const found = outputLines.some((line) => line.includes(';') && line.includes(comment));
+              assert(found, `Trailing comment "${comment}" was separated from its statement`);
+            }
           }
         }
       }
-    }
-
-    console.log(`✅ ${testCase.name}`);
-    passed++;
-  } catch (error) {
-    console.error(`❌ ${testCase.name}`);
-    console.error(`   Error: ${(error as Error).message}`);
-    failed++;
+    });
   }
-}
-
-console.log(`\n${'='.repeat(60)}`);
-console.log(`Results: ${String(passed)} passed, ${String(failed)} failed`);
-console.log('='.repeat(60));
-
-if (failed > 0) {
-  process.exit(1);
-}
+});

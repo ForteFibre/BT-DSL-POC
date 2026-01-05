@@ -1,5 +1,6 @@
-import { formatBtDslText } from '../src/index.js';
+import { test, describe } from 'node:test';
 import assert from 'node:assert';
+import { formatBtDslText } from '../src/index.js';
 
 interface TestCase {
   name: string;
@@ -107,32 +108,11 @@ const testCases: TestCase[] = [
   },
 ];
 
-let passed = 0;
-let failed = 0;
-
-for (const testCase of testCases) {
-  try {
-    const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
-
-    assert.strictEqual(formatted, testCase.expected, `Output does not match expected`);
-
-    console.log(`✅ ${testCase.name}`);
-    passed++;
-  } catch (error) {
-    console.error(`❌ ${testCase.name}`);
-    console.error(`   Error: ${(error as Error).message}`);
-    console.error(`   Input:\n${testCase.input}`);
-    console.error(`   Expected:\n${testCase.expected}`);
-    const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
-    console.error(`   Actual:\n${formatted}`);
-    failed++;
+describe('Argument Comments Preservation', () => {
+  for (const testCase of testCases) {
+    test(testCase.name, async () => {
+      const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
+      assert.strictEqual(formatted, testCase.expected);
+    });
   }
-}
-
-console.log(`\n${'='.repeat(60)}`);
-console.log(`Results: ${String(passed)} passed, ${String(failed)} failed`);
-console.log('='.repeat(60));
-
-if (failed > 0) {
-  process.exit(1);
-}
+});

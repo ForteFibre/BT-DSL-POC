@@ -43,7 +43,7 @@
     ]
   },
   "scripts": {
-    "prebuild": "(if [ -f ../core/build-lsp/bt_dsl_lsp_server ]; then mkdir -p server && cp -f ../core/build-lsp/bt_dsl_lsp_server server/; elif [ -f ../core/build/bt_dsl_lsp_server ]; then mkdir -p server && cp -f ../core/build/bt_dsl_lsp_server server/; elif [ -f server/bt_dsl_lsp_server ]; then :; else echo 'Warning: LSP server not found (checked ../core/build-lsp/bt_dsl_lsp_server, ../core/build/bt_dsl_lsp_server, server/bt_dsl_lsp_server). Set BT_DSL_LSP_PATH for dev or build bt_dsl_lsp_server.'; fi) && if [ -d ../core/std ]; then cp -rf ../core/std .; else echo 'Warning: std/ not found'; fi && pnpm --filter @bt-dsl/core build:wasm && mkdir -p out && cp -f ../core/build-wasm/formatter_wasm.js out/ && cp -f ../core/build-wasm/formatter_wasm.wasm out/",
+    "prebuild": "./scripts/prebuild.sh",
     "build": "tsc -b && esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:vscode-languageclient --external:vscode-languageclient/* --external:@bt-dsl/formatter --external:prettier --format=esm --platform=node",
     "test": "node --test test/*.test.cjs",
     "compile-tests": "tsc -p tsconfig.test.json && node ./scripts/ensure-cjs.mjs",

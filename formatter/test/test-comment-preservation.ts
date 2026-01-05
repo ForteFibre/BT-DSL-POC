@@ -1,3 +1,5 @@
+import { test, describe } from 'node:test';
+import assert from 'node:assert';
 import { formatBtDslText } from '../src/index.js';
 
 interface TestCase {
@@ -60,22 +62,11 @@ tree Main() {
   },
 ];
 
-for (const testCase of testCases) {
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`=== ${testCase.name} ===`);
-  console.log('='.repeat(60));
-  console.log('\nInput:');
-  console.log(testCase.input);
-
-  try {
-    const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
-    console.log('\nFormatted output:');
-    console.log(formatted);
-  } catch (error) {
-    console.error('\n❌ Error formatting:', (error as Error).message);
+describe('Comment Preservation', () => {
+  for (const testCase of testCases) {
+    test(testCase.name, async () => {
+      const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
+      assert.ok(formatted, 'Formatted output should not be empty');
+    });
   }
-}
-
-console.log('\n' + '='.repeat(60));
-console.log('=== Testing complete ===');
-console.log('='.repeat(60));
+});
