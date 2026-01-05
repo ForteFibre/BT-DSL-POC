@@ -69,8 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: core-lsp-build
-          path: |
-            core/build-lsp/bt_dsl_lsp_server
+          path: core/build-lsp/
           retention-days: 1
 
   # 4a. Lint Core (clang-format)
@@ -176,9 +175,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: core-wasm-build
-          path: |
-            core/build-wasm/formatter_wasm.js
-            core/build-wasm/formatter_wasm.wasm
+          path: core/build-wasm/
           retention-days: 1
 
   # 8. Build Formatter
@@ -199,7 +196,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: core-wasm-build
-          path: .
+          path: core/build-wasm
 
       - name: Install dependencies
         run: pnpm install
@@ -211,10 +208,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: formatter-build
-          path: |
-            formatter/dist/
-            formatter/package.json
-            formatter/tsconfig.json
+          path: formatter/
           retention-days: 1
 
   # 9. Test Formatter
@@ -235,7 +229,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: formatter-build
-          path: .
+          path: formatter
 
       - name: Install dependencies
         run: pnpm install
@@ -261,13 +255,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: core-lsp-build
-          path: .
+          path: core/build-lsp
 
       - name: Download Formatter Artifacts
         uses: actions/download-artifact@v4
         with:
           name: formatter-build
-          path: .
+          path: formatter
 
       - name: Make LSP server executable
         run: chmod +x core/build-lsp/bt_dsl_lsp_server
@@ -299,13 +293,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: core-lsp-build
-          path: .
+          path: core/build-lsp
 
       - name: Download Formatter Artifacts
         uses: actions/download-artifact@v4
         with:
           name: formatter-build
-          path: .
+          path: formatter
 
       - name: Make LSP server executable
         run: chmod +x core/build-lsp/bt_dsl_lsp_server
@@ -342,13 +336,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: core-lsp-build
-          path: .
+          path: core/build-lsp
 
       - name: Download Formatter Artifacts
         uses: actions/download-artifact@v4
         with:
           name: formatter-build
-          path: .
+          path: formatter
 
       - name: Install dependencies
         run: pnpm install
