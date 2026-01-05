@@ -149,9 +149,9 @@ tree Main() {
   },
 ];
 
-describe('Trailing Comments Preservation', () => {
+await describe('Trailing Comments Preservation', async () => {
   for (const testCase of testCases) {
-    test(testCase.name, async () => {
+    await test(testCase.name, async () => {
       const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
 
       if (testCase.expected) {
@@ -167,7 +167,9 @@ describe('Trailing Comments Preservation', () => {
             const comment = trailingMatch[1];
             if (comment !== undefined) {
               // Check that the comment appears on a line with a semicolon in output
-              const found = outputLines.some((line) => line.includes(';') && line.includes(comment));
+              const found = outputLines.some(
+                (line) => line.includes(';') && line.includes(comment),
+              );
               assert(found, `Trailing comment "${comment}" was separated from its statement`);
             }
           }

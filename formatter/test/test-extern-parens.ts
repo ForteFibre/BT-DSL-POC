@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { formatBtDslText } from '../src/index.js';
 
-test('Extern declaration parentheses', async () => {
+await test('Extern declaration parentheses', async () => {
   const input = `extern control Sequence();
 extern decorator Inverter();
 
@@ -18,8 +18,12 @@ tree Main() {
 
   const formatted = await formatBtDslText(input, { filepath: 'test.bt' });
 
-  assert.ok(formatted.includes('extern control Sequence();'),
-    'extern control without ports must keep parentheses');
-  assert.ok(formatted.includes('extern decorator Inverter();'),
-    'extern decorator without ports must keep parentheses');
+  assert.ok(
+    formatted.includes('extern control Sequence();'),
+    'extern control without ports must keep parentheses',
+  );
+  assert.ok(
+    formatted.includes('extern decorator Inverter();'),
+    'extern decorator without ports must keep parentheses',
+  );
 });

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { formatBtDslText } from '../src/index.js';
 
-test('Tree parameters formatting', async () => {
+await test('Tree parameters formatting', async () => {
   // Test with just a tree definition (typed params are required by the grammar)
   const testInput = `tree SearchAndDestroy(ref target: Vector3, ref ammo: int, ref alert: bool) {
   Sequence {

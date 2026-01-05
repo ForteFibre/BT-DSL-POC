@@ -27,7 +27,7 @@ function countOccurrences(haystack: string, needle: string): number {
 // When running from dist/test/, dist is at ../
 const distDir = join(__dirname, '..');
 
-test('WASM Relocation and UTF-8 handling', async () => {
+await test('WASM Relocation and UTF-8 handling', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'bt-dsl-core-wasm-'));
   try {
     // Copy the WASM bundle to a different directory, to simulate relocation
@@ -61,7 +61,6 @@ test('WASM Relocation and UTF-8 handling', async () => {
       assert.equal(countOccurrences(out, '日本語コメント'), 1);
       assert.equal(countOccurrences(out, 'AlwaysSuccess();'), 1);
     }
-
   } finally {
     try {
       rmSync(tmp, { recursive: true, force: true });

@@ -832,11 +832,10 @@ just random tokens here and there
 // RUN ALL TESTS
 // ============================================================================
 
-describe('Malformed Input Handling', () => {
-
-  describe('Extern declarations', () => {
+await describe('Malformed Input Handling', async () => {
+  await describe('Extern declarations', async () => {
     for (const tc of externTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
@@ -844,9 +843,9 @@ describe('Malformed Input Handling', () => {
     }
   });
 
-  describe('Tree declarations', () => {
+  await describe('Tree declarations', async () => {
     for (const tc of treeTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
@@ -854,9 +853,9 @@ describe('Malformed Input Handling', () => {
     }
   });
 
-  describe('Statements', () => {
+  await describe('Statements', async () => {
     for (const tc of stmtTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
@@ -864,9 +863,9 @@ describe('Malformed Input Handling', () => {
     }
   });
 
-  describe('Expressions', () => {
+  await describe('Expressions', async () => {
     for (const tc of exprTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
@@ -874,9 +873,9 @@ describe('Malformed Input Handling', () => {
     }
   });
 
-  describe('Type expressions', () => {
+  await describe('Type expressions', async () => {
     for (const tc of typeTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
@@ -884,9 +883,9 @@ describe('Malformed Input Handling', () => {
     }
   });
 
-  describe('Global declarations', () => {
+  await describe('Global declarations', async () => {
     for (const tc of globalTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
@@ -894,9 +893,9 @@ describe('Malformed Input Handling', () => {
     }
   });
 
-  describe('Comments in broken code', () => {
+  await describe('Comments in broken code', async () => {
     for (const tc of commentTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
@@ -904,9 +903,9 @@ describe('Malformed Input Handling', () => {
     }
   });
 
-  describe('Node invocations', () => {
+  await describe('Node invocations', async () => {
     for (const tc of nodeTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
@@ -914,9 +913,9 @@ describe('Malformed Input Handling', () => {
     }
   });
 
-  describe('Unicode and special characters', () => {
+  await describe('Unicode and special characters', async () => {
     for (const tc of unicodeTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
@@ -924,14 +923,13 @@ describe('Malformed Input Handling', () => {
     }
   });
 
-  describe('Edge cases and stress tests', () => {
+  await describe('Edge cases and stress tests', async () => {
     for (const tc of edgeCaseTestCases) {
-      test(tc.name, async () => {
+      await test(tc.name, async () => {
         const output = await formatBtDslText(tc.input, { filepath: `${tc.name}.bt` });
         assertNoNonWhitespaceChange(tc.input, output, tc.name);
         assertPreserved(output, tc.mustPreserve, tc.name);
       });
     }
   });
-
 });

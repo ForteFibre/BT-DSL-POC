@@ -62,9 +62,9 @@ tree Main() {
   },
 ];
 
-describe('Comment Preservation', () => {
+await describe('Comment Preservation', async () => {
   for (const testCase of testCases) {
-    test(testCase.name, async () => {
+    await test(testCase.name, async () => {
       const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
       assert.ok(formatted, 'Formatted output should not be empty');
     });

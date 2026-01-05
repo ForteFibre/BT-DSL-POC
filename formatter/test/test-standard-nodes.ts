@@ -12,8 +12,12 @@ const __dirname = dirname(__filename);
 const standardNodesPath = join(__dirname, '../../../shared/examples/StandardNodes.bt');
 const input = readFileSync(standardNodesPath, 'utf8');
 
-test('Format StandardNodes.bt', async () => {
+await test('Format StandardNodes.bt', async () => {
   const output = await formatBtDslText(input, { filepath: standardNodesPath });
   assert.ok(output, 'Output should not be empty');
-  assert.match(output, /extern action FindEnemy/, 'Output should contain extern action declaration');
+  assert.match(
+    output,
+    /extern action FindEnemy/,
+    'Output should contain extern action declaration',
+  );
 });

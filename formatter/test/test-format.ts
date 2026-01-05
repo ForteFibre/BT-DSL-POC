@@ -12,7 +12,7 @@ const __dirname = dirname(__filename);
 const soldierAiPath = join(__dirname, '../../../shared/examples/soldier-ai.bt');
 const input = readFileSync(soldierAiPath, 'utf8');
 
-test('Format soldier-ai.bt', async () => {
+await test('Format soldier-ai.bt', async () => {
   const output = await formatBtDslText(input, { filepath: soldierAiPath });
   assert.ok(output, 'Output should not be empty');
   assert.match(output, /tree Main/, 'Output should contain tree Main');

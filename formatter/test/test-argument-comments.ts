@@ -108,9 +108,9 @@ const testCases: TestCase[] = [
   },
 ];
 
-describe('Argument Comments Preservation', () => {
+await describe('Argument Comments Preservation', async () => {
   for (const testCase of testCases) {
-    test(testCase.name, async () => {
+    await test(testCase.name, async () => {
       const formatted = await formatBtDslText(testCase.input, { filepath: 'test.bt' });
       assert.strictEqual(formatted, testCase.expected);
     });
