@@ -111,8 +111,10 @@ TEST(RefLexicalStructure, IntegerLiteralDecimal)
   std::unique_ptr<ParsedUnit> unit;
   auto * prog = get_program(unit, "const X = 42;");
   ASSERT_NE(prog, nullptr);
-  ASSERT_EQ(prog->globalConsts.size(), 1);
-  EXPECT_EQ(prog->globalConsts[0]->name, "X");
+  const auto consts = prog->global_consts();
+  ASSERT_EQ(consts.size(), 1U);
+  ASSERT_NE(consts[0], nullptr);
+  EXPECT_EQ(consts[0]->name, "X");
 }
 
 TEST(RefLexicalStructure, IntegerLiteralNegative)

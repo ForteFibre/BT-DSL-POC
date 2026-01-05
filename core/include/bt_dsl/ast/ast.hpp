@@ -5,9 +5,12 @@
 //
 #pragma once
 
+#include <cstddef>
 #include <gsl/span>
+#include <iterator>
 #include <optional>
 #include <string_view>
+#include <utility>
 
 #include "bt_dsl/ast/ast_enums.hpp"
 #include "bt_dsl/basic/casting.hpp"
@@ -654,13 +657,118 @@ class Program : public NodeBase<Program, AstNode, NodeKind::Program>
 {
 public:
   gsl::span<std::string_view> innerDocs;
-  gsl::span<ImportDecl *> imports;
-  gsl::span<ExternTypeDecl *> externTypes;
-  gsl::span<TypeAliasDecl *> typeAliases;
-  gsl::span<ExternDecl *> externs;
-  gsl::span<GlobalVarDecl *> globalVars;
-  gsl::span<GlobalConstDecl *> globalConsts;
-  gsl::span<TreeDecl *> trees;
+  /// All top-level declarations in source order.
+  gsl::span<Decl *> decls;
+
+  /// Type-filtered iterator over Program::decls (Clang-style).
+  template <typename T>
+  class DeclIterator
+  {
+  public:
+    using span_iterator = decltype(std::declval<const gsl::span<Decl *> &>().begin());
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T *;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T **;
+    using reference = T *;
+
+    DeclIterator(span_iterator cur, span_iterator end) : cur_(cur), end_(end)
+    {
+      skip_non_matching();
+    }
+
+    [[nodiscard]] T * operator*() const
+    {
+      // Safe by construction (skip_non_matching ensures isa<T>)
+      return cast<T>(*cur_);
+    }
+
+    DeclIterator & operator++()
+    {
+      ++cur_;
+      skip_non_matching();
+      return *this;
+    }
+
+    DeclIterator operator++(int)
+    {
+      DeclIterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    [[nodiscard]] bool operator==(const DeclIterator & rhs) const { return cur_ == rhs.cur_; }
+    [[nodiscard]] bool operator!=(const DeclIterator & rhs) const { return !(*this == rhs); }
+
+  private:
+    void skip_non_matching()
+    {
+      while (cur_ != end_ && !isa<T>(*cur_)) {
+        ++cur_;
+      }
+    }
+
+    span_iterator cur_;
+    span_iterator end_;
+  };
+
+  /// A lightweight view (range) over decls filtered by T.
+  template <typename T>
+  class DeclRange
+  {
+  public:
+    explicit DeclRange(gsl::span<Decl *> all) : all_(all) {}
+
+    [[nodiscard]] DeclIterator<T> begin() const
+    {
+      return DeclIterator<T>(all_.begin(), all_.end());
+    }
+    [[nodiscard]] DeclIterator<T> end() const { return DeclIterator<T>(all_.end(), all_.end()); }
+
+    [[nodiscard]] bool empty() const { return begin() == end(); }
+
+    [[nodiscard]] std::size_t size() const
+    {
+      std::size_t n = 0;
+      for (auto it = begin(); it != end(); ++it) {
+        ++n;
+      }
+      return n;
+    }
+
+    [[nodiscard]] T * operator[](std::size_t idx) const
+    {
+      std::size_t i = 0;
+      for (auto it = begin(); it != end(); ++it) {
+        if (i == idx) return *it;
+        ++i;
+      }
+      return nullptr;
+    }
+
+  private:
+    gsl::span<Decl *> all_;
+  };
+
+  [[nodiscard]] DeclRange<ImportDecl> imports() const { return DeclRange<ImportDecl>(decls); }
+  [[nodiscard]] DeclRange<ExternTypeDecl> extern_types() const
+  {
+    return DeclRange<ExternTypeDecl>(decls);
+  }
+  [[nodiscard]] DeclRange<TypeAliasDecl> type_aliases() const
+  {
+    return DeclRange<TypeAliasDecl>(decls);
+  }
+  [[nodiscard]] DeclRange<ExternDecl> externs() const { return DeclRange<ExternDecl>(decls); }
+  [[nodiscard]] DeclRange<GlobalVarDecl> global_vars() const
+  {
+    return DeclRange<GlobalVarDecl>(decls);
+  }
+  [[nodiscard]] DeclRange<GlobalConstDecl> global_consts() const
+  {
+    return DeclRange<GlobalConstDecl>(decls);
+  }
+  [[nodiscard]] DeclRange<TreeDecl> trees() const { return DeclRange<TreeDecl>(decls); }
 
   explicit Program(SourceRange r = {}) : NodeBase(r) {}
 };

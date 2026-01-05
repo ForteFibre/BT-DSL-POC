@@ -22,8 +22,17 @@ var HasPlan: bool = false;
 var PlanId: int32 = 0;
 var StatusText: string = "";
 
-extern action ComputePath(in start: Vector3, in goal: Vector3, out ok: bool, out plan_id: int32);
-extern action FollowPath(in plan_id: int32, in tolerance: float = DEFAULT_TOLERANCE, out ok: bool);
+extern action ComputePath(
+  in start: Vector3,
+  in goal: Vector3,
+  out ok: bool,
+  out plan_id: int32,
+);
+extern action FollowPath(
+  in plan_id: int32,
+  in tolerance: float = DEFAULT_TOLERANCE,
+  out ok: bool,
+);
 extern action ReadPose(out current: Vector3);
 extern action SetFixedGoal(out goal: Vector3);
 extern action FormatStatus(in ok: bool, in txt: string, out out_txt: string);

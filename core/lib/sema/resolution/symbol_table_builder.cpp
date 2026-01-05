@@ -33,7 +33,7 @@ bool SymbolTableBuilder::build(Program & program)
   values_.build_from_program(program);
 
   // Register extern types (Type namespace)
-  for (const auto * ext_type : program.externTypes) {
+  for (const auto * ext_type : program.extern_types()) {
     if (!ext_type) continue;
 
     const TypeSymbol * existing = types_.lookup(ext_type->name);
@@ -53,7 +53,7 @@ bool SymbolTableBuilder::build(Program & program)
   }
 
   // Register type aliases (Type namespace)
-  for (const auto * alias : program.typeAliases) {
+  for (const auto * alias : program.type_aliases()) {
     if (!alias) continue;
 
     const TypeSymbol * existing = types_.lookup(alias->name);
@@ -72,7 +72,7 @@ bool SymbolTableBuilder::build(Program & program)
   }
 
   // Register extern nodes (Node namespace)
-  for (const auto * ext : program.externs) {
+  for (const auto * ext : program.externs()) {
     if (!ext) continue;
 
     const NodeSymbol * existing = nodes_.lookup(ext->name);
@@ -90,7 +90,7 @@ bool SymbolTableBuilder::build(Program & program)
   }
 
   // Register trees (Node namespace)
-  for (const auto * tree : program.trees) {
+  for (const auto * tree : program.trees()) {
     if (!tree) continue;
 
     const NodeSymbol * existing = nodes_.lookup(tree->name);
@@ -109,7 +109,7 @@ bool SymbolTableBuilder::build(Program & program)
 
   // Validate global value declarations (Value namespace)
   if (Scope * global = values_.get_global_scope()) {
-    for (const auto * v : program.globalVars) {
+    for (const auto * v : program.global_vars()) {
       if (!v) continue;
       if (const Symbol * existing = global->lookup_local(v->name)) {
         if (existing->astNode != v) {
@@ -117,7 +117,7 @@ bool SymbolTableBuilder::build(Program & program)
         }
       }
     }
-    for (const auto * c : program.globalConsts) {
+    for (const auto * c : program.global_consts()) {
       if (!c) continue;
       if (const Symbol * existing = global->lookup_local(c->name)) {
         if (existing->astNode != c) {
@@ -128,7 +128,7 @@ bool SymbolTableBuilder::build(Program & program)
   }
 
   // Build tree scopes with block scopes
-  for (auto * tree : program.trees) {
+  for (auto * tree : program.trees()) {
     build_tree_scope(tree);
   }
 

@@ -39,7 +39,7 @@ static BuiltCfg build_cfg(const std::string & src)
   }
 
   Program * program = out.unit->program;
-  if (program == nullptr || program->trees.empty()) {
+  if (program == nullptr || program->trees().empty()) {
     std::cerr << "No tree found\n";
     return out;
   }
@@ -51,13 +51,13 @@ static BuiltCfg build_cfg(const std::string & src)
   module.types.register_builtins();
   module.values.build_from_program(*module.program);
 
-  for (const auto * ext : module.program->externs) {
+  for (const auto * ext : module.program->externs()) {
     NodeSymbol sym;
     sym.name = ext->name;
     sym.decl = ext;
     module.nodes.define(sym);
   }
-  for (const auto * tree : module.program->trees) {
+  for (const auto * tree : module.program->trees()) {
     NodeSymbol sym;
     sym.name = tree->name;
     sym.decl = tree;
@@ -72,7 +72,7 @@ static BuiltCfg build_cfg(const std::string & src)
 
   // Build CFG for the first tree
   CFGBuilder cfg_builder(module.nodes);
-  out.cfg = cfg_builder.build(module.program->trees[0]);
+  out.cfg = cfg_builder.build(module.program->trees()[0]);
   out.unit = std::move(module.parsedUnit);
   return out;
 }

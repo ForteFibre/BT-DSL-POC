@@ -46,9 +46,9 @@ TEST(AstLiterals, ParseLiterals)
 
   bt_dsl::Program * p = unit->program;
   ASSERT_NE(p, nullptr);
-  ASSERT_EQ(p->trees.size(), 1U);
+  ASSERT_EQ(p->trees().size(), 1U);
 
-  bt_dsl::NodeStmt * root = first_node_stmt(p->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(p->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->args.size(), 5U);
 
@@ -91,7 +91,7 @@ TEST(AstLiterals, FloatExponent)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
 
   auto * e = get_arg_expr(root, 0);
@@ -124,7 +124,7 @@ TEST(AstLiterals, StringEscapes)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->args.size(), 10U);
 
@@ -161,7 +161,7 @@ TEST(AstLiterals, NullLiteral)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
 
   auto * e = get_arg_expr(root, 0);
@@ -182,7 +182,7 @@ TEST(AstLiterals, ArrayLiteral)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
 
   auto * e = get_arg_expr(root, 0);
@@ -208,7 +208,7 @@ TEST(AstLiterals, VecMacro)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
 
   auto * e = get_arg_expr(root, 0);

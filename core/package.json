@@ -6,6 +6,7 @@
   "scripts": {
     "build": "pnpm run build:native",
     "build:native": "node ./scripts/ensure-cmake-build-dir.mjs build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)",
+    "build:wasm": "node ./scripts/build-wasm.mjs",
     "build:lsp": "node ./scripts/ensure-cmake-build-dir.mjs build-lsp && cmake -S . -B build-lsp -DBUILD_LSP_SERVER=ON -DBUILD_CLI=OFF -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-lsp -j$(nproc)",
     "test": "cd build && ctest --output-on-failure",
     "clean": "rm -rf build build-lsp",

@@ -16,6 +16,11 @@ enum class TokenKind : uint8_t {
   DocLine,    // /// ...
   DocModule,  // //! ...
 
+  // Non-doc comments (currently ignored by the parser, but useful for tools
+  // like formatters that must preserve user text)
+  LineComment,   // // ...
+  BlockComment,  // /* ... */
+
   Identifier,
   IntLiteral,
   FloatLiteral,
@@ -88,6 +93,10 @@ struct Token
       return "<doc_line>";
     case TokenKind::DocModule:
       return "<doc_module>";
+    case TokenKind::LineComment:
+      return "<line_comment>";
+    case TokenKind::BlockComment:
+      return "<block_comment>";
     case TokenKind::Identifier:
       return "identifier";
     case TokenKind::IntLiteral:

@@ -191,7 +191,13 @@ bool ConstEvaluator::evaluate_program(Program & program)
   error_count_ = 0;
 
   // Build evaluation order for global consts
-  auto order = build_evaluation_order(program.globalConsts);
+  std::vector<GlobalConstDecl *> global_consts;
+  global_consts.reserve(program.global_consts().size());
+  for (auto * gc : program.global_consts()) {
+    global_consts.push_back(gc);
+  }
+
+  auto order = build_evaluation_order(gsl::span<GlobalConstDecl *>(global_consts));
 
   // Evaluate global consts in order
   for (const auto * node : order) {
@@ -223,7 +229,7 @@ bool ConstEvaluator::evaluate_program(Program & program)
   evaluate_default_args(program);
 
   // Evaluate local consts in tree bodies
-  for (auto * tree : program.trees) {
+  for (auto * tree : program.trees()) {
     const Scope * tree_scope = values_.get_tree_scope(tree->name);
     for (auto * stmt : tree->body) {
       evaluate_local_consts(stmt, tree_scope);
@@ -236,7 +242,7 @@ bool ConstEvaluator::evaluate_program(Program & program)
 void ConstEvaluator::evaluate_default_args(Program & program)
 {
   // Extern default ports
-  for (auto * ext : program.externs) {
+  for (auto * ext : program.externs()) {
     for (auto * port : ext->ports) {
       if (port && port->defaultValue) {
         (void)evaluate(port->defaultValue);
@@ -245,7 +251,7 @@ void ConstEvaluator::evaluate_default_args(Program & program)
   }
 
   // Tree parameter defaults
-  for (auto * tree : program.trees) {
+  for (auto * tree : program.trees()) {
     for (auto * param : tree->params) {
       if (param && param->defaultValue) {
         (void)evaluate(param->defaultValue);

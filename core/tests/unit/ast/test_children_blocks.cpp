@@ -38,7 +38,7 @@ TEST(AstChildrenBlocks, NestedChildren)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * seq = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * seq = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(seq, nullptr);
   EXPECT_EQ(seq->nodeName, "Sequence");
   ASSERT_TRUE(seq->hasChildrenBlock);
@@ -82,7 +82,7 @@ TEST(AstChildrenBlocks, AssignmentInChildren)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::TreeDecl * t = unit->program->trees[0];
+  bt_dsl::TreeDecl * t = unit->program->trees()[0];
   bt_dsl::NodeStmt * seq = nullptr;
   for (auto * s : t->body) {
     if (auto * n = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(s)) {
@@ -119,7 +119,7 @@ TEST(AstChildrenBlocks, EmptyChildrenBlock)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * seq = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * seq = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(seq, nullptr);
   ASSERT_TRUE(seq->hasChildrenBlock);
   EXPECT_TRUE(seq->children.empty());
@@ -141,7 +141,7 @@ TEST(AstChildrenBlocks, LeafNodeWithSemicolon)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * seq = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * seq = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(seq, nullptr);
   ASSERT_EQ(seq->children.size(), 1U);
 
@@ -171,7 +171,7 @@ TEST(AstChildrenBlocks, DeeplyNestedChildren)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  auto * a = first_node_stmt(unit->program->trees[0]->body);
+  auto * a = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_TRUE(a != nullptr && a->nodeName == "A");
 
   auto * b = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(a->children[0]);

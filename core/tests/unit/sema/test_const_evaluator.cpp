@@ -47,7 +47,7 @@ struct TestContext
 
     module.types.register_builtins();
 
-    for (const auto * ext_type : program->externTypes) {
+    for (const auto * ext_type : program->extern_types()) {
       TypeSymbol sym;
       sym.name = ext_type->name;
       sym.decl = ext_type;
@@ -55,13 +55,13 @@ struct TestContext
       module.types.define(sym);
     }
 
-    for (const auto * ext : program->externs) {
+    for (const auto * ext : program->externs()) {
       NodeSymbol sym;
       sym.name = ext->name;
       sym.decl = ext;
       module.nodes.define(sym);
     }
-    for (const auto * tree : program->trees) {
+    for (const auto * tree : program->trees()) {
       NodeSymbol sym;
       sym.name = tree->name;
       sym.decl = tree;
@@ -87,8 +87,10 @@ struct TestContext
 
   const ConstValue * get_global_const_value(size_t idx) const
   {
-    if (idx >= program->globalConsts.size()) return nullptr;
-    return program->globalConsts[idx]->evaluatedValue;
+    const auto consts = program->global_consts();
+    auto * c = consts[idx];
+    if (c == nullptr) return nullptr;
+    return c->evaluatedValue;
   }
 };
 

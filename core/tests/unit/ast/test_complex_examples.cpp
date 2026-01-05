@@ -54,27 +54,27 @@ TEST(AstComplexExamples, SoldierAI)
   EXPECT_NE(p->innerDocs[0].find("Soldier AI"), std::string_view::npos);
 
   // Import
-  ASSERT_EQ(p->imports.size(), 1U);
-  EXPECT_EQ(p->imports[0]->path_string(), "StandardNodes.bt");
+  ASSERT_EQ(p->imports().size(), 1U);
+  EXPECT_EQ(p->imports()[0]->path_string(), "StandardNodes.bt");
 
   // Global vars
-  ASSERT_EQ(p->globalVars.size(), 3U);
-  EXPECT_EQ(p->globalVars[0]->name, "TargetPos");
-  EXPECT_EQ(p->globalVars[1]->name, "Ammo");
-  EXPECT_EQ(p->globalVars[2]->name, "IsAlerted");
+  ASSERT_EQ(p->global_vars().size(), 3U);
+  EXPECT_EQ(p->global_vars()[0]->name, "TargetPos");
+  EXPECT_EQ(p->global_vars()[1]->name, "Ammo");
+  EXPECT_EQ(p->global_vars()[2]->name, "IsAlerted");
 
   // Trees
-  ASSERT_EQ(p->trees.size(), 2U);
-  EXPECT_EQ(p->trees[0]->name, "Main");
-  EXPECT_EQ(p->trees[0]->docs.size(), 1U);
-  EXPECT_EQ(p->trees[1]->name, "SearchAndDestroy");
-  EXPECT_EQ(p->trees[1]->docs.size(), 1U);
+  ASSERT_EQ(p->trees().size(), 2U);
+  EXPECT_EQ(p->trees()[0]->name, "Main");
+  EXPECT_EQ(p->trees()[0]->docs.size(), 1U);
+  EXPECT_EQ(p->trees()[1]->name, "SearchAndDestroy");
+  EXPECT_EQ(p->trees()[1]->docs.size(), 1U);
 
   // Tree params
-  ASSERT_EQ(p->trees[1]->params.size(), 3U);
-  EXPECT_EQ(p->trees[1]->params[0]->name, "target");
+  ASSERT_EQ(p->trees()[1]->params.size(), 3U);
+  EXPECT_EQ(p->trees()[1]->params[0]->name, "target");
   {
-    const auto & dir_opt = p->trees[1]->params[0]->direction;
+    const auto & dir_opt = p->trees()[1]->params[0]->direction;
     ASSERT_TRUE(dir_opt.has_value());
     if (!dir_opt.has_value()) return;
     EXPECT_EQ(*dir_opt, bt_dsl::PortDirection::Ref);
@@ -100,14 +100,14 @@ TEST(AstComplexExamples, SourceRangesArePopulated)
 
   // Check source ranges are populated
   EXPECT_GT(p->get_range().get_end().get_offset(), p->get_range().get_begin().get_offset());
-  ASSERT_EQ(p->trees.size(), 1U);
+  ASSERT_EQ(p->trees().size(), 1U);
   EXPECT_GT(
-    p->trees[0]->get_range().get_end().get_offset(),
-    p->trees[0]->get_range().get_begin().get_offset());
+    p->trees()[0]->get_range().get_end().get_offset(),
+    p->trees()[0]->get_range().get_begin().get_offset());
 
   // Check node stmt range
-  ASSERT_FALSE(p->trees[0]->body.empty());
-  auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(p->trees[0]->body[0]);
+  ASSERT_FALSE(p->trees()[0]->body.empty());
+  auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(p->trees()[0]->body[0]);
   ASSERT_NE(node, nullptr);
   EXPECT_GT(node->get_range().get_end().get_offset(), node->get_range().get_begin().get_offset());
 }
@@ -130,7 +130,7 @@ TEST(AstComplexExamples, ComplexExpressionsInArgs)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  auto * tree = unit->program->trees[0];
+  auto * tree = unit->program->trees()[0];
   auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(tree->body[0]);
   ASSERT_NE(node, nullptr);
   ASSERT_EQ(node->args.size(), 3U);
@@ -174,7 +174,7 @@ TEST(AstComplexExamples, AllAssignOps)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  auto * tree = unit->program->trees[0];
+  auto * tree = unit->program->trees()[0];
   bt_dsl::NodeStmt * seq = nullptr;
   for (auto * s : tree->body) {
     if (auto * n = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(s)) {

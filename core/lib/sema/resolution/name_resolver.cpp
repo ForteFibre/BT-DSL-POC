@@ -26,7 +26,7 @@ bool NameResolver::resolve()
   current_scope_ = module_.values.get_global_scope();
 
   // Resolve global var initializers
-  for (auto * var : program.globalVars) {
+  for (auto * var : program.global_vars()) {
     if (var->type) {
       visit(var->type);
     }
@@ -36,7 +36,7 @@ bool NameResolver::resolve()
   }
 
   // Resolve global const values
-  for (auto * c : program.globalConsts) {
+  for (auto * c : program.global_consts()) {
     if (c->type) {
       visit(c->type);
     }
@@ -46,21 +46,21 @@ bool NameResolver::resolve()
   }
 
   // Resolve type alias definitions
-  for (auto * alias : program.typeAliases) {
+  for (auto * alias : program.type_aliases()) {
     if (alias->aliasedType) {
       visit(alias->aliasedType);
     }
   }
 
   // Resolve extern port types
-  for (auto * ext : program.externs) {
+  for (auto * ext : program.externs()) {
     for (auto * port : ext->ports) {
       visit_extern_port(port);
     }
   }
 
   // Resolve tree definitions
-  for (auto * tree : program.trees) {
+  for (auto * tree : program.trees()) {
     visit_tree_decl(tree);
   }
 

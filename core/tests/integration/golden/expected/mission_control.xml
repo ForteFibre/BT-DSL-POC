@@ -3,100 +3,99 @@
     <BehaviorTree ID="Main">
         <Sequence>
             <Sequence>
-                <Script code=" t0#1 := 0 " />
-                <GetTimeMs now="{t0#1}" />
+                <Script code=" t0#1 := 0 "/>
+                <GetTimeMs now="{t0#1}"/>
             </Sequence>
             <Repeat num_cycles="3">
                 <Sequence>
-                    <Script code=" found_now#2 := false " />
+                    <Script code=" found_now#2 := false "/>
                     <Sequence>
-                        <Script code=" p#3 := 0 " />
-                        <FindTarget radius="10" found="{found_now#2}" pose="{p#3}" />
+                        <Script code=" p#3 := 0 "/>
+                        <FindTarget radius="10" found="{found_now#2}" pose="{p#3}"/>
                     </Sequence>
-                    <Script code=" @{HasTarget} = found_now#2 " />
-                    <Script code=" @{TargetPose} = p#3 " _failureIf="({found_now#2} == false)" />
-                    <Log msg="No target yet" _failureIf="!{found_now#2}" />
+                    <Script code=" @{HasTarget} = found_now#2 "/>
+                    <Script code=" @{TargetPose} = p#3 " _failureIf="({found_now#2} == false)"/>
+                    <Log msg="No target yet" _failureIf="!{found_now#2}"/>
                 </Sequence>
             </Repeat>
             <Sequence>
-                <BlackboardExists key="TargetPose" _while="true" />
+                <BlackboardExists key="TargetPose" _while="true"/>
                 <Sequence _while="true">
                     <Sequence>
-                        <Script code=" ok#4 := 0 " />
-                        <SubTree ID="EngageTarget" pose="@{TargetPose}" ammo="@{Ammo}" ok="{ok#4}" />
+                        <Script code=" ok#4 := 0 "/>
+                        <SubTree ID="EngageTarget" pose="@{TargetPose}" ammo="@{Ammo}" ok="{ok#4}"/>
                     </Sequence>
-                    <Log msg="EngageTarget returned failure" _failureIf="({ok#4} == false)" />
-                    <Script code=" @{LastError} = &apos;&lt;none&gt; &amp; ok&apos; "
-                        _failureIf="({ok#4} == false)" />
+                    <Log msg="EngageTarget returned failure" _failureIf="({ok#4} == false)"/>
+                    <Script code=" @{LastError} = &apos;&lt;none&gt; &amp; ok&apos; " _failureIf="({ok#4} == false)"/>
                 </Sequence>
-                <AlwaysSuccess _failureIf="!(true)" />
+                <AlwaysSuccess _failureIf="!(true)"/>
             </Sequence>
-            <AlwaysSuccess />
+            <AlwaysSuccess/>
         </Sequence>
     </BehaviorTree>
     <BehaviorTree ID="EngageTarget">
         <Sequence>
-            <Script code=" local_ok#1 := true " />
-            <ComputeGoal pose="{pose}" goal="@{Goal}" />
+            <Script code=" local_ok#1 := true "/>
+            <ComputeGoal pose="{pose}" goal="@{Goal}"/>
             <Sequence>
-                <Script code=" _default#2 := 2500 " />
-                <MoveTo goal="@{Goal}" ok="{local_ok#1}" timeout_ms="{_default#2}" />
+                <Script code=" _default#2 := 2500 "/>
+                <MoveTo goal="@{Goal}" ok="{local_ok#1}" timeout_ms="{_default#2}"/>
             </Sequence>
-            <Log msg="MoveTo failed" _failureIf="({local_ok#1} == false)" />
+            <Log msg="MoveTo failed" _failureIf="({local_ok#1} == false)"/>
             <Fallback>
-                <AlwaysSuccess _successIf="({ammo} &gt; 0)" />
-                <Reload ok="{local_ok#1}" />
+                <AlwaysSuccess _successIf="({ammo} &gt; 0)"/>
+                <Reload ok="{local_ok#1}"/>
             </Fallback>
             <Repeat num_cycles="3">
                 <Sequence>
-                    <Shoot burst="1" ok="{local_ok#1}" _while="{local_ok#1}" />
-                    <AlwaysSuccess _failureIf="!({local_ok#1})" />
+                    <Shoot burst="1" ok="{local_ok#1}" _while="{local_ok#1}"/>
+                    <AlwaysSuccess _failureIf="!({local_ok#1})"/>
                 </Sequence>
             </Repeat>
-            <Script code=" ok = local_ok#1 " />
+            <Script code=" ok = local_ok#1 "/>
         </Sequence>
     </BehaviorTree>
     <TreeNodesModel>
-        <Action ID="AlwaysSuccess" />
+        <Action ID="AlwaysSuccess"/>
         <Action ID="ComputeGoal">
-            <input_port name="pose" type="Pose" />
-            <output_port name="goal" type="Vector3" />
+            <input_port name="pose" type="Pose"/>
+            <output_port name="goal" type="Vector3"/>
         </Action>
         <Action ID="FindTarget">
-            <input_port name="radius" type="float" />
-            <output_port name="found" type="bool" />
-            <output_port name="pose" type="Pose" />
+            <input_port name="radius" type="float"/>
+            <output_port name="found" type="bool"/>
+            <output_port name="pose" type="Pose"/>
         </Action>
         <Action ID="GetTimeMs">
-            <output_port name="now" type="int64" />
+            <output_port name="now" type="int64"/>
         </Action>
         <Action ID="Log">
-            <input_port name="msg" type="string" />
+            <input_port name="msg" type="string"/>
         </Action>
         <Action ID="MoveTo">
-            <input_port name="goal" type="Vector3" />
-            <input_port name="timeout_ms" type="Millis" />
-            <output_port name="ok" type="bool" />
+            <input_port name="goal" type="Vector3"/>
+            <input_port name="timeout_ms" type="Millis"/>
+            <output_port name="ok" type="bool"/>
         </Action>
         <Action ID="Reload">
-            <output_port name="ok" type="bool" />
+            <output_port name="ok" type="bool"/>
         </Action>
         <Action ID="Shoot">
-            <input_port name="burst" type="int32" />
-            <output_port name="ok" type="bool" />
+            <input_port name="burst" type="int32"/>
+            <output_port name="ok" type="bool"/>
         </Action>
         <Condition ID="BlackboardExists">
-            <input_port name="key" type="string" />
+            <input_port name="key" type="string"/>
         </Condition>
-        <Control ID="Fallback" />
-        <Control ID="Sequence" />
+        <Control ID="Fallback"/>
+        <Control ID="Sequence"/>
         <Decorator ID="Repeat">
-            <input_port name="num_cycles" type="int" />
+            <input_port name="num_cycles" type="int"/>
         </Decorator>
         <SubTree ID="EngageTarget">
-            <output_port name="ok" type="bool" />
-            <inout_port name="ammo" type="int32" />
-            <inout_port name="pose" type="Pose" />
+            <output_port name="ok" type="bool"/>
+            <inout_port name="ammo" type="int32"/>
+            <inout_port name="pose" type="Pose"/>
         </SubTree>
     </TreeNodesModel>
 </root>

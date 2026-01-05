@@ -177,13 +177,7 @@ public:
 
     // Collect all children
     std::vector<AstNode *> all_children;
-    collect_children(all_children, node->imports);
-    collect_children(all_children, node->externTypes);
-    collect_children(all_children, node->typeAliases);
-    collect_children(all_children, node->externs);
-    collect_children(all_children, node->globalVars);
-    collect_children(all_children, node->globalConsts);
-    collect_children(all_children, node->trees);
+    collect_children(all_children, node->decls);
 
     if (!all_children.empty()) {
       // Root's direct children should start at column 0 with the tree markers.

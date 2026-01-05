@@ -216,7 +216,7 @@ bool NullChecker::check(const Program & program)
 {
   CFGBuilder builder(nodes_);
 
-  for (const auto * tree : program.trees) {
+  for (const auto * tree : program.trees()) {
     if (tree == nullptr) continue;
 
     auto cfg = builder.build(tree);

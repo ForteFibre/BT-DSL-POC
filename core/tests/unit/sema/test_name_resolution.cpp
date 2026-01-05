@@ -29,7 +29,7 @@ static ModuleInfo create_test_module(ParsedUnit & unit)
   module.program = unit.program;
   module.types.register_builtins();
 
-  for (const auto * ext_type : unit.program->externTypes) {
+  for (const auto * ext_type : unit.program->extern_types()) {
     TypeSymbol sym;
     sym.name = ext_type->name;
     sym.decl = ext_type;
@@ -37,13 +37,13 @@ static ModuleInfo create_test_module(ParsedUnit & unit)
     module.types.define(sym);
   }
 
-  for (const auto * ext : unit.program->externs) {
+  for (const auto * ext : unit.program->externs()) {
     NodeSymbol sym;
     sym.name = ext->name;
     sym.decl = ext;
     module.nodes.define(sym);
   }
-  for (const auto * tree : unit.program->trees) {
+  for (const auto * tree : unit.program->trees()) {
     NodeSymbol sym;
     sym.name = tree->name;
     sym.decl = tree;
@@ -72,7 +72,7 @@ TEST(SemaNameResolver, ResolveBuiltinType)
   ASSERT_TRUE(unit->diags.empty());
   Program * program = unit->program;
   ASSERT_NE(program, nullptr);
-  ASSERT_EQ(program->globalVars.size(), 1U);
+  ASSERT_EQ(program->global_vars().size(), 1U);
 
   ModuleInfo module = create_test_module(*unit);
 
@@ -81,7 +81,7 @@ TEST(SemaNameResolver, ResolveBuiltinType)
   ASSERT_TRUE(ok);
 
   // Check that the type is resolved
-  auto * var = program->globalVars[0];
+  auto * var = program->global_vars()[0];
   ASSERT_NE(var->type, nullptr);
   auto * type_expr = var->type;
   ASSERT_NE(type_expr->base, nullptr);
@@ -103,8 +103,8 @@ TEST(SemaNameResolver, ResolveExternType)
   ASSERT_TRUE(unit->diags.empty());
   Program * program = unit->program;
   ASSERT_NE(program, nullptr);
-  ASSERT_EQ(program->externTypes.size(), 1U);
-  ASSERT_EQ(program->globalVars.size(), 1U);
+  ASSERT_EQ(program->extern_types().size(), 1U);
+  ASSERT_EQ(program->global_vars().size(), 1U);
 
   ModuleInfo module = create_test_module(*unit);
 
@@ -113,7 +113,7 @@ TEST(SemaNameResolver, ResolveExternType)
   ASSERT_TRUE(ok);
 
   // Check that the extern type is resolved
-  auto * var = program->globalVars[0];
+  auto * var = program->global_vars()[0];
   auto * primary_type = cast<PrimaryType>(var->type->base);
   ASSERT_NE(primary_type, nullptr);
   ASSERT_NE(primary_type->resolvedType, nullptr);
@@ -138,8 +138,8 @@ TEST(SemaNameResolver, ResolveExternNode)
   ASSERT_TRUE(unit->diags.empty());
   Program * program = unit->program;
   ASSERT_NE(program, nullptr);
-  ASSERT_EQ(program->externs.size(), 1U);
-  ASSERT_EQ(program->trees.size(), 1U);
+  ASSERT_EQ(program->externs().size(), 1U);
+  ASSERT_EQ(program->trees().size(), 1U);
 
   ModuleInfo module = create_test_module(*unit);
 
@@ -148,7 +148,7 @@ TEST(SemaNameResolver, ResolveExternNode)
   ASSERT_TRUE(ok);
 
   // Check that the node is resolved in the tree body
-  auto * tree = program->trees[0];
+  auto * tree = program->trees()[0];
   ASSERT_EQ(tree->body.size(), 1U);
   auto * node_stmt = cast<NodeStmt>(tree->body[0]);
   ASSERT_NE(node_stmt, nullptr);
@@ -170,7 +170,7 @@ TEST(SemaNameResolver, ResolveTreeCall)
   ASSERT_TRUE(unit->diags.empty());
   Program * program = unit->program;
   ASSERT_NE(program, nullptr);
-  ASSERT_EQ(program->trees.size(), 2U);
+  ASSERT_EQ(program->trees().size(), 2U);
 
   ModuleInfo module = create_test_module(*unit);
 
@@ -179,7 +179,7 @@ TEST(SemaNameResolver, ResolveTreeCall)
   ASSERT_TRUE(ok);
 
   // Check that the tree call is resolved
-  auto * main_tree = program->trees[1];  // Main
+  auto * main_tree = program->trees()[1];  // Main
   ASSERT_EQ(main_tree->body.size(), 1U);
   auto * node_stmt = cast<NodeStmt>(main_tree->body[0]);
   ASSERT_NE(node_stmt, nullptr);
@@ -205,8 +205,8 @@ TEST(SemaNameResolver, ResolveGlobalVar)
   ASSERT_TRUE(unit->diags.empty());
   Program * program = unit->program;
   ASSERT_NE(program, nullptr);
-  ASSERT_EQ(program->globalVars.size(), 1U);
-  ASSERT_EQ(program->trees.size(), 1U);
+  ASSERT_EQ(program->global_vars().size(), 1U);
+  ASSERT_EQ(program->trees().size(), 1U);
 
   ModuleInfo module = create_test_module(*unit);
 
@@ -215,7 +215,7 @@ TEST(SemaNameResolver, ResolveGlobalVar)
   ASSERT_TRUE(ok);
 
   // Check that the assignment target is resolved
-  auto * tree = program->trees[0];
+  auto * tree = program->trees()[0];
   ASSERT_EQ(tree->body.size(), 1U);
   auto * assign_stmt = cast<AssignmentStmt>(tree->body[0]);
   ASSERT_NE(assign_stmt, nullptr);
@@ -237,7 +237,7 @@ TEST(SemaNameResolver, ResolveParameter)
   ASSERT_TRUE(unit->diags.empty());
   Program * program = unit->program;
   ASSERT_NE(program, nullptr);
-  ASSERT_EQ(program->trees.size(), 1U);
+  ASSERT_EQ(program->trees().size(), 1U);
 
   ModuleInfo module = create_test_module(*unit);
 
@@ -246,7 +246,7 @@ TEST(SemaNameResolver, ResolveParameter)
   ASSERT_TRUE(ok);
 
   // Check that the parameter reference is resolved
-  auto * tree = program->trees[0];
+  auto * tree = program->trees()[0];
   ASSERT_EQ(tree->body.size(), 1U);
   auto * node_stmt = cast<NodeStmt>(tree->body[0]);
   ASSERT_NE(node_stmt, nullptr);
@@ -336,14 +336,14 @@ TEST(SemaNameResolver, ErrorDuplicateTree)
   ASSERT_NE(unit, nullptr);
   Program * program = unit->program;
   ASSERT_NE(program, nullptr);
-  ASSERT_EQ(program->trees.size(), 2U);
+  ASSERT_EQ(program->trees().size(), 2U);
 
   ModuleInfo module;
   module.program = program;
   module.types.register_builtins();
 
   bool has_duplicate = false;
-  for (const auto * tree : program->trees) {
+  for (const auto * tree : program->trees()) {
     NodeSymbol sym;
     sym.name = tree->name;
     sym.decl = tree;
@@ -446,7 +446,7 @@ TEST(SemaNameResolver, InlineBlackboardDecl)
   ASSERT_TRUE(ok);
 
   // Check that x is resolved in Log call
-  auto * tree = program->trees[0];
+  auto * tree = program->trees()[0];
   auto * seq_node = cast<NodeStmt>(tree->body[0]);
   ASSERT_NE(seq_node, nullptr);
   // Log is the second child

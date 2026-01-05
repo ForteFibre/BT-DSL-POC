@@ -43,7 +43,7 @@ TEST(AstPreconditions, ParseGuard)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   EXPECT_EQ(root->nodeName, "Action");
   ASSERT_EQ(root->preconditions.size(), 1U);
@@ -71,7 +71,7 @@ TEST(AstPreconditions, ParseSuccessIf)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->preconditions.size(), 1U);
   EXPECT_EQ(root->preconditions[0]->kind, bt_dsl::PreconditionKind::SuccessIf);
@@ -92,7 +92,7 @@ TEST(AstPreconditions, ParseFailureIf)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->preconditions.size(), 1U);
   EXPECT_EQ(root->preconditions[0]->kind, bt_dsl::PreconditionKind::FailureIf);
@@ -113,7 +113,7 @@ TEST(AstPreconditions, ParseRunWhile)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->preconditions.size(), 1U);
   EXPECT_EQ(root->preconditions[0]->kind, bt_dsl::PreconditionKind::RunWhile);
@@ -135,7 +135,7 @@ TEST(AstPreconditions, MultiplePreconditions)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees[0]->body);
+  bt_dsl::NodeStmt * root = first_node_stmt(unit->program->trees()[0]->body);
   ASSERT_NE(root, nullptr);
   ASSERT_EQ(root->preconditions.size(), 2U);
   EXPECT_EQ(root->preconditions[0]->kind, bt_dsl::PreconditionKind::Guard);
@@ -160,7 +160,7 @@ TEST(AstPreconditions, AssignmentWithPrecondition)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * seq = find_node_stmt(unit->program->trees[0]->body, "Sequence");
+  bt_dsl::NodeStmt * seq = find_node_stmt(unit->program->trees()[0]->body, "Sequence");
   ASSERT_NE(seq, nullptr);
   ASSERT_EQ(seq->children.size(), 1U);
 

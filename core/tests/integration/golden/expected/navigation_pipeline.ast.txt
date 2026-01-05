@@ -4,6 +4,37 @@ Program [1 docs]
 |-TypeAliasDecl name='Millis'
 | `-TypeExpr
 |   `-PrimaryType name='int32'
+|-GlobalConstDecl name='DEFAULT_TOLERANCE'
+| |-TypeExpr
+| | `-PrimaryType name='float'
+| `-FloatLiteralExpr 0.250000
+|-GlobalConstDecl name='DEFAULT_TIMEOUT'
+| |-TypeExpr
+| | `-PrimaryType name='Millis'
+| `-BinaryExpr op='+'
+|   |-IntLiteralExpr 1200
+|   `-IntLiteralExpr 800
+|-GlobalVarDecl name='Start'
+| `-TypeExpr
+|   `-PrimaryType name='Vector3'
+|-GlobalVarDecl name='Goal'
+| `-TypeExpr
+|   `-PrimaryType name='Vector3'
+|-GlobalVarDecl name='Current'
+| `-TypeExpr
+|   `-PrimaryType name='Vector3'
+|-GlobalVarDecl name='HasPlan'
+| |-TypeExpr
+| | `-PrimaryType name='bool'
+| `-BoolLiteralExpr false
+|-GlobalVarDecl name='PlanId'
+| |-TypeExpr
+| | `-PrimaryType name='int32'
+| `-IntLiteralExpr 0
+|-GlobalVarDecl name='StatusText'
+| |-TypeExpr
+| | `-PrimaryType name='string'
+| `-StringLiteralExpr ""
 |-ExternDecl action name='ComputePath'
 | |-ExternPort name='start' in
 | | `-TypeExpr
@@ -50,37 +81,6 @@ Program [1 docs]
 | `-ExternPort name='txt' in
 |   `-TypeExpr
 |     `-PrimaryType name='string'
-|-GlobalVarDecl name='Start'
-| `-TypeExpr
-|   `-PrimaryType name='Vector3'
-|-GlobalVarDecl name='Goal'
-| `-TypeExpr
-|   `-PrimaryType name='Vector3'
-|-GlobalVarDecl name='Current'
-| `-TypeExpr
-|   `-PrimaryType name='Vector3'
-|-GlobalVarDecl name='HasPlan'
-| |-TypeExpr
-| | `-PrimaryType name='bool'
-| `-BoolLiteralExpr false
-|-GlobalVarDecl name='PlanId'
-| |-TypeExpr
-| | `-PrimaryType name='int32'
-| `-IntLiteralExpr 0
-|-GlobalVarDecl name='StatusText'
-| |-TypeExpr
-| | `-PrimaryType name='string'
-| `-StringLiteralExpr ""
-|-GlobalConstDecl name='DEFAULT_TOLERANCE'
-| |-TypeExpr
-| | `-PrimaryType name='float'
-| `-FloatLiteralExpr 0.250000
-|-GlobalConstDecl name='DEFAULT_TIMEOUT'
-| |-TypeExpr
-| | `-PrimaryType name='Millis'
-| `-BinaryExpr op='+'
-|   |-IntLiteralExpr 1200
-|   `-IntLiteralExpr 800
 |-TreeDecl name='NavigateOnce'
 | |-ParamDecl name='start' in
 | | `-TypeExpr

@@ -60,7 +60,7 @@ struct SingleModulePipeline
 
   bool analyze()
   {
-    for (const auto * ext_type : module.program->externTypes) {
+    for (const auto * ext_type : module.program->extern_types()) {
       TypeSymbol sym;
       sym.name = ext_type->name;
       sym.decl = ext_type;
@@ -68,13 +68,13 @@ struct SingleModulePipeline
       module.types.define(sym);
     }
 
-    for (const auto * ext : module.program->externs) {
+    for (const auto * ext : module.program->externs()) {
       NodeSymbol sym;
       sym.name = ext->name;
       sym.decl = ext;
       module.nodes.define(sym);
     }
-    for (const auto * tree : module.program->trees) {
+    for (const auto * tree : module.program->trees()) {
       NodeSymbol sym;
       sym.name = tree->name;
       sym.decl = tree;
@@ -493,7 +493,7 @@ TEST(CodegenXmlGenerator, ManglesImportedTreeIdsAndSubtreeReferences)
 
     m->types.register_builtins();
 
-    for (const auto * ext_type : m->program->externTypes) {
+    for (const auto * ext_type : m->program->extern_types()) {
       TypeSymbol sym;
       sym.name = ext_type->name;
       sym.decl = ext_type;
@@ -501,13 +501,13 @@ TEST(CodegenXmlGenerator, ManglesImportedTreeIdsAndSubtreeReferences)
       m->types.define(sym);
     }
 
-    for (const auto * ext : m->program->externs) {
+    for (const auto * ext : m->program->externs()) {
       NodeSymbol sym;
       sym.name = ext->name;
       sym.decl = ext;
       m->nodes.define(sym);
     }
-    for (const auto * tree : m->program->trees) {
+    for (const auto * tree : m->program->trees()) {
       NodeSymbol sym;
       sym.name = tree->name;
       sym.decl = tree;

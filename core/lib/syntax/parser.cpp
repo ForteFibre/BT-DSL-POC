@@ -4,7 +4,6 @@
 #include <charconv>
 #include <cstdint>
 #include <cstdlib>
-#include <limits>
 #include <string>
 
 namespace bt_dsl::syntax
@@ -257,25 +256,19 @@ Program * Parser::parse_program()
     prog->innerDocs = ast_.copy_to_arena(md);
   }
 
-  std::vector<ImportDecl *> imports;
-  std::vector<ExternTypeDecl *> extern_types;
-  std::vector<TypeAliasDecl *> type_aliases;
-  std::vector<ExternDecl *> externs;
-  std::vector<GlobalVarDecl *> global_vars;
-  std::vector<GlobalConstDecl *> global_consts;
-  std::vector<TreeDecl *> trees;
+  std::vector<Decl *> decls;
 
   while (!at_eof()) {
     const auto docs = collect_line_docs();
 
     if (is_kw("import", cur())) {
-      imports.push_back(parse_import_decl(docs));
+      decls.push_back(parse_import_decl(docs));
       continue;
     }
 
     // Attribute-prefixed top-level decls (currently only #[behavior(...)] extern ...)
     if (at(TokenKind::Hash)) {
-      externs.push_back(parse_extern_decl(docs));
+      decls.push_back(parse_extern_decl(docs));
       continue;
     }
 
@@ -283,30 +276,30 @@ Program * Parser::parse_program()
       // Need to decide between extern type and extern node
       // Lookahead: extern type
       if (cur(1).kind == TokenKind::Identifier && cur(1).text == "type") {
-        extern_types.push_back(parse_extern_type_decl(docs));
+        decls.push_back(parse_extern_type_decl(docs));
       } else {
-        externs.push_back(parse_extern_decl(docs));
+        decls.push_back(parse_extern_decl(docs));
       }
       continue;
     }
 
     if (is_kw("type", cur())) {
-      type_aliases.push_back(parse_type_alias_decl(docs));
+      decls.push_back(parse_type_alias_decl(docs));
       continue;
     }
 
     if (is_kw("var", cur())) {
-      global_vars.push_back(parse_global_var_decl(docs));
+      decls.push_back(parse_global_var_decl(docs));
       continue;
     }
 
     if (is_kw("const", cur())) {
-      global_consts.push_back(parse_global_const_decl(docs));
+      decls.push_back(parse_global_const_decl(docs));
       continue;
     }
 
     if (is_kw("tree", cur())) {
-      trees.push_back(parse_tree_decl(docs));
+      decls.push_back(parse_tree_decl(docs));
       continue;
     }
 
@@ -318,13 +311,7 @@ Program * Parser::parse_program()
     advance();
   }
 
-  prog->imports = ast_.copy_to_arena(imports);
-  prog->externTypes = ast_.copy_to_arena(extern_types);
-  prog->typeAliases = ast_.copy_to_arena(type_aliases);
-  prog->externs = ast_.copy_to_arena(externs);
-  prog->globalVars = ast_.copy_to_arena(global_vars);
-  prog->globalConsts = ast_.copy_to_arena(global_consts);
-  prog->trees = ast_.copy_to_arena(trees);
+  prog->decls = ast_.copy_to_arena(decls);
 
   return prog;
 }
@@ -344,7 +331,10 @@ ImportDecl * Parser::parse_import_decl(const std::vector<std::string_view> & /*d
   auto * decl =
     ast_.create<ImportDecl>(ast_.intern(unescaped), join_ranges(kw.range, path_tok.range));
 
-  expect(TokenKind::Semicolon, "';' after import");
+  if (expect(TokenKind::Semicolon, "';' after import")) {
+    const Token & semi_tok = tokens_[idx_ - 1];
+    decl->range_ = join_ranges(decl->get_range(), semi_tok.range);
+  }
   return decl;
 }
 
@@ -366,7 +356,10 @@ ExternTypeDecl * Parser::parse_extern_type_decl(const std::vector<std::string_vi
     ast_.create<ExternTypeDecl>(ast_.intern(name_tok.text), join_ranges(kw.range, name_tok.range));
   d->docs = ast_.copy_to_arena(docs);
 
-  expect(TokenKind::Semicolon, "';' after extern type");
+  if (expect(TokenKind::Semicolon, "';' after extern type")) {
+    const Token & semi_tok = tokens_[idx_ - 1];
+    d->range_ = join_ranges(d->get_range(), semi_tok.range);
+  }
   return d;
 }
 
@@ -381,8 +374,10 @@ TypeAliasDecl * Parser::parse_type_alias_decl(const std::vector<std::string_view
 
   expect(TokenKind::Semicolon, "';' after type alias");
 
-  auto * d =
-    ast_.create<TypeAliasDecl>(ast_.intern(name_tok.text), ty, join_ranges(kw.range, cur().range));
+  const Token & semi_tok = tokens_[idx_ - 1];
+
+  auto * d = ast_.create<TypeAliasDecl>(
+    ast_.intern(name_tok.text), ty, join_ranges(kw.range, semi_tok.range));
   d->docs = ast_.copy_to_arena(docs);
   return d;
 }
@@ -406,8 +401,10 @@ GlobalVarDecl * Parser::parse_global_var_decl(const std::vector<std::string_view
 
   expect(TokenKind::Semicolon, "';' after global var");
 
+  const Token & semi_tok = tokens_[idx_ - 1];
+
   auto * d = ast_.create<GlobalVarDecl>(
-    ast_.intern(name_tok.text), ty, init, join_ranges(kw.range, cur().range));
+    ast_.intern(name_tok.text), ty, init, join_ranges(kw.range, semi_tok.range));
   d->docs = ast_.copy_to_arena(docs);
   return d;
 }
@@ -429,8 +426,10 @@ GlobalConstDecl * Parser::parse_global_const_decl(const std::vector<std::string_
 
   expect(TokenKind::Semicolon, "';' after global const");
 
+  const Token & semi_tok = tokens_[idx_ - 1];
+
   auto * d = ast_.create<GlobalConstDecl>(
-    ast_.intern(name_tok.text), ty, value, join_ranges(kw.range, cur().range));
+    ast_.intern(name_tok.text), ty, value, join_ranges(kw.range, semi_tok.range));
   d->docs = ast_.copy_to_arena(docs);
   return d;
 }
@@ -549,7 +548,10 @@ ExternDecl * Parser::parse_extern_decl(const std::vector<std::string_view> & doc
   }
 
   expect(TokenKind::RParen, "')' after extern ports");
-  expect(TokenKind::Semicolon, "';' after extern");
+  if (expect(TokenKind::Semicolon, "';' after extern")) {
+    const Token & semi_tok = tokens_[idx_ - 1];
+    d->range_ = join_ranges(d->get_range(), semi_tok.range);
+  }
 
   d->ports = ast_.copy_to_arena(ports);
   return d;
@@ -674,8 +676,10 @@ BlackboardDeclStmt * Parser::parse_var_stmt(
 
   expect(TokenKind::Semicolon, "';' after var decl");
 
+  const Token & semi_tok = tokens_[idx_ - 1];
+
   auto * st = ast_.create<BlackboardDeclStmt>(
-    ast_.intern(name_tok.text), ty, init, join_ranges(kw.range, cur().range));
+    ast_.intern(name_tok.text), ty, init, join_ranges(kw.range, semi_tok.range));
   st->docs = ast_.copy_to_arena(docs);
   return st;
 }
@@ -697,8 +701,10 @@ ConstDeclStmt * Parser::parse_const_stmt(
 
   expect(TokenKind::Semicolon, "';' after const decl");
 
+  const Token & semi_tok = tokens_[idx_ - 1];
+
   auto * st = ast_.create<ConstDeclStmt>(
-    ast_.intern(name_tok.text), ty, value, join_ranges(kw.range, cur().range));
+    ast_.intern(name_tok.text), ty, value, join_ranges(kw.range, semi_tok.range));
   st->docs = ast_.copy_to_arena(docs);
   return st;
 }
@@ -740,8 +746,10 @@ AssignmentStmt * Parser::parse_assignment_stmt(
   Expr * value = parse_expr();
   expect(TokenKind::Semicolon, "';' after assignment");
 
+  const Token & semi_tok = tokens_[idx_ - 1];
+
   auto * st = ast_.create<AssignmentStmt>(
-    ast_.intern(name_tok.text), op, value, join_ranges(name_tok.range, cur().range));
+    ast_.intern(name_tok.text), op, value, join_ranges(name_tok.range, semi_tok.range));
   st->docs = ast_.copy_to_arena(docs);
   st->preconditions = ast_.copy_to_arena(preconds);
   st->indices = ast_.copy_to_arena(indices);
@@ -801,7 +809,10 @@ NodeStmt * Parser::parse_node_stmt(
 
   // Leaf call requires semicolon
   expect(TokenKind::Semicolon, "';' after node call");
-  st->range_ = join_ranges(name_tok.range, cur().range);
+  {
+    const Token & semi_tok = tokens_[idx_ - 1];
+    st->range_ = join_ranges(name_tok.range, semi_tok.range);
+  }
   return st;
 }
 
