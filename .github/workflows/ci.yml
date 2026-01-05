@@ -199,7 +199,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: core-wasm-build
-          path: core/build-wasm
+          path: .
 
       - name: Install dependencies
         run: pnpm install
@@ -235,7 +235,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: formatter-build
-          path: formatter
+          path: .
 
       - name: Install dependencies
         run: pnpm install
@@ -261,13 +261,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: core-lsp-build
-          path: core/build-lsp
+          path: .
 
       - name: Download Formatter Artifacts
         uses: actions/download-artifact@v4
         with:
           name: formatter-build
-          path: formatter
+          path: .
 
       - name: Make LSP server executable
         run: chmod +x core/build-lsp/bt_dsl_lsp_server
@@ -299,13 +299,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: core-lsp-build
-          path: core/build-lsp
+          path: .
 
       - name: Download Formatter Artifacts
         uses: actions/download-artifact@v4
         with:
           name: formatter-build
-          path: formatter
+          path: .
 
       - name: Make LSP server executable
         run: chmod +x core/build-lsp/bt_dsl_lsp_server
@@ -342,13 +342,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: core-lsp-build
-          path: core/build-lsp
+          path: .
 
       - name: Download Formatter Artifacts
         uses: actions/download-artifact@v4
         with:
           name: formatter-build
-          path: formatter
+          path: .
 
       - name: Install dependencies
         run: pnpm install
