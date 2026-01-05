@@ -35,7 +35,7 @@ void DiagnosticPrinter::print(const Diagnostic & diag, const SourceRegistry & so
   // Convert to relative path for cleaner output
   std::string filename = "<unknown>";
   if (file_id.is_valid()) {
-    const auto abs_path = sources.get_path(file_id);
+    const auto & abs_path = sources.get_path(file_id);
     std::error_code ec;
     auto rel_path = std::filesystem::relative(abs_path, std::filesystem::current_path(), ec);
     filename = ec ? abs_path.string() : rel_path.string();
@@ -238,7 +238,7 @@ void DiagnosticPrinter::print_source_line(
   // Print markers
   fmt::print(os_, "{}", marker_prefix);
 
-  char marker_char = (style == LabelStyle::Primary) ? '^' : '-';
+  const char marker_char = (style == LabelStyle::Primary) ? '^' : '-';
 
   if (use_color_) {
     if (style == LabelStyle::Primary) {
@@ -301,8 +301,7 @@ void DiagnosticPrinter::print_fixit(const FixIt & fixit, const SourceRegistry & 
   // Build the fixed line by inserting replacement at the end position
   std::string cleaned_line;
   cleaned_line.reserve(line.size() + fixit.replacement_text.size());
-  for (size_t i = 0; i < line.size(); ++i) {
-    char c = line[i];
+  for (const char c : line) {
     if (c == '\t') {
       cleaned_line += "    ";
     } else if (c != '\r' && c != '\n') {
