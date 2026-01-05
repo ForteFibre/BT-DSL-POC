@@ -10,8 +10,9 @@
 static const bt_dsl::TreeDecl * first_tree(const bt_dsl::Program * p)
 {
   if (p == nullptr) return nullptr;
-  if (p->trees.empty()) return nullptr;
-  return p->trees[0];
+  const auto trees = p->trees();
+  if (trees.empty()) return nullptr;
+  return trees[0];
 }
 
 TEST(AstParser, PortedBasic)
@@ -42,12 +43,12 @@ TEST(AstParser, PortedBasic)
   ASSERT_NE(p, nullptr);
 
   // Import
-  ASSERT_EQ(p->imports.size(), 1U);
-  EXPECT_EQ(p->imports[0]->path_string(), "nodes.bt");
+  ASSERT_EQ(p->imports().size(), 1U);
+  EXPECT_EQ(p->imports()[0]->path_string(), "nodes.bt");
 
   // Extern decl
-  ASSERT_EQ(p->externs.size(), 1U);
-  const bt_dsl::ExternDecl * ex = p->externs[0];
+  ASSERT_EQ(p->externs().size(), 1U);
+  const bt_dsl::ExternDecl * ex = p->externs()[0];
   ASSERT_NE(ex, nullptr);
   EXPECT_EQ(ex->category, bt_dsl::ExternNodeCategory::Action);
   EXPECT_EQ(ex->name, "FindEnemy");

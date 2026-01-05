@@ -31,7 +31,7 @@ static ModuleInfo create_test_module(ParsedUnit & unit, DiagnosticBag * diags = 
   module.program = unit.program;
   module.types.register_builtins();
 
-  for (const auto * ext_type : unit.program->externTypes) {
+  for (const auto * ext_type : unit.program->extern_types()) {
     TypeSymbol sym;
     sym.name = ext_type->name;
     sym.decl = ext_type;
@@ -39,13 +39,13 @@ static ModuleInfo create_test_module(ParsedUnit & unit, DiagnosticBag * diags = 
     module.types.define(sym);
   }
 
-  for (const auto * ext : unit.program->externs) {
+  for (const auto * ext : unit.program->externs()) {
     NodeSymbol sym;
     sym.name = ext->name;
     sym.decl = ext;
     module.nodes.define(sym);
   }
-  for (const auto * tree : unit.program->trees) {
+  for (const auto * tree : unit.program->trees()) {
     NodeSymbol sym;
     sym.name = tree->name;
     sym.decl = tree;

@@ -31,8 +31,8 @@ TEST(AstDocs, CrLfIsNormalized)
   ASSERT_EQ(p->innerDocs.size(), 1U);
   EXPECT_EQ(p->innerDocs[0].find('\r'), std::string_view::npos);
 
-  ASSERT_EQ(p->trees.size(), 1U);
-  bt_dsl::TreeDecl * t = p->trees[0];
+  ASSERT_EQ(p->trees().size(), 1U);
+  bt_dsl::TreeDecl * t = p->trees()[0];
   ASSERT_EQ(t->docs.size(), 1U);
   EXPECT_EQ(t->docs[0].find('\r'), std::string_view::npos);
 

@@ -9,8 +9,20 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(BUILD_TESTS "Build tests" ON)
 option(BUILD_CLI "Build CLI executable (btc)" ON)
 option(BUILD_LSP_SERVER "Build LSP server executable" ON)
+option(BUILD_WASM "Build WebAssembly bindings" OFF)
 option(WERROR "Treat warnings as errors" OFF)
 option(ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
+# Minimal build mode (syntax + formatter/JSON only). Useful for WebAssembly.
+option(BT_DSL_MINIMAL_CORE "Build only syntax/basic components" OFF)
+
+if(EMSCRIPTEN)
+    # When targeting WASM, default to a minimal core build.
+    set(BT_DSL_MINIMAL_CORE ON CACHE BOOL "" FORCE)
+    set(BUILD_CLI OFF CACHE BOOL "" FORCE)
+    set(BUILD_LSP_SERVER OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+endif()
 
 # =============================================================================
 # Sanitizers (must be set before any targets)
@@ -30,12 +42,14 @@ endif()
 include(FetchContent)
 
 # TinyXML2 (for BT.CPP XML emission)
-FetchContent_Declare(
-    tinyxml2
-    GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
-    GIT_TAG 10.0.0
-)
-FetchContent_MakeAvailable(tinyxml2)
+if(NOT BT_DSL_MINIMAL_CORE)
+    FetchContent_Declare(
+        tinyxml2
+        GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
+        GIT_TAG 10.0.0
+    )
+    FetchContent_MakeAvailable(tinyxml2)
+endif()
 
 # nlohmann/json (used for serverless LSP JSON APIs)
 FetchContent_Declare(
@@ -54,15 +68,17 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(GSL)
 
 # yaml-cpp (for btc.yaml project configuration)
-FetchContent_Declare(
-    yaml-cpp
-    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
-    GIT_TAG 0.8.0
-)
-set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(yaml-cpp)
+if(NOT BT_DSL_MINIMAL_CORE)
+    FetchContent_Declare(
+        yaml-cpp
+        GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+        GIT_TAG 0.8.0
+    )
+    set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(yaml-cpp)
+endif()
 
 # GoogleTest (tests)
 if(BUILD_TESTS)
@@ -82,58 +98,80 @@ endif()
 # =============================================================================
 # Core library
 # =============================================================================
-set(BT_DSL_CORE_SOURCES
-    lib/basic/source_manager.cpp
-    lib/basic/diagnostic.cpp
-    lib/basic/diagnostic_printer.cpp
+if(BT_DSL_MINIMAL_CORE)
+    set(BT_DSL_CORE_SOURCES
+        lib/basic/source_manager.cpp
+        lib/basic/diagnostic.cpp
 
-    # Sema: Resolution (symbols, names, modules)
-    lib/sema/resolution/symbol_table.cpp
-    lib/sema/resolution/symbol_table_builder.cpp
-    lib/sema/resolution/name_resolver.cpp
-    lib/sema/resolution/module_resolver.cpp
+        # Frontend (Lexer -> recursive descent parser -> AST)
+        lib/syntax/lexer.cpp
+        lib/syntax/parser.cpp
+        lib/syntax/frontend.cpp
 
-    # Sema: Types (type system, type checking, constants)
-    lib/sema/types/type.cpp
-    lib/sema/types/type_utils.cpp
-    lib/sema/types/const_evaluator.cpp
-    lib/sema/types/type_checker.cpp
+        # AST utilities
+        lib/ast/json_visitor.cpp
+    )
+else()
+    set(BT_DSL_CORE_SOURCES
+        lib/basic/source_manager.cpp
+        lib/basic/diagnostic.cpp
+        lib/basic/diagnostic_printer.cpp
 
-    # Sema: Analysis (CFG, data-flow, safety checks)
-    lib/sema/analysis/cfg_builder.cpp
-    lib/sema/analysis/init_checker.cpp
-    lib/sema/analysis/null_checker.cpp
-    lib/sema/analysis/tree_recursion_checker.cpp
+        # Sema: Resolution (symbols, names, modules)
+        lib/sema/resolution/symbol_table.cpp
+        lib/sema/resolution/symbol_table_builder.cpp
+        lib/sema/resolution/name_resolver.cpp
+        lib/sema/resolution/module_resolver.cpp
 
-    # Codegen
-    lib/codegen/xml_generator.cpp
-    lib/codegen/model_converter.cpp
+        # Sema: Types (type system, type checking, constants)
+        lib/sema/types/type.cpp
+        lib/sema/types/type_utils.cpp
+        lib/sema/types/const_evaluator.cpp
+        lib/sema/types/type_checker.cpp
 
-    # Frontend (Lexer -> recursive descent parser -> AST)
-    lib/syntax/lexer.cpp
-    lib/syntax/parser.cpp
-    lib/syntax/frontend.cpp
+        # Sema: Analysis (CFG, data-flow, safety checks)
+        lib/sema/analysis/cfg_builder.cpp
+        lib/sema/analysis/init_checker.cpp
+        lib/sema/analysis/null_checker.cpp
+        lib/sema/analysis/tree_recursion_checker.cpp
 
-    # LSP (serverless language service)
-    lib/lsp/completion_context.cpp
-    lib/lsp/workspace.cpp
+        # Codegen
+        lib/codegen/xml_generator.cpp
+        lib/codegen/model_converter.cpp
 
-    # Project configuration
-    lib/project/project_config.cpp
+        # Frontend (Lexer -> recursive descent parser -> AST)
+        lib/syntax/lexer.cpp
+        lib/syntax/parser.cpp
+        lib/syntax/frontend.cpp
 
-    # Compiler driver
-    lib/driver/compiler.cpp
-    lib/driver/stdlib_finder.cpp
-)
+        # AST utilities
+        lib/ast/json_visitor.cpp
+
+        # LSP (serverless language service)
+        lib/lsp/completion_context.cpp
+        lib/lsp/workspace.cpp
+
+        # Project configuration
+        lib/project/project_config.cpp
+
+        # Compiler driver
+        lib/driver/compiler.cpp
+        lib/driver/stdlib_finder.cpp
+    )
+endif()
 
 add_library(bt_dsl_core STATIC ${BT_DSL_CORE_SOURCES})
 target_include_directories(bt_dsl_core PUBLIC
     include
 )
-target_link_libraries(bt_dsl_core PUBLIC tinyxml2)
+if(NOT BT_DSL_MINIMAL_CORE)
+    target_link_libraries(bt_dsl_core PUBLIC tinyxml2)
+endif()
 target_link_libraries(bt_dsl_core PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(bt_dsl_core PUBLIC Microsoft.GSL::GSL)
-target_link_libraries(bt_dsl_core PUBLIC yaml-cpp::yaml-cpp)
+if(NOT BT_DSL_MINIMAL_CORE)
+    target_link_libraries(bt_dsl_core PUBLIC yaml-cpp::yaml-cpp)
+endif()
 
 # Common compiler warnings
 set(BT_DSL_COMPILE_OPTIONS
@@ -171,6 +209,28 @@ if(BUILD_CLI)
     # Define default stdlib path relative to install prefix
     target_compile_definitions(btc PRIVATE
         BT_DSL_STDLIB_INSTALL_PATH="${CMAKE_INSTALL_PREFIX}/share/bt-dsl/std")
+endif()
+
+# =============================================================================
+# WebAssembly bindings (Emscripten) - for Prettier formatter
+# =============================================================================
+if(BUILD_WASM)
+    if(NOT EMSCRIPTEN)
+        message(FATAL_ERROR "BUILD_WASM requires Emscripten toolchain")
+    endif()
+
+    add_executable(formatter_wasm tools/formatter_wasm/main.cpp)
+    target_link_libraries(formatter_wasm PRIVATE bt_dsl_core)
+
+    # Produce an ES module factory (MODULARIZE) for Node/Esm usage.
+    target_link_options(formatter_wasm PRIVATE
+        "--bind"
+        "-sMODULARIZE=1"
+        "-sEXPORT_ES6=1"
+        "-sENVIRONMENT=node"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sASSERTIONS=0"
+    )
 endif()
 
 # =============================================================================

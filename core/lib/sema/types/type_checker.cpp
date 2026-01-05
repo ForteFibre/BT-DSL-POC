@@ -351,23 +351,23 @@ bool TypeChecker::check(Program & program)
 {
   // Validate type alias definitions even if unused.
   // Spec: circular type alias definitions are prohibited.
-  for (auto * alias : program.typeAliases) {
+  for (auto * alias : program.type_aliases()) {
     if (!alias || !alias->aliasedType) continue;
     (void)resolve_type(alias->aliasedType);
   }
 
   // Check global variable declarations
-  for (auto * decl : program.globalVars) {
+  for (auto * decl : program.global_vars()) {
     check_global_var_decl(decl);
   }
 
   // Check global const declarations (types should already be set by ConstEvaluator)
-  for (auto * decl : program.globalConsts) {
+  for (auto * decl : program.global_consts()) {
     check_global_const_decl(decl);
   }
 
   // Check tree declarations
-  for (auto * tree : program.trees) {
+  for (auto * tree : program.trees()) {
     check_tree_decl(tree);
   }
 

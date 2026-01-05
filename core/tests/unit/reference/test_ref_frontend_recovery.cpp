@@ -45,9 +45,12 @@ TEST(RefFrontendRecovery, MissingSemicolonDoesNotStopParsingNextDecl)
   Program * p = parse_with_errors(unit, "const A = 1\nconst B = 2;\n");
   ASSERT_NE(p, nullptr);
 
-  ASSERT_EQ(p->globalConsts.size(), 2U);
-  EXPECT_EQ(p->globalConsts[0]->name, "A");
-  EXPECT_EQ(p->globalConsts[1]->name, "B");
+  const auto consts = p->global_consts();
+  ASSERT_EQ(consts.size(), 2U);
+  ASSERT_NE(consts[0], nullptr);
+  ASSERT_NE(consts[1], nullptr);
+  EXPECT_EQ(consts[0]->name, "A");
+  EXPECT_EQ(consts[1]->name, "B");
 }
 
 TEST(RefFrontendRecovery, MissingExpressionDoesNotStopParsingNextDecl)
@@ -56,9 +59,12 @@ TEST(RefFrontendRecovery, MissingExpressionDoesNotStopParsingNextDecl)
   Program * p = parse_with_errors(unit, "const A = ; const B = 2;\n");
   ASSERT_NE(p, nullptr);
 
-  ASSERT_EQ(p->globalConsts.size(), 2U);
-  EXPECT_EQ(p->globalConsts[0]->name, "A");
-  EXPECT_EQ(p->globalConsts[1]->name, "B");
+  const auto consts = p->global_consts();
+  ASSERT_EQ(consts.size(), 2U);
+  ASSERT_NE(consts[0], nullptr);
+  ASSERT_NE(consts[1], nullptr);
+  EXPECT_EQ(consts[0]->name, "A");
+  EXPECT_EQ(consts[1]->name, "B");
 }
 
 TEST(RefFrontendRecovery, UnexpectedTokenInTreeBodySynchronizesToNextStmt)
@@ -66,9 +72,10 @@ TEST(RefFrontendRecovery, UnexpectedTokenInTreeBodySynchronizesToNextStmt)
   std::unique_ptr<ParsedUnit> unit;
   Program * p = parse_with_errors(unit, "tree T() { $; var y: int32; }\n");
   ASSERT_NE(p, nullptr);
-  ASSERT_EQ(p->trees.size(), 1U);
+  const auto trees = p->trees();
+  ASSERT_EQ(trees.size(), 1U);
 
-  const TreeDecl * t = p->trees[0];
+  const TreeDecl * t = trees[0];
   ASSERT_NE(t, nullptr);
 
   // The unexpected token statement is dropped; the later var statement should still parse.
@@ -95,6 +102,6 @@ TEST(RefFrontendRecovery, ValidInputStillParsesOk)
   std::unique_ptr<ParsedUnit> unit;
   Program * p = parse_ok(unit, "const X = 1; tree T() { var y: int32; }\n");
   ASSERT_NE(p, nullptr);
-  ASSERT_EQ(p->globalConsts.size(), 1U);
-  ASSERT_EQ(p->trees.size(), 1U);
+  ASSERT_EQ(p->global_consts().size(), 1U);
+  ASSERT_EQ(p->trees().size(), 1U);
 }

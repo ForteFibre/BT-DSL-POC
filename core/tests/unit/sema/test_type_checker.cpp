@@ -55,7 +55,7 @@ struct TestContext
     module.program = program;
     module.types.register_builtins();
 
-    for (const auto * ext_type : program->externTypes) {
+    for (const auto * ext_type : program->extern_types()) {
       TypeSymbol sym;
       sym.name = ext_type->name;
       sym.decl = ext_type;
@@ -63,13 +63,13 @@ struct TestContext
       module.types.define(sym);
     }
 
-    for (const auto * ext : program->externs) {
+    for (const auto * ext : program->externs()) {
       NodeSymbol sym;
       sym.name = ext->name;
       sym.decl = ext;
       module.nodes.define(sym);
     }
-    for (const auto * tree : program->trees) {
+    for (const auto * tree : program->trees()) {
       NodeSymbol sym;
       sym.name = tree->name;
       sym.decl = tree;
@@ -104,16 +104,20 @@ struct TestContext
   // Helper to get the resolved type of a global const's value expression
   const Type * get_global_const_expr_type(size_t idx) const
   {
-    if (idx >= program->globalConsts.size()) return nullptr;
-    const Expr * value_expr = program->globalConsts[idx]->value;
+    const auto consts = program->global_consts();
+    const auto * c = consts[idx];
+    if (c == nullptr) return nullptr;
+    const Expr * value_expr = c->value;
     return value_expr ? value_expr->resolvedType : nullptr;
   }
 
   // Helper to get the resolved type of a global var's initial value expression
   const Type * get_global_var_expr_type(size_t idx) const
   {
-    if (idx >= program->globalVars.size()) return nullptr;
-    const Expr * init_expr = program->globalVars[idx]->initialValue;
+    const auto vars = program->global_vars();
+    const auto * v = vars[idx];
+    if (v == nullptr) return nullptr;
+    const Expr * init_expr = v->initialValue;
     return init_expr ? init_expr->resolvedType : nullptr;
   }
 };

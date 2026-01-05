@@ -60,7 +60,7 @@ static bool check_null_safety(const std::string & src, DiagnosticBag & diags)
 
   module.types.register_builtins();
 
-  for (const auto * ext_type : program->externTypes) {
+  for (const auto * ext_type : program->extern_types()) {
     TypeSymbol sym;
     sym.name = ext_type->name;
     sym.decl = ext_type;
@@ -68,13 +68,13 @@ static bool check_null_safety(const std::string & src, DiagnosticBag & diags)
     module.types.define(sym);
   }
 
-  for (const auto * ext : program->externs) {
+  for (const auto * ext : program->externs()) {
     NodeSymbol sym;
     sym.name = ext->name;
     sym.decl = ext;
     module.nodes.define(sym);
   }
-  for (const auto * tree : program->trees) {
+  for (const auto * tree : program->trees()) {
     NodeSymbol sym;
     sym.name = tree->name;
     sym.decl = tree;

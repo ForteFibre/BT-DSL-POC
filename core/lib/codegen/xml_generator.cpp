@@ -75,13 +75,14 @@ enum class ExprMode : std::uint8_t {
 
 [[nodiscard]] std::string choose_entry_tree_name(const Program & program)
 {
-  for (const auto * t : program.trees) {
+  const auto trees = program.trees();
+  for (const auto * t : trees) {
     if (t && t->name == "Main") {
       return "Main";
     }
   }
-  if (!program.trees.empty() && program.trees[0]) {
-    return std::string(program.trees[0]->name);
+  if (!trees.empty() && trees[0]) {
+    return std::string(trees[0]->name);
   }
   return "Main";
 }
@@ -1109,7 +1110,7 @@ struct TreeKeyHash
   if (!m.program) {
     return nullptr;
   }
-  for (const auto * t : m.program->trees) {
+  for (const auto * t : m.program->trees()) {
     if (t && t->name == name) {
       return t;
     }
@@ -1146,7 +1147,7 @@ void collect_tree_owner_map(
     }
 
     if (m->program) {
-      for (const auto * t : m->program->trees) {
+      for (const auto * t : m->program->trees()) {
         if (t) {
           out.emplace(t, m);
         }
@@ -1289,7 +1290,7 @@ btcpp::Document AstToBtCppModelConverter::convert(const ModuleInfo & module)
     std::unordered_set<const ExternDecl *> used_externs;
     used_externs.reserve(64);
 
-    for (const auto * t : module.program->trees) {
+    for (const auto * t : module.program->trees()) {
       if (!t) {
         continue;
       }
@@ -1323,7 +1324,7 @@ btcpp::Document AstToBtCppModelConverter::convert(const ModuleInfo & module)
     append_blackboard_exists_model(doc);
 
     // SubTree models (only for trees with params)
-    for (const auto * t : module.program->trees) {
+    for (const auto * t : module.program->trees()) {
       if (!t || t->params.empty()) {
         continue;
       }
@@ -1347,7 +1348,7 @@ btcpp::Document AstToBtCppModelConverter::convert(const ModuleInfo & module)
   }
 
   // BehaviorTrees
-  for (const auto * tree : module.program->trees) {
+  for (const auto * tree : module.program->trees()) {
     if (!tree) {
       continue;
     }

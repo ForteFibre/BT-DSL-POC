@@ -160,9 +160,9 @@ bool TreeRecursionChecker::check(const Program & program)
 
   // Build adjacency list for all trees in this program.
   std::unordered_map<const TreeDecl *, std::vector<Edge>> adj;
-  adj.reserve(program.trees.size());
+  adj.reserve(program.trees().size());
 
-  for (const auto * t : program.trees) {
+  for (const auto * t : program.trees()) {
     std::vector<Edge> edges;
     edges.reserve(16);
     collect_edges_from_tree(t, edges);
@@ -171,8 +171,8 @@ bool TreeRecursionChecker::check(const Program & program)
 
   // Roots: all trees defined in this program.
   std::vector<const TreeDecl *> roots;
-  roots.reserve(program.trees.size());
-  for (const auto * t : program.trees) {
+  roots.reserve(program.trees().size());
+  for (const auto * t : program.trees()) {
     roots.push_back(t);
   }
 
@@ -188,7 +188,7 @@ bool TreeRecursionChecker::check(const ModuleGraph & graph, const ModuleInfo & e
   std::unordered_set<const TreeDecl *> all_trees;
   for (const auto * m : graph.get_all_modules()) {
     if (!m || !m->program) continue;
-    for (const auto * t : m->program->trees) {
+    for (const auto * t : m->program->trees()) {
       if (t) all_trees.insert(t);
     }
   }
@@ -217,8 +217,8 @@ bool TreeRecursionChecker::check(const ModuleGraph & graph, const ModuleInfo & e
   // Roots: trees defined in entry module.
   std::vector<const TreeDecl *> roots;
   if (entry.program) {
-    roots.reserve(entry.program->trees.size());
-    for (const auto * t : entry.program->trees) {
+    roots.reserve(entry.program->trees().size());
+    for (const auto * t : entry.program->trees()) {
       roots.push_back(t);
     }
   }

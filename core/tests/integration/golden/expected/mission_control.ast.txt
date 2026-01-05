@@ -12,6 +12,37 @@ Program [1 docs]
 |-TypeAliasDecl name='MaybePose'
 | `-TypeExpr nullable
 |   `-PrimaryType name='Pose'
+|-GlobalConstDecl name='DEFAULT_TIMEOUT_MS'
+| |-TypeExpr
+| | `-PrimaryType name='Millis'
+| `-IntLiteralExpr 2500
+|-GlobalConstDecl name='MAX_RETRIES'
+| |-TypeExpr
+| | `-PrimaryType name='int'
+| `-IntLiteralExpr 3
+|-GlobalConstDecl name='SEARCH_RADIUS'
+| |-TypeExpr
+| | `-PrimaryType name='float'
+| `-FloatLiteralExpr 10.000000
+|-GlobalVarDecl name='TargetPose'
+| |-TypeExpr
+| | `-PrimaryType name='MaybePose'
+| `-NullLiteralExpr
+|-GlobalVarDecl name='HasTarget'
+| |-TypeExpr
+| | `-PrimaryType name='bool'
+| `-BoolLiteralExpr false
+|-GlobalVarDecl name='Ammo'
+| |-TypeExpr
+| | `-PrimaryType name='int32'
+| `-IntLiteralExpr 30
+|-GlobalVarDecl name='Goal'
+| `-TypeExpr
+|   `-PrimaryType name='Vector3'
+|-GlobalVarDecl name='LastError'
+| |-TypeExpr
+| | `-PrimaryType name='string'
+| `-StringLiteralExpr ""
 |-ExternDecl action name='Log'
 | `-ExternPort name='msg' in
 |   `-TypeExpr
@@ -59,37 +90,6 @@ Program [1 docs]
 | `-ExternPort name='ok' out
 |   `-TypeExpr
 |     `-PrimaryType name='bool'
-|-GlobalVarDecl name='TargetPose'
-| |-TypeExpr
-| | `-PrimaryType name='MaybePose'
-| `-NullLiteralExpr
-|-GlobalVarDecl name='HasTarget'
-| |-TypeExpr
-| | `-PrimaryType name='bool'
-| `-BoolLiteralExpr false
-|-GlobalVarDecl name='Ammo'
-| |-TypeExpr
-| | `-PrimaryType name='int32'
-| `-IntLiteralExpr 30
-|-GlobalVarDecl name='Goal'
-| `-TypeExpr
-|   `-PrimaryType name='Vector3'
-|-GlobalVarDecl name='LastError'
-| |-TypeExpr
-| | `-PrimaryType name='string'
-| `-StringLiteralExpr ""
-|-GlobalConstDecl name='DEFAULT_TIMEOUT_MS'
-| |-TypeExpr
-| | `-PrimaryType name='Millis'
-| `-IntLiteralExpr 2500
-|-GlobalConstDecl name='MAX_RETRIES'
-| |-TypeExpr
-| | `-PrimaryType name='int'
-| `-IntLiteralExpr 3
-|-GlobalConstDecl name='SEARCH_RADIUS'
-| |-TypeExpr
-| | `-PrimaryType name='float'
-| `-FloatLiteralExpr 10.000000
 |-TreeDecl name='EngageTarget'
 | |-ParamDecl name='pose' ref
 | | `-TypeExpr

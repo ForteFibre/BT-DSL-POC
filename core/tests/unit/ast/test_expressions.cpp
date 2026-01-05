@@ -43,7 +43,7 @@ TEST(AstExpressions, BinaryExpression)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::TreeDecl * t = unit->program->trees[0];
+  bt_dsl::TreeDecl * t = unit->program->trees()[0];
   ASSERT_GE(t->body.size(), 2U);
 
   auto * decl = first_var_decl(t->body);
@@ -77,7 +77,7 @@ TEST(AstExpressions, UnaryExpression)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * seq = find_node_stmt(unit->program->trees[0]->body, "Sequence");
+  bt_dsl::NodeStmt * seq = find_node_stmt(unit->program->trees()[0]->body, "Sequence");
   ASSERT_NE(seq, nullptr);
   ASSERT_FALSE(seq->children.empty());
 
@@ -106,7 +106,7 @@ TEST(AstExpressions, ComparisonExpression)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  bt_dsl::NodeStmt * seq = find_node_stmt(unit->program->trees[0]->body, "Sequence");
+  bt_dsl::NodeStmt * seq = find_node_stmt(unit->program->trees()[0]->body, "Sequence");
   ASSERT_NE(seq, nullptr);
 
   auto * assign = bt_dsl::dyn_cast<bt_dsl::AssignmentStmt>(seq->children[0]);
@@ -178,7 +178,7 @@ TEST(AstExpressions, IndexExpression)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  auto * tree = unit->program->trees[0];
+  auto * tree = unit->program->trees()[0];
   auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(tree->body[0]);
   ASSERT_NE(node, nullptr);
   ASSERT_EQ(node->args.size(), 1U);
@@ -203,7 +203,7 @@ TEST(AstExpressions, CastExpression)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  auto * tree = unit->program->trees[0];
+  auto * tree = unit->program->trees()[0];
   auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(tree->body[0]);
   ASSERT_NE(node, nullptr);
 
@@ -227,7 +227,7 @@ TEST(AstExpressions, NegativeNumber)
   ASSERT_NE(unit, nullptr);
   ASSERT_TRUE(unit->diags.empty());
 
-  auto * tree = unit->program->trees[0];
+  auto * tree = unit->program->trees()[0];
   auto * node = bt_dsl::dyn_cast<bt_dsl::NodeStmt>(tree->body[0]);
   ASSERT_NE(node, nullptr);
 

@@ -84,7 +84,7 @@ bool ModuleResolver::process_module(
   if (module->program) {
     const std::filesystem::path base_dir = path.parent_path();
 
-    for (auto * import_decl : module->program->imports) {
+    for (auto * import_decl : module->program->imports()) {
       // Validate import path
       if (!validate_import_path(import_decl->path, import_decl->get_range())) {
         continue;
@@ -270,7 +270,7 @@ bool ModuleResolver::register_declarations(ModuleInfo & module)
   module.types.register_builtins();
 
   // Register extern types
-  for (const auto * ext_type : program.externTypes) {
+  for (const auto * ext_type : program.extern_types()) {
     TypeSymbol sym;
     sym.name = ext_type->name;
     sym.decl = ext_type;
@@ -282,7 +282,7 @@ bool ModuleResolver::register_declarations(ModuleInfo & module)
   }
 
   // Register type aliases
-  for (const auto * alias : program.typeAliases) {
+  for (const auto * alias : program.type_aliases()) {
     TypeSymbol sym;
     sym.name = alias->name;
     sym.decl = alias;
@@ -294,7 +294,7 @@ bool ModuleResolver::register_declarations(ModuleInfo & module)
   }
 
   // Register extern nodes
-  for (const auto * ext : program.externs) {
+  for (const auto * ext : program.externs()) {
     NodeSymbol sym;
     sym.name = ext->name;
     sym.decl = ext;
@@ -305,7 +305,7 @@ bool ModuleResolver::register_declarations(ModuleInfo & module)
   }
 
   // Register trees
-  for (const auto * tree : program.trees) {
+  for (const auto * tree : program.trees()) {
     NodeSymbol sym;
     sym.name = tree->name;
     sym.decl = tree;

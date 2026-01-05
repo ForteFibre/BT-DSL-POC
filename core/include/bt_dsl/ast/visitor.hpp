@@ -399,26 +399,8 @@ public:
 
   bool visit_program(NodePtr<Program> node)
   {
-    for (auto * imp : node->imports) {
-      if (!get_derived().visit(imp)) return false;
-    }
-    for (auto * et : node->externTypes) {
-      if (!get_derived().visit(et)) return false;
-    }
-    for (auto * ta : node->typeAliases) {
-      if (!get_derived().visit(ta)) return false;
-    }
-    for (auto * ext : node->externs) {
-      if (!get_derived().visit(ext)) return false;
-    }
-    for (auto * gv : node->globalVars) {
-      if (!get_derived().visit(gv)) return false;
-    }
-    for (auto * gc : node->globalConsts) {
-      if (!get_derived().visit(gc)) return false;
-    }
-    for (auto * tree : node->trees) {
-      if (!get_derived().visit(tree)) return false;
+    for (auto * d : node->decls) {
+      if (!get_derived().visit(d)) return false;
     }
     return true;
   }

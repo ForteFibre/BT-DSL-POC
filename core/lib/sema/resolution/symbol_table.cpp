@@ -34,7 +34,7 @@ void SymbolTable::build_from_program(const Program & program)
   tree_scopes_.clear();
 
   // Register global variables
-  for (const auto * var : program.globalVars) {
+  for (const auto * var : program.global_vars()) {
     Symbol sym;
     sym.name = var->name;
     sym.kind = SymbolKind::GlobalVariable;
@@ -48,7 +48,7 @@ void SymbolTable::build_from_program(const Program & program)
   }
 
   // Register global constants
-  for (const auto * c : program.globalConsts) {
+  for (const auto * c : program.global_consts()) {
     Symbol sym;
     sym.name = c->name;
     sym.kind = SymbolKind::GlobalConst;
@@ -59,7 +59,7 @@ void SymbolTable::build_from_program(const Program & program)
   }
 
   // Build per-tree scopes
-  for (const auto * tree : program.trees) {
+  for (const auto * tree : program.trees()) {
     build_tree_scope(*tree);
   }
 }

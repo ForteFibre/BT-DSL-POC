@@ -30,7 +30,7 @@ bool InitializationChecker::check(const Program & program)
   CFGBuilder builder(nodes_);
 
   // Check each tree declaration
-  for (const auto * tree : program.trees) {
+  for (const auto * tree : program.trees()) {
     if (tree == nullptr) continue;
 
     // Build CFG for the tree

@@ -43,9 +43,9 @@ TEST(AstStatements, ChildrenAndInlineDecl)
 
   bt_dsl::Program * p = unit->program;
   ASSERT_NE(p, nullptr);
-  ASSERT_EQ(p->trees.size(), 1U);
+  ASSERT_EQ(p->trees().size(), 1U);
 
-  bt_dsl::TreeDecl * t = p->trees[0];
+  bt_dsl::TreeDecl * t = p->trees()[0];
   bt_dsl::NodeStmt * seq = find_node_stmt(t->body, "Sequence");
   ASSERT_NE(seq, nullptr);
   ASSERT_TRUE(seq->hasChildrenBlock);

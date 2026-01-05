@@ -391,7 +391,7 @@ bt_dsl::TreeDecl * find_tree_at(bt_dsl::Program & p, uint32_t off)
   bt_dsl::TreeDecl * best = nullptr;
   uint32_t best_len = std::numeric_limits<uint32_t>::max();
 
-  for (auto * t : p.trees) {
+  for (auto * t : p.trees()) {
     if (t == nullptr) continue;
     if (!contains_byte(t->get_range(), off)) {
       continue;
@@ -737,7 +737,7 @@ struct Workspace::Impl
 
     d.module.types.register_builtins();
 
-    for (const auto * ext_type : d.module.program->externTypes) {
+    for (const auto * ext_type : d.module.program->extern_types()) {
       bt_dsl::TypeSymbol sym;
       sym.name = ext_type->name;
       sym.decl = ext_type;
@@ -745,7 +745,7 @@ struct Workspace::Impl
       d.module.types.define(sym);
     }
 
-    for (const auto * alias : d.module.program->typeAliases) {
+    for (const auto * alias : d.module.program->type_aliases()) {
       bt_dsl::TypeSymbol sym;
       sym.name = alias->name;
       sym.decl = alias;
@@ -753,13 +753,13 @@ struct Workspace::Impl
       d.module.types.define(sym);
     }
 
-    for (const auto * ext : d.module.program->externs) {
+    for (const auto * ext : d.module.program->externs()) {
       bt_dsl::NodeSymbol sym;
       sym.name = ext->name;
       sym.decl = ext;
       d.module.nodes.define(sym);
     }
-    for (const auto * tree : d.module.program->trees) {
+    for (const auto * tree : d.module.program->trees()) {
       bt_dsl::NodeSymbol sym;
       sym.name = tree->name;
       sym.decl = tree;
@@ -866,7 +866,7 @@ struct Workspace::Impl
       return out;
     }
 
-    for (auto * imp : p->imports) {
+    for (auto * imp : p->imports()) {
       if (imp == nullptr) continue;
       const std::string_view spec = imp->path;
 
@@ -898,7 +898,7 @@ struct Workspace::Impl
     // Import diagnostics: policy + missing-doc checks.
     bt_dsl::Program * p = doc->module.program;
     if (p != nullptr) {
-      for (auto * imp : p->imports) {
+      for (auto * imp : p->imports()) {
         if (imp == nullptr) continue;
         const std::string_view spec = imp->path;
 
@@ -1230,10 +1230,10 @@ struct Workspace::Impl
       // Local module externs + trees
       bt_dsl::Program * p0 = doc->module.program;
       if (p0) {
-        for (auto * e : p0->externs) {
+        for (auto * e : p0->externs()) {
           if (e) names.emplace_back(e->name);
         }
-        for (auto * t : p0->trees) {
+        for (auto * t : p0->trees()) {
           if (t) names.emplace_back(t->name);
         }
       }
@@ -1241,12 +1241,12 @@ struct Workspace::Impl
       // Direct imports (public only)
       for (auto * imp : doc->module.imports) {
         if (imp == nullptr || imp->program == nullptr) continue;
-        for (auto * e : imp->program->externs) {
+        for (auto * e : imp->program->externs()) {
           if (e && bt_dsl::ModuleInfo::is_public(e->name)) {
             names.emplace_back(e->name);
           }
         }
-        for (auto * t : imp->program->trees) {
+        for (auto * t : imp->program->trees()) {
           if (t && bt_dsl::ModuleInfo::is_public(t->name)) {
             names.emplace_back(t->name);
           }
@@ -1445,7 +1445,7 @@ struct Workspace::Impl
     }
 
     // Import path definition: jump to imported file root.
-    for (auto * imp : p->imports) {
+    for (auto * imp : p->imports()) {
       if (imp == nullptr) continue;
       const auto narrowed = narrow_to_identifier(doc->text, imp->get_range(), imp->path);
       if (!contains_byte(narrowed, byte_offset)) {
@@ -1482,13 +1482,13 @@ struct Workspace::Impl
     // Node / subtree definition
     if (auto w = word_at(doc->text, byte_offset)) {
       // Prefer same document
-      for (auto * e : p->externs) {
+      for (auto * e : p->externs()) {
         if (e && e->name == *w) {
           push_loc(doc->uri, doc->text, e->get_range(), *w);
           return out;
         }
       }
-      for (auto * t : p->trees) {
+      for (auto * t : p->trees()) {
         if (t && t->name == *w) {
           push_loc(doc->uri, doc->text, t->get_range(), *w);
           return out;
@@ -1506,13 +1506,13 @@ struct Workspace::Impl
         if (ip == nullptr) {
           continue;
         }
-        for (auto * e : ip->externs) {
+        for (auto * e : ip->externs()) {
           if (e && e->name == *w && bt_dsl::ModuleInfo::is_public(e->name)) {
             push_loc(imp_doc->uri, imp_doc->text, e->get_range(), *w);
             return out;
           }
         }
-        for (auto * t : ip->trees) {
+        for (auto * t : ip->trees()) {
           if (t && t->name == *w && bt_dsl::ModuleInfo::is_public(t->name)) {
             push_loc(imp_doc->uri, imp_doc->text, t->get_range(), *w);
             return out;
@@ -1572,19 +1572,19 @@ struct Workspace::Impl
       return out;
     }
 
-    for (auto * d0 : p->externs) {
+    for (auto * d0 : p->externs()) {
       if (d0) push_sym(std::string(d0->name), "Declare", d0->get_range());
     }
 
-    for (auto * g : p->globalVars) {
+    for (auto * g : p->global_vars()) {
       if (g) push_sym(std::string(g->name), "GlobalVar", g->get_range());
     }
 
-    for (auto * c : p->globalConsts) {
+    for (auto * c : p->global_consts()) {
       if (c) push_sym(std::string(c->name), "GlobalConst", c->get_range());
     }
 
-    for (auto * t : p->trees) {
+    for (auto * t : p->trees()) {
       if (t) push_sym(std::string(t->name), "Tree", t->get_range());
     }
 
@@ -1660,12 +1660,12 @@ struct Workspace::Impl
         }
 
         // Also highlight same-document decl name.
-        for (auto * e : p->externs) {
+        for (auto * e : p->externs()) {
           if (e && e->name == node_name) {
             push_item_narrowed(e->get_range(), node_name, "Text");
           }
         }
-        for (auto * t : p->trees) {
+        for (auto * t : p->trees()) {
           if (t && t->name == node_name) {
             push_item_narrowed(t->get_range(), node_name, "Text");
           }
@@ -1833,7 +1833,7 @@ struct Workspace::Impl
     const std::vector<std::string> decl_mods{"declaration"};
 
     // Declarations
-    for (auto * e : p->externs) {
+    for (auto * e : p->externs()) {
       if (e == nullptr) continue;
       tok_ident(
         e->get_range(), e->name, token_type_for_node_category(e->category, false), decl_mods);
@@ -1843,7 +1843,7 @@ struct Workspace::Impl
       }
     }
 
-    for (auto * t : p->trees) {
+    for (auto * t : p->trees()) {
       if (t == nullptr) continue;
       tok_ident(t->get_range(), t->name, "function", decl_mods);
       for (auto * param : t->params) {
@@ -1852,11 +1852,11 @@ struct Workspace::Impl
       }
     }
 
-    for (auto * gv : p->globalVars) {
+    for (auto * gv : p->global_vars()) {
       if (gv == nullptr) continue;
       tok_ident(gv->get_range(), gv->name, "variable", decl_mods);
     }
-    for (auto * gc : p->globalConsts) {
+    for (auto * gc : p->global_consts()) {
       if (gc == nullptr) continue;
       tok_ident(gc->get_range(), gc->name, "variable", decl_mods);
     }
@@ -1961,7 +1961,7 @@ struct Workspace::Impl
       }
     };
 
-    for (auto * t : p->trees) {
+    for (auto * t : p->trees()) {
       if (t == nullptr) continue;
       for (auto * stmt : t->body) {
         visit_stmt(stmt);

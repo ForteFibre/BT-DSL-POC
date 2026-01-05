@@ -82,8 +82,12 @@ bool Lexer::skip_line_comment_or_emit_doc(Token & out)
   while (!eof() && peek() != '\n') {
     advance(1);
   }
-  (void)start;
-  return false;
+
+  out.kind = TokenKind::LineComment;
+  out.range = SourceRange(start, static_cast<uint32_t>(pos_));
+  out.text = {};  // tools should use out.range to slice the original text
+
+  return true;
 }
 
 Token Lexer::lex_identifier_or_keyword()
@@ -203,6 +207,8 @@ Token Lexer::lex_string()
 
   const auto payload_start = static_cast<uint32_t>(pos_);
 
+  bool invalid = false;
+
   while (!eof()) {
     const char c = peek();
     if (c == '"') {
@@ -220,43 +226,85 @@ Token Lexer::lex_string()
       return t;
     }
     if (c == '\\') {
-      // Skip escape sequence in a best-effort way (parser validates)
+      // Skip escape sequence in a best-effort way.
+      // If we detect an invalid escape, we still try to keep scanning until the closing quote,
+      // but mark the token as Unknown so downstream passes can preserve the original text.
       advance(1);
-      if (!eof()) {
-        if (peek() == 'u') {
-          // \u{...}
+      if (eof()) {
+        invalid = true;
+        break;
+      }
+
+      if (peek() == 'u') {
+        // \u{...} requires 1-6 hex digits.
+        advance(1);
+        if (!eof() && peek() == '{') {
           advance(1);
-          if (peek() == '{') {
+
+          bool escape_invalid = false;
+          int digits = 0;
+          while (!eof() && peek() != '}') {
+            const auto hc = static_cast<unsigned char>(peek());
+            if (!is_hex_digit(hc)) {
+              escape_invalid = true;
+            }
+            ++digits;
+            if (digits > 6) {
+              escape_invalid = true;
+            }
             advance(1);
-            while (!eof() && peek() != '}') {
-              advance(1);
-            }
-            if (peek() == '}') {
-              advance(1);
-            }
+          }
+
+          if (digits == 0) {
+            escape_invalid = true;
+          }
+
+          if (!eof() && peek() == '}') {
+            advance(1);
+          } else {
+            escape_invalid = true;
+          }
+
+          if (escape_invalid) {
+            invalid = true;
           }
         } else {
-          advance(1);
+          // Unsupported/invalid unicode escape form.
+          invalid = true;
         }
+
+        continue;
       }
+
+      // Generic one-char escape. We don't validate the escape here.
+      advance(1);
       continue;
     }
     // normal char
     advance(1);
   }
 
+  const bool has_closing_quote = (!eof() && peek() == '"');
   const auto payload_end = static_cast<uint32_t>(pos_);
 
   // closing quote (if present)
-  if (!eof() && peek() == '"') {
+  if (has_closing_quote) {
     advance(1);
   }
 
   const auto end = static_cast<uint32_t>(pos_);
 
   Token t;
-  t.kind = TokenKind::StringLiteral;
   t.range = SourceRange(start, end);
+
+  // Unterminated string or invalid escapes: emit Unknown and include the opening quote in text.
+  if (!has_closing_quote || invalid) {
+    t.kind = TokenKind::Unknown;
+    t.text = src_.substr(start, end - start);
+    return t;
+  }
+
+  t.kind = TokenKind::StringLiteral;
   t.text = src_.substr(payload_start, payload_end - payload_start);
   return t;
 }
@@ -281,18 +329,27 @@ Token Lexer::next_token()
       if (skip_line_comment_or_emit_doc(doc)) {
         return doc;
       }
-      // Non-doc comment: consumed by skip_line_comment_or_emit_doc().
-      continue;
     }
     if (starts_with("/*")) {
-      // Block comment: skip until */ (best-effort; if unterminated, skip to EOF)
+      const auto start = static_cast<uint32_t>(pos_);
+      // Block comment: consume until */ (best-effort; if unterminated, consume to EOF)
       advance(2);
       while (!eof() && !starts_with("*/")) {
         advance(1);
       }
       if (starts_with("*/")) {
         advance(2);
+
+        const auto end = static_cast<uint32_t>(pos_);
+        Token t;
+        t.kind = TokenKind::BlockComment;
+        t.range = SourceRange(start, end);
+        t.text = {};  // tools should use t.range to slice the original text
+        return t;
       }
+
+      // Unterminated block comment: do not emit a BlockComment token.
+      // Treat it as EOF so callers don't see a "phantom" comment token.
       continue;
     }
 
