@@ -66,7 +66,7 @@ tree Main() {
     AlwaysSuccess();
   }
 }`,
-    expected: `var X: int; // global variable comment
+    expected: `var X: int // global variable comment
 
 tree Main() {
   Sequence {
@@ -84,7 +84,7 @@ tree Main() {
     AlwaysSuccess();
   }
 }`,
-    expected: `const Y = 42; // constant comment
+    expected: `const Y = 42 // constant comment
 
 tree Main() {
   Sequence {
