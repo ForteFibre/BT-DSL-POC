@@ -65,7 +65,7 @@ struct NodeRegistryEqual
  * - extern node declarations
  * - tree definitions
  *
- * Reference: docs/reference/declarations-and-scopes.md 4.1.1
+ * Reference: docs/reference/semantics.md §4.1.1 (名前空間)
  */
 class NodeRegistry
 {

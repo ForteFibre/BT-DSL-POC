@@ -80,7 +80,7 @@ extern decorator Retry(n: int32);
 ```
 
 `control` / `decorator` は `#[behavior(DataPolicy, FlowPolicy)]`
-属性で振る舞いを定義します。詳細は[静的解析と安全性](/reference/static-analysis-and-safety)を参照してください。
+属性で振る舞いを定義します。詳細は[診断仕様](/reference/diagnostics)を参照してください。
 
 ### カテゴリ
 
@@ -101,7 +101,7 @@ extern decorator Retry(n: int32);
 | `mut` | State (Live R/W): 状態の共有・更新（読み書き） | -          |
 | `out` | Output: 結果の出力専用                         | -          |
 
-詳細は[静的解析と安全性 - ポート方向の整合性](/reference/static-analysis-and-safety#_6-4-ポート方向と引数制約port-direction-and-argument-constraints)を参照してください。
+詳細は[診断仕様 - ポート方向の整合性](/reference/diagnostics#_5-4-ポート方向と引数制約)を参照してください。
 
 ---
 
@@ -120,7 +120,7 @@ const DEFAULT_SPEED: float = 1.5;
 
 - グローバル変数は型注釈または初期値が必要
 - すべての tree から参照可能
-- `const` はコンパイル時定数（初期化式は `const_expr` に制限されます。詳細は [宣言とスコープ](/reference/declarations-and-scopes#_4-3-定数評価constant-evaluation)）
+- `const` はコンパイル時定数（初期化式は `const_expr` に制限されます。詳細は [意味論](/reference/semantics#_4-3-定数評価)）
 
 ---
 
@@ -265,7 +265,7 @@ LongRunningTask();
 
 > [!NOTE]
 > `Skip` は多くの場合 `Success` と同様に扱われ、親が「次の子へ進む」等の進行を行います。
-> 最終的な伝播はノード実装に依存します（詳細は [実行モデル](/reference/execution-model)）。
+> 最終的な伝播はノード実装に依存します（詳細は [意味論](/reference/semantics)）。
 
 ---
 
@@ -305,7 +305,7 @@ MoveTo(target);            // このスコープ内では target は Pose 型と
 `@guard`
 内で null チェックを行うと、そのノードのスコープ内で型の絞り込み（Narrowing）が適用されます。
 
-詳細は[型システム](/reference/type-system/)を参照してください。
+詳細は[型システム](/reference/type-system)を参照してください。
 
 ---
 

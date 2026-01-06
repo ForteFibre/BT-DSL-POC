@@ -224,7 +224,7 @@ BasicBlock * CFGBuilder::build_preconditions(
       continue;
     }
 
-    // Reference: execution-model.md §5.3.3
+    // Reference: docs/reference/semantics.md §4.6 (制御フロー)
     // - @success_if(cond): if cond is true -> skip body and return Success
     // - @failure_if(cond): if cond is true -> skip body and return Failure
     // - @skip_if(cond): if cond is true -> skip body and return Skip (treated like Success for CFG)

@@ -46,7 +46,8 @@ export default defineConfig({
 
   // Railroad 図は構文ガイド内に埋め込む方針のため、
   // standalone ページはビルド対象から除外する。
-  srcExclude: ['railroad.md', 'README.md'],
+  // reference-combined.md は export 用ファイルのため除外。
+  srcExclude: ['railroad.md', 'README.md', 'reference-combined.md'],
 
   markdown: {
     math: true,
@@ -77,32 +78,22 @@ export default defineConfig({
           { text: '言語仕様書', link: '/reference/' },
           { text: '字句構造', link: '/reference/lexical-structure' },
           { text: '構文', link: '/reference/syntax' },
-          {
-            text: '型システム',
-            link: '/reference/type-system/',
-            items: [
-              { text: '3.1 型の定義', link: '/reference/type-system/type-definitions' },
-              {
-                text: '3.2 型推論と決定',
-                link: '/reference/type-system/inference-and-resolution',
-              },
-              {
-                text: '3.3 互換性と変換',
-                link: '/reference/type-system/compatibility-and-conversion',
-              },
-              { text: '3.4 式の型規則', link: '/reference/type-system/expression-typing' },
-            ],
-          },
-          { text: '意味論: 宣言とスコープ', link: '/reference/declarations-and-scopes' },
-          { text: '意味論: 実行モデル', link: '/reference/execution-model' },
-          { text: '静的解析と安全性', link: '/reference/static-analysis-and-safety' },
+          { text: '型システム', link: '/reference/type-system' },
+          { text: '意味論', link: '/reference/semantics' },
+          { text: '診断仕様', link: '/reference/diagnostics' },
         ],
       },
       {
-        text: 'ツール仕様',
+        text: '補足資料',
         items: [
-          { text: 'コンパイラ仕様', link: '/reference/compiler' },
-          { text: 'XMLマッピング仕様', link: '/reference/xml-mapping' },
+          { text: '補足資料 目次', link: '/internals/' },
+          { text: 'XMLマッピング仕様', link: '/internals/xml-mapping' },
+          { text: 'コンパイラ仕様', link: '/internals/compiler' },
+          { text: '字句構造 補足', link: '/internals/lexical-structure-notes' },
+          { text: '構文 補足', link: '/internals/syntax-notes' },
+          { text: '型システム 補足', link: '/internals/type-system-notes' },
+          { text: '意味論 補足', link: '/internals/semantics-notes' },
+          { text: '診断仕様 補足', link: '/internals/diagnostics-notes' },
         ],
       },
       {

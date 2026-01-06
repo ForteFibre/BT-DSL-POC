@@ -78,7 +78,7 @@ bool is_assignable(const Type * target, const Type * source)
   }
 
   // NOTE: Implicit conversions between static/bounded arrays and vec<T> are forbidden.
-  // Reference: docs/reference/type-system/compatibility-and-conversion.md §3.3.5
+  // Reference: docs/reference/type-system.md §3.7.4
 
   return false;
 }

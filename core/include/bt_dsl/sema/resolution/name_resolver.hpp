@@ -31,7 +31,7 @@ namespace bt_dsl
  * - Non-transitive imports: only direct imports are searched
  * - Shadowing detection: error if declaration hides a parent scope symbol
  *
- * Reference: docs/reference/declarations-and-scopes.md
+ * Reference: docs/reference/semantics.md
  */
 class NameResolver : public AstVisitor<NameResolver>
 {

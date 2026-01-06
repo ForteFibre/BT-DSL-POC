@@ -100,7 +100,7 @@ function resolveVitePressRoute(route) {
   // Examples:
   //  - /guide/quick-start        -> docs/guide/quick-start.md
   //  - /reference/               -> docs/reference/index.md
-  //  - /reference/type-system/   -> docs/reference/type-system/index.md
+  //  - /reference/               -> docs/reference/index.md
   //  - /examples                 -> docs/examples.md
 
   let r = route;
