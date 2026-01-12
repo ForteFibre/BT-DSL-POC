@@ -30,12 +30,12 @@ whitespace = /\s+/ ;
 
 ```ebnf
 line_comment  = "//" , /[^\n]*/ ;
-block_comment = "/*" , /[^*]*\*+([^/*][^*]*\*+)*/ , "/" ;
+block_comment = "/*" , (* ネスト可能なコメント本体 *) , "*/" ;
 comment       = line_comment | block_comment ;
 ```
 
 - コメントは空白と同様に無視されます。
-- ブロックコメントの入れ子（ネスト）は**未規定**（TBD）です。
+- ブロックコメントは**ネスト可能**です。`/*` の出現でネストレベルが増加し、`*/` の出現で減少します。ネストレベルが 0 になった時点で終了します。
 
 ### 1.2.3 ドキュメンテーションコメント
 
@@ -63,11 +63,9 @@ identifier = /[a-zA-Z_][a-zA-Z0-9_]*/ - keyword ;
 以下はキーワードとして予約されます。
 
 ```text
-import  extern  type  var  const  tree  as
-in  out  ref  mut
-true  false  null
-vec
-string
+import  extern  type  var  const  tree  as  root  do
+in  out  inout
+true  false
 action  subtree  condition  control  decorator
 ```
 
@@ -78,48 +76,21 @@ action  subtree  condition  control  decorator
 ### 1.4.1 字句規則
 
 ```ebnf
-string  = '"' , /([^"\\r\n]|\\.)*/ , '"' ;
-float   = [ "-" ] , ( /[0-9]+/ , "." , /[0-9]+/ , [ exponent ]
-     | /[0-9]+/ , exponent
-     ) ;
+float    = /[0-9]+/ , "." , /[0-9]+/ , [ exponent ]
+         | /[0-9]+/ , exponent ;
 exponent = ( "e" | "E" ) , [ "+" | "-" ] , /[0-9]+/ ;
-integer = [ "-" ] , ( "0"
-     | /[1-9][0-9]*/
-     | "0x" , /[0-9a-fA-F]+/
-     | "0b" , /[01]+/
-     | "0o" , /[0-7]+/
-     ) ;
-boolean = "true" | "false" ;
-null    = "null" ;
-literal = string | float | integer | boolean | null ;
+integer  = "0" | /[1-9][0-9]*/ ;
+string   = '"' , { string_char | escape_seq } , '"' ;
+string_char = /[^"\\\n]/ ;
+escape_seq  = "\\" , ( '"' | "\\" | "n" | "r" | "t" | "0" | "b" | "f" )
+            | "\\u{" , /[0-9A-Fa-f]{1,6}/ , "}" ;
+boolean  = "true" | "false" ;
+literal  = float | integer | string | boolean ;
 ```
 
 ### 1.4.2 トークン化の優先順位
 
 `float` は `integer` より優先してトークン化されなければなりません。
-
-### 1.4.3 整数リテラル
-
-- 10進、16進（`0x`）、2進（`0b`）、8進（`0o`）を許容します。
-- 符号 `-` を許容します。
-- 桁区切り（`_`）は**未サポート**です。
-
-### 1.4.4 浮動小数点リテラル
-
-整数部、`.`、小数部から成ります。指数表記（例: `1e3`, `1.5E-2`）をサポートします。
-
-### 1.4.5 文字列リテラル
-
-- `"..."` で囲まれます。
-- `\\` によるエスケープを許容します。
-- 文字列リテラル中に**生の改行**を含めてはなりません。
-
-サポートされるエスケープシーケンスは [補足情報](../internals/lexical-structure-notes.md) を参照してください。
-
-### 1.4.6 真偽値・Null
-
-- 真偽値: `true` / `false`
-- Null: `null`
 
 ---
 
@@ -128,7 +99,7 @@ literal = string | float | integer | boolean | null ;
 ### 1.5.1 区切り文字（Punctuation）
 
 - 区切り: `;` `,` `:`
-- 括弧: `{` `}` `(` `)` `[` `]`
+- 括弧: `{` `}` `(` `)`
 - 属性: `#` `[` `]`（構文上は `#[ ... ]` として使用）
 - 事前条件: `@`
 

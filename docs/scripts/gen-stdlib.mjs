@@ -15,7 +15,7 @@ function parsePortLine(rawLine) {
   // examples:
   // in msec: int
   // out pos: Vector3,
-  // ref entry: any
+  // inout entry: any
   let line = rawLine.trim();
   if (!line) return null;
   if (line.startsWith('///')) return null;
@@ -24,9 +24,8 @@ function parsePortLine(rawLine) {
   if (!line) return null;
 
   // direction optional
-  const m = /^(?:(in|out|ref)\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/.exec(
-    line,
-  );
+  const m =
+    /^(?:(in|out|inout)\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/.exec(line);
   if (!m) return null;
   return {
     direction: m[1] ?? 'in',

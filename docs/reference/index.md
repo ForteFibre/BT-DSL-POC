@@ -5,17 +5,12 @@
 - 本仕様は**観測可能な振る舞い**のみを規定します。
 - 補足情報、コード例、実装詳細は [docs/internals/](../internals/) を参照してください。
 
-
-
 ## 目次
 
 1. [字句構造（Lexical Structure）](./lexical-structure.md)
 2. [構文（Syntax）](./syntax.md)
 3. [型システム（Type System）](./type-system.md)
 4. [意味論（Semantics）](./semantics.md)
-5. [診断仕様（Diagnostics）](./diagnostics.md)
-
-
 
 ## 適用範囲（Scope）
 
@@ -23,7 +18,7 @@
 
 - ソーステキストからトークン列へ変換する規則（字句構造）
 - トークン列から構文木を構成する規則（EBNF による文法）
-- 型付け、互換性、推論、ならびに静的制約（エラー/警告条件）
+- 型付け、互換性、推論
 - BT-DSL が規定する範囲での実行モデル（Blackboard、ノード呼び出し、事前条件）
 
 次は、本仕様の範囲外、または**実装定義**です。

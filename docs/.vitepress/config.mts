@@ -80,7 +80,6 @@ export default defineConfig({
           { text: '構文', link: '/reference/syntax' },
           { text: '型システム', link: '/reference/type-system' },
           { text: '意味論', link: '/reference/semantics' },
-          { text: '診断仕様', link: '/reference/diagnostics' },
         ],
       },
       {
@@ -89,11 +88,8 @@ export default defineConfig({
           { text: '補足資料 目次', link: '/internals/' },
           { text: 'XMLマッピング仕様', link: '/internals/xml-mapping' },
           { text: 'コンパイラ仕様', link: '/internals/compiler' },
-          { text: '字句構造 補足', link: '/internals/lexical-structure-notes' },
-          { text: '構文 補足', link: '/internals/syntax-notes' },
-          { text: '型システム 補足', link: '/internals/type-system-notes' },
-          { text: '意味論 補足', link: '/internals/semantics-notes' },
-          { text: '診断仕様 補足', link: '/internals/diagnostics-notes' },
+          { text: '診断ガイド', link: '/internals/diagnostics' },
+          { text: 'データフロー安全性', link: '/internals/data-flow-safety' },
         ],
       },
       {

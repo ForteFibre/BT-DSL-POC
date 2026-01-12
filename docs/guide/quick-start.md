@@ -10,7 +10,7 @@
 // main.bt - 最も単純なビヘイビアツリー
 
 tree Main() {
-  AlwaysSuccess();
+  root AlwaysSuccess();
 }
 ```
 
@@ -26,7 +26,7 @@ BT-DSL には標準ノードが用意されています。import で読み込み
 import "./std.bt"
 
 tree Main() {
-  Sequence {
+  root Sequence {
     Log(message: "Starting...");
     AlwaysSuccess();
   }
@@ -79,7 +79,7 @@ Retry(n: 3) {
 
 ```bt-dsl
 var TargetPos: Vector3;
-var Health: int;
+var Health: int32;
 
 tree Main() {
   FindEnemy(pos: out TargetPos);
@@ -94,16 +94,18 @@ tree Main() {
 
 ```bt-dsl
 tree Counter() {
-  var count: int = 0
+  var count: int32 = 0;
 
-  Sequence {
-    count += 1;
+  root Sequence {
+    do {
+      count += 1;
+    }
     Log(message: "Count is updated");
   }
 }
 ```
 
-tree 内で `var` を宣言すると、その tree だけで使えます。
+tree 内で `var` を宣言すると、その tree だけで使えます。代入文は `do` ブロック内で記述します。
 
 ---
 
