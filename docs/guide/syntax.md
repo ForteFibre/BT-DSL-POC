@@ -15,12 +15,12 @@ BT-DSL ファイルは典型的には次のように書きます（例）：
 
 import "./other.bt"
 
-extern action MyAction(port: int);
+extern action MyAction(port: int32);
 
-var GlobalVar: string;
+var GlobalVar: int32;
 
 tree Main() {
-  MyAction(port: 42);
+  root MyAction(port: 42);
 }
 ```
 
@@ -80,28 +80,37 @@ extern decorator Retry(n: int32);
 ```
 
 `control` / `decorator` は `#[behavior(DataPolicy, FlowPolicy)]`
-属性で振る舞いを定義します。詳細は[静的解析と安全性](/reference/static-analysis-and-safety)を参照してください。
+属性で振る舞いを定義します。
 
 ### カテゴリ
 
-| カテゴリ    | 用途                           |
-| :---------- | :----------------------------- |
-| `action`    | 動作を実行                     |
-| `condition` | 条件を判定                     |
-| `control`   | 子ノードを制御（`{...}` 必須） |
-| `decorator` | 単一の子を修飾（`{...}` 必須） |
-| `subtree`   | サブツリーの参照               |
+| カテゴリ    | 用途                                |
+| :---------- | :---------------------------------- |
+| `action`    | 動作を実行                          |
+| `condition` | 条件を判定                          |
+| `control`   | 子ノードを制御（`{...}` 必須）      |
+| `decorator` | 単一の子を修飾（`{...}` 必須）      |
+| `subtree`   | DSL 外で定義された SubTree への参照 |
+
+> [!NOTE]
+> `extern subtree` は、他の XML ファイルや BT.CPP コードで定義された SubTree を参照するために使用します。
+> DSL 内で定義する SubTree は `tree` キーワードを使用してください。
+>
+> ```bt-dsl
+> // 外部定義の SubTree を宣言
+> extern subtree NavigationTree(in goal: Vector3);
+>
+> // DSL 内で定義する SubTree
+> tree MyTree() { ... }
+> ```
 
 ### ポート方向
 
-| 方向  | 意味                                           | 省略時     |
-| :---- | :--------------------------------------------- | :--------- |
-| `in`  | Input (Snapshot): 開始時の入力                 | デフォルト |
-| `ref` | View (Live Read): 継続的な監視（読み取り）     | -          |
-| `mut` | State (Live R/W): 状態の共有・更新（読み書き） | -          |
-| `out` | Output: 結果の出力専用                         | -          |
-
-詳細は[静的解析と安全性 - ポート方向の整合性](/reference/static-analysis-and-safety#_6-4-ポート方向と引数制約port-direction-and-argument-constraints)を参照してください。
+| 方向    | 意味   | 省略時     |
+| :------ | :----- | :--------- |
+| `in`    | 入力   | デフォルト |
+| `inout` | 入出力 | -          |
+| `out`   | 出力   | -          |
 
 ---
 
@@ -109,18 +118,22 @@ extern decorator Retry(n: int32);
 
 ```bt-dsl
 /// プレイヤーの体力
-var PlayerHealth: int;
+var PlayerHealth: int32;
 var TargetPosition: Vector3;
 var IsAlerted: bool;
 
 /// 最大リトライ回数
 const MAX_HEALTH = 100;
-const DEFAULT_SPEED: float = 1.5;
+const DEFAULT_SPEED: float32 = 1.5;
 ```
 
 - グローバル変数は型注釈または初期値が必要
 - すべての tree から参照可能
-- `const` はコンパイル時定数（初期化式は `const_expr` に制限されます。詳細は [宣言とスコープ](/reference/declarations-and-scopes#_4-3-定数評価constant-evaluation)）
+- `const` は不変値（初期化後に変更できません）
+
+> [!NOTE]
+> `const` はコンパイル時定数です。初期化式にはリテラル、他の `const`、基本的な演算のみが使用できます。
+> `var` やパラメータは参照できません。詳細は[型システム - 定数式](/reference/type-system#344-定数式constant-expression)を参照してください。
 
 ---
 
@@ -128,13 +141,15 @@ const DEFAULT_SPEED: float = 1.5;
 
 ```bt-dsl
 /// このツリーの説明
-tree SearchAndDestroy(ref target: Vector3, ref ammo: int) {
-  var localCounter: int = 0;
+tree SearchAndDestroy(out target: Vector3, inout ammo: int32) {
+  var localCounter: int32 = 0;
 
-  Sequence {
+  root Sequence {
     FindEnemy(pos: out target);
-    AttackEnemy(ammo: ref ammo);
-    localCounter += 1;
+    AttackEnemy(ammo: inout ammo);
+    do {
+      localCounter += 1;
+    }
   }
 }
 ```
@@ -146,8 +161,7 @@ tree Example(
   inputOnly: int32,          // in（デフォルト）
   in explicitIn: int32,      // in（明示）
   out outputOnly: int32,     // out
-  ref readOnly: int32,       // ref（読み取り参照）
-  mut readWrite: int32       // mut（読み書き両用）
+  inout readWrite: int32     // inout（入出力）
 ) {
   // ...
 }
@@ -158,16 +172,23 @@ tree Example(
 ```bt-dsl
 tree Example() {
   /// カウンタ
-  var count: int = 0;       // 型と初期値
-  var name = "test";        // 型推論（string）
-  var flag: bool;           // 初期値なし（Uninit）
+  var count: int32 = 0;       // 型と初期値
+  var value = 1.0;            // 型推論（float64）
+  var flag: bool;           // 初期値なし（Unset: 値なし）
 
   /// ローカル上限
   const LOCAL_MAX = 10;     // ローカル定数
 
+  root Sequence {
+    DoSomething();
+  }
+
   // var x                  ← エラー: 型か初期値が必要
 }
 ```
+
+> [!NOTE]
+> `var` / `const` 宣言は `root` より前に配置します。
 
 ---
 
@@ -184,17 +205,15 @@ MoveTo(goal: TargetPos, speed: 1.5);
 
 // Blackboard 参照に方向を指定
 GetPosition(pos: out CurrentPos);
-UpdateValue(val: ref Counter);
+UpdateValue(val: inout Counter);
 ```
 
 > [!IMPORTANT]
-> `children_block`（`{ ... }`）内では、次の要素は文として `;` が必要です。
->
-> - Leaf ノード呼び出し（子を持たない呼び出し）: `Action(...);`
-> - 代入: `x = expr;` / `x += expr;`
-> - ローカル宣言: `var x = ...;` / `const X = ...;`
+> `children_block`（`{ ... }`）内では、Leaf ノード呼び出し（子を持たない呼び出し）は `;` が必要です: `Action(...);`
 >
 > `Sequence { ... }` のような Compound ノード呼び出し（子ブロックを持つもの）自体には `;` は不要です。
+>
+> なお、ローカル宣言（`var x = ...;` / `const X = ...;`）は `tree` 本体の `root` より**前**でのみ記述可能です。`children_block` 内では宣言できません。
 
 ### Control ノード
 
@@ -237,6 +256,51 @@ ForceSuccess {
 と同様の構文で使用しますが、厳密には子は1つのみです。複数記述した場合は暗黙的に `Sequence`
 でラップされます。
 
+> [!NOTE]
+> 複数の子を記述した場合、暗黙的に `Sequence` でラップされます。
+> 以下の2つは等価です：
+>
+> ```bt-dsl
+> Retry(n: 3) {
+>   ActionA();
+>   ActionB();
+> }
+>
+> // 上記は以下と等価
+> Retry(n: 3) {
+>   Sequence {
+>     ActionA();
+>     ActionB();
+>   }
+> }
+> ```
+
+### ポート引数の評価
+
+ポート引数に渡した式は**毎 tick 評価**されます。これにより、Blackboard の値が変化すると自動的に追従します。
+
+```bt-dsl
+// targetPos が外部で更新されると、MoveTo も新しい値を使う
+MoveTo(goal: targetPos);
+
+// 式も毎tick再評価される
+MoveTo(goal: targetPos + offset);
+```
+
+> [!IMPORTANT]
+> 式（`targetPos + 1` など）も毎tick評価されます。
+> 「計算結果を固定したい」場合は、事前にローカル変数にコピーしてください。
+
+```bt-dsl
+Sequence {
+  // 開始時の値を固定
+  do { cachedGoal = targetPos + 1; }
+
+  // cachedGoal は変化しない
+  MoveTo(goal: cachedGoal);
+}
+```
+
 ### 事前条件（Precondition）
 
 ノードの実行前に評価される条件を `@` 構文で記述します。
@@ -247,7 +311,7 @@ ForceSuccess {
 FetchData(result: out data);
 
 // 条件が偽なら実行しない（Failure）
-@guard(target != null)
+@guard(is_set(target))
 MoveTo(goal: target);
 
 // 条件が偽になったら Running 中でも中断
@@ -265,7 +329,17 @@ LongRunningTask();
 
 > [!NOTE]
 > `Skip` は多くの場合 `Success` と同様に扱われ、親が「次の子へ進む」等の進行を行います。
-> 最終的な伝播はノード実装に依存します（詳細は [実行モデル](/reference/execution-model)）。
+> 最終的な伝播はノード実装に依存します（詳細は [意味論](/reference/semantics)）。
+
+> [!IMPORTANT]
+> 事前条件は1つのノードに対して**1つだけ**付与できます。
+> 複数の条件が必要な場合は、論理演算子で結合してください。
+>
+> ```bt-dsl
+> // OK: 1つの事前条件に結合
+> @guard(is_set(x) && is_set(y))
+> DoSomething();
+> ```
 
 ---
 
@@ -274,79 +348,104 @@ LongRunningTask();
 ### 基本型
 
 ```bt-dsl
-var i: int32;         // 32ビット整数
-var f: float64;       // 64ビット浮動小数点
-var b: bool;          // 真偽値
-var s: string;        // 文字列
+var b: bool;            // 真偽値
+var i: int32;           // 32ビット符号付き整数
+var u: uint64;          // 64ビット符号なし整数
+var f: float64;         // 64ビット浮動小数点
+var s: string;          // 文字列
 ```
 
-### 配列型
+> [!NOTE]
+> 整数型は `int8`〜`int64`、`uint8`〜`uint64`、浮動小数点型は `float32`/`float64` が利用可能です。
+
+### Unset 変数と存在チェック
 
 ```bt-dsl
-var arr: [int32; 5];       // 静的配列（固定サイズ5）
-var bounded: [int32; <=5]; // 上限付き静的配列（最大5要素）
-var dynamic: vec<int32>;   // 動的配列
+var target: Pose;          // 初期値なし = Unset（値がない）
 
-// 配列リテラル
-var a = [1, 2, 3];         // [int32; 3]
-var v = vec![1, 2, 3];     // vec<int32>
+// target = null;          // エラー: null リテラルは使用できません
+
+@guard(is_set(target))
+MoveTo(target);            // このスコープ内では target は Set として扱われる
 ```
 
-### Nullable型
+初期化されていない変数は **Unset** 状態であり、Blackboard 上にエントリが存在しません。
+Unset 変数を読み取ろうとすると（`in` ポートへの引数渡しなど）、実行時エラーとなります。
 
-```bt-dsl
-var target: Pose?;         // Nullable（null を許容）
-target = null;             // OK
+`is_set(x)` 関数を使用することで、変数が設定済みかどうかをチェックできます。
+`@guard` 内でチェックを行うと、そのノードのスコープ内で変数を安全に使用できます（[データフロー安全性](/internals/data-flow-safety)）。
 
-@guard(target != null)
-MoveTo(target);            // このスコープ内では target は Pose 型として扱える
-```
-
-`@guard`
-内で null チェックを行うと、そのノードのスコープ内で型の絞り込み（Narrowing）が適用されます。
-
-詳細は[型システム](/reference/type-system/)を参照してください。
+詳細は[型システム](/reference/type-system)を参照してください。
 
 ---
 
 ## 8. 式と代入
 
-### 代入文
+### do ブロック（代入文・変数宣言）
 
 ```bt-dsl
-Sequence {
-  counter = 0;
-  counter += 1;
-  health -= damage;
-  score *= 2;
+tree Counter() {
+  var counter: int32 = 0;
+  var health: int32 = 100;
+  var damage: int32 = 10;
+  var score: int32 = 0;
+
+  root Sequence {
+    do {
+      counter = 0;
+      counter += 1;
+      health -= damage;
+      score *= 2;
+      var temp: int32 = counter * 2;  // do 内での変数宣言も可能
+    }
+    DoWork();
+  }
 }
 ```
 
-代入は `{...}` ブロック内でのみ記述可能です。
+代入文と `var` 宣言は `do { ... }` ブロック内で記述可能です。`do` ブロックは常に `Success` を返します。
+`do` 内で宣言された変数は Tree ローカルスコープを持ち、Tree 全体から参照可能です。
 
 ### 式の演算子
 
 ```bt-dsl
-Sequence {
-  // 算術
-  result = a + b * 2;
+tree Expressions() {
+  var a: int32 = 5;
+  var b: int32 = 3;
+  var result: int32 = 0;
+  var value: int32 = 1;
+  var isPositive: bool = false;
+  var isReady: bool = true;
+  var isPaused: bool = false;
+  var shouldAct: bool = false;
+  var mask: int32 = 15;
+  var flags: int32 = 0;
+  var large: float64 = 3.7;
+  var small: int32 = 0;
 
-  // 比較
-  isPositive = value > 0;
+  root Sequence {
+    do {
+      // 算術
+      result = a + b * 2;
 
-  // 論理
-  shouldAct = isReady && !isPaused;
+      // 比較
+      isPositive = value > 0;
 
-  // ビット
-  flags = mask & 0xFF;
+      // 論理
+      shouldAct = isReady && !isPaused;
 
-  // キャスト
-  small = large as int8;
+      // ビット
+      flags = mask & 255;
+
+      // キャスト
+      small = large as int32;
+    }
+  }
 }
 ```
 
 詳細な演算子の優先順位は
-[構文](/reference/syntax#_2-4-2-演算子の優先順位と結合規則precedence-and-associativity)
+[構文](/reference/syntax#242-演算子の優先順位と結合規則)
 を参照してください。
 
 ---

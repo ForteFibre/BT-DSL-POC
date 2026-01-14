@@ -1,5 +1,5 @@
 // tests/unit/reference/test_ref_imports.cpp
-// Reference compliance tests for: 4.1.3 Import Resolution (declarations-and-scopes.md)
+// Reference compliance tests for: 4.1.3 Import Resolution (semantics.md)
 //
 // Tests module resolution rules:
 // - Non-transitive imports (A imports B, B imports C -> A cannot see C)

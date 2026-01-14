@@ -297,7 +297,7 @@ void InitializationChecker::transfer_edge(
   if (source == nullptr || source->stmts.empty()) return;
 
   if (edge.kind == CFGEdgeKind::ChildSuccess) {
-    // Reference: static-analysis-and-safety.md §6.1.3 (DataPolicy None)
+    // Reference: docs/reference/diagnostics.md §5.1.3 (DataPolicy)
     // If the containing policy is None, no child out writes are guaranteed to propagate.
     if (source->dataPolicy == DataPolicy::None) {
       return;

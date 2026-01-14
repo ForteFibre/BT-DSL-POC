@@ -480,8 +480,8 @@ const Type * TypeChecker::infer_float_literal(FloatLiteralExpr * /*node*/, const
 const Type * TypeChecker::infer_string_literal(StringLiteralExpr * node, const Type * expected)
 {
   // String literals can be contextually typed to bounded strings.
-  // Reference: docs/reference/type-system/type-definitions.md §3.1.1.4
-  // Reference: docs/reference/type-system/inference-and-resolution.md
+  // Reference: docs/reference/type-system.md §3.1.4 (文字列)
+  // Reference: docs/reference/type-system.md §3.6 (型推論)
   if (expected && expected->kind == TypeKind::BoundedString) {
     const auto len_bytes = static_cast<uint64_t>(node->value.size());
     if (len_bytes > expected->size) {
@@ -1359,7 +1359,7 @@ void TypeChecker::check_tree_decl(TreeDecl * decl)
 
 void TypeChecker::check_global_var_decl(GlobalVarDecl * decl)
 {
-  // Reference: docs/reference/type-system/inference-and-resolution.md
+  // Reference: docs/reference/type-system.md §3.6 (型推論)
   // Global vars must have either a type annotation or an initializer.
   if (!decl->type && !decl->initialValue) {
     report_error(decl->get_range(), "global variable must have a type annotation or initializer");

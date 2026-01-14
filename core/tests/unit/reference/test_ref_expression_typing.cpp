@@ -1,5 +1,5 @@
 // tests/unit/reference/test_ref_expression_typing.cpp
-// Reference compliance tests for: 3.4 Expression Typing (expression-typing.md)
+// Reference compliance tests for: 3.8 Expression Typing (type-system.md)
 //
 // Tests that expression typing correctly implements:
 // - Unary operators (-, !)

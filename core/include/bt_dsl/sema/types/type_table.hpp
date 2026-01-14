@@ -71,8 +71,8 @@ struct TypeTableEqual
  * - extern type declarations
  * - type alias declarations
  *
- * Reference: docs/reference/declarations-and-scopes.md 4.1.1
- * Reference: docs/reference/type-system/type-definitions.md §3.1.4.1
+ * Reference: docs/reference/semantics.md §4.1.1 (名前空間)
+ * Reference: docs/reference/type-system.md §3.4 (型エイリアス)
  */
 class TypeTable
 {

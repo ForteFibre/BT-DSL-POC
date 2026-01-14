@@ -31,13 +31,16 @@ BT-DSL は BehaviorTree.CPP (BT.CPP) の DSL フロントエンドとして設�
 
 本仕様では、BT.CPP 標準機能のみで動作する XML を生成するため、以下の**コンパイル時制限**を適用します。
 
-| 制限                 | 説明                                                                          |
-| :------------------- | :---------------------------------------------------------------------------- |
-| 標準型のみ           | `int32`, `float64`, `string` のみ許可。他の数値型（`int8`, `int16` 等）は禁止 |
-| 配列型禁止           | 固定長配列 `[T; N]`、動的配列 `vec<T>` は使用不可                             |
-| `as` キャスト禁止    | 明示的型変換 `expr as T` は使用不可                                           |
-| グローバル変数初期化 | `null` のみ許可。ホスト側ランタイムで初期化する                               |
-| nullable 型          | 許可。`null` は Blackboard エントリの不在で表現                               |
+> [!NOTE]
+> BT-DSL 言語仕様では `int8`〜`int64`, `uint8`〜`uint64`, `float32`, `float64` のすべての数値型が利用可能です。
+> 本節の制限は **XML 出力モード固有** であり、BT.CPP 標準機能のみで動作する XML を生成するためのものです。
+
+| 制限                 | 説明                                                                                  |
+| :------------------- | :------------------------------------------------------------------------------------ |
+| 標準型のみ           | `bool`, `int32`, `float64`, `string` のみ許可。他の数値型（`int8`, `int16` 等）は禁止 |
+| `as` キャスト禁止    | 明示的型変換 `expr as T` は使用不可                                                   |
+| グローバル変数初期化 | Unset のみ許可（初期値指定不可）。ホスト側ランタイムで初期化する                      |
+| Unset 変数           | 許可。Blackboard エントリの不在で表現                                                 |
 
 > [!NOTE]
 > これらの制限により、BT.CPP 標準ノードのみで動作します。カスタムノードは **`BlackboardExists`（存在チェック用 Condition）** の1つのみ必要です。
@@ -159,14 +162,16 @@ Sequence {
 
 ### 2.4 暗黙のシーケンス (Implicit Sequence)
 
-`tree` 定義のルート、または `decorator` の子が **2つ以上** の場合、コンパイラは自動的に `Sequence` でラップします。
+`decorator` の子が **2つ以上** の場合、コンパイラは自動的に `Sequence` でラップします。
 
 **DSL:**
 
 ```bt-dsl
 tree Main() {
-    ActionA();
-    ActionB();
+    root Retry(n: 3) {
+        ActionA();
+        ActionB();
+    }
 }
 ```
 
@@ -174,10 +179,12 @@ tree Main() {
 
 ```xml
 <BehaviorTree ID="Main">
-    <Sequence>  <!-- 自動挿入 -->
-        <ActionA />
-        <ActionB />
-    </Sequence>
+    <Retry n="3">
+        <Sequence>  <!-- 自動挿入 -->
+            <ActionA />
+            <ActionB />
+        </Sequence>
+    </Retry>
 </BehaviorTree>
 ```
 
@@ -187,16 +194,16 @@ tree Main() {
 
 ### 3.1 ポート方向と値のマッピング
 
-| ポート方向            | DSL 指定値     | XML 属性値               |
-| :-------------------- | :------------- | :----------------------- |
-| `in`                  | リテラル `10`  | `"10"`                   |
-| `in`                  | 変数 `x`       | `"{x}"` または `"{x#1}"` |
-| `in`                  | グローバル `g` | `"@{g}"`                 |
-| `out` / `ref` / `mut` | 変数 `x`       | `"{x}"` または `"{x#1}"` |
-| `out` / `ref` / `mut` | グローバル `g` | `"@{g}"`                 |
+| ポート方向      | DSL 指定値     | XML 属性値               |
+| :-------------- | :------------- | :----------------------- |
+| `in`            | リテラル `10`  | `"10"`                   |
+| `in`            | 変数 `x`       | `"{x}"` または `"{x#1}"` |
+| `in`            | グローバル `g` | `"@{g}"`                 |
+| `out` / `inout` | 変数 `x`       | `"{x}"` または `"{x#1}"` |
+| `out` / `inout` | グローバル `g` | `"@{g}"`                 |
 
 > [!NOTE]
-> BT.CPP のポートは `in` / `out` の区別を厳密には行いません。DSL における `ref` は論理的に `in`（読み取り参照）、`mut` は論理的に `inout`（読み書き参照）に相当しますが、XML 出力上は同じ `{...}` / `@{...}` 形式になります。
+> BT.CPP のポートは `in` / `out` の区別を厳密には行いません。DSL における `inout` は論理的に入出力に相当しますが、XML 出力上は同じ `{...}` / `@{...}` 形式になります。
 
 ### 3.2 省略された `out` 引数
 
@@ -204,7 +211,7 @@ tree Main() {
 
 ### 3.3 スコープと名前マングリング
 
-ブロックスコープ変数は、XML のフラット Blackboard 上で衝突しないようリネームされます。
+Tree ローカル変数は、XML のフラット Blackboard 上で一意になるようリネームされます。
 
 - **ルール**: `{original_name}#{unique_id}`
 - コンパイル時に静的解決され、ランタイム側でのスコープ解決は不要。
@@ -217,7 +224,7 @@ tree Main() {
 
 DSL の `var g_param;` は、XML 上では **`@{g_param}`** 形式で参照されます。
 
-- **初期化**: `null` のみ許可。XML に出力しない。ホスト側ランタイムの責務。
+- **初期化**: Unset のみ許可。XML に出力しない。ホスト側ランタイムの責務。
 
 ### 4.2 定数 (Constants)
 
@@ -308,9 +315,6 @@ x += 3;
 > [!NOTE]
 > BT.CPP Script では `:=` は新規エントリ作成、`=` は既存エントリへの代入です。変数宣言時は `:=` を使用します。
 
-> [!IMPORTANT]
-> **複合代入演算子**（`+=`, `-=`, `*=`, `/=`）は、コンパイラによって**単純な代入に展開**されます。例: `x += 3` → `x = x + 3`
-
 ### 6.2 Script の演算子
 
 BT.CPP Script は以下の演算子をサポートします：
@@ -326,7 +330,7 @@ BT.CPP Script は以下の演算子をサポートします：
 
 ### 6.3 前処理を伴うノード呼び出し
 
-以下のケースでは、ノード呼び出しの前に `<Script>` で前処理を行い、全体を `<Sequence>` でラップします。
+以下のケースでは、ノード呼び出しの前に `<Script>` で前処理を行い、全体を制御ノードでラップします。
 
 #### 6.3.1 デフォルト引数省略時
 
@@ -350,7 +354,7 @@ Foo();  // x を省略
 
 #### 6.3.2 `out var x` インライン宣言
 
-`out var x` 構文で変数をインライン宣言する場合、コンパイラは事前に変数を宣言します。
+`out var x` 構文で変数をインライン宣言する場合、宣言された変数は Tree ローカルスコープを持ち、Tree 全体から参照可能です。XML 上は通常のノード呼び出しと同じ形式になります。
 
 **DSL:**
 
@@ -361,18 +365,15 @@ DoWork(result: out var x);
 **XML:**
 
 ```xml
-<Sequence>
-    <Script code="x#1 := 0" />
-    <DoWork result="{x#1}" />
-</Sequence>
+<DoWork result="{x#1}" />
 ```
 
 > [!NOTE]
-> 初期値は型に応じたデフォルト値（`int32` → `0`, `float64` → `0.0`, `string` → `''`）を使用します。
+> `out` ポートはノード側が値を書き込むため、事前の初期化は不要です。
 
 #### 6.3.3 in ポートへの右辺値（式）渡し
 
-`in` ポートに式を渡す場合、式を事前に評価して一時変数に格納します。
+`in` ポートに式を渡す場合、式を事前に評価して一時変数に格納します。式は毎tick再評価される必要があるため、`<ReactiveSequence>` でラップします。
 
 **DSL:**
 
@@ -383,59 +384,59 @@ MoveTo(target: start + offset);
 **XML:**
 
 ```xml
-<Sequence>
+<ReactiveSequence>
     <Script code="_expr#1 := {start#1} + {offset#2}" />
     <MoveTo target="{_expr#1}" />
-</Sequence>
+</ReactiveSequence>
 ```
 
-> [!NOTE]
-> 複数の前処理が必要な場合（例: 複数の引数で式評価が必要）、すべての `<Script>` を同一の `<Sequence>` 内に順番に配置します。
-
----
-
-## 7. Nullable 型と存在チェック (Nullable Types)
-
-### 7.1 null の表現
-
-DSL の nullable 型 (`T?`) における `null` 値は、**Blackboard エントリの不在**として表現されます。
+複数の引数に式を渡す場合、各式を個別の `<Script>` ノードとして生成します。
 
 **DSL:**
 
 ```bt-dsl
-var maybeValue: int32?;  // 初期状態は null
-```
-
-**XML:**
-（エントリを作成しない = Blackboard に存在しない状態）
-
-### 7.2 null 代入
-
-変数に `null` を代入する場合、BT.CPP 標準の `UnsetBlackboard` ノードを使用して Blackboard エントリを削除します。
-
-**DSL:**
-
-```bt-dsl
-var maybeValue: int32? = 10;
-maybeValue = null;  // null に戻す
+Foo(a: x + 1, b: y * 2);
 ```
 
 **XML:**
 
 ```xml
-<Script code="maybeValue#1 := 10" />
-<UnsetBlackboard key="maybeValue#1" />
+<ReactiveSequence>
+    <Script code="_expr#1 := {x#1} + 1" />
+    <Script code="_expr#2 := {y#2} * 2" />
+    <Foo a="{_expr#1}" b="{_expr#2}" />
+</ReactiveSequence>
 ```
 
-### 7.3 BlackboardExists ノード
+> [!NOTE]
+> `ReactiveSequence` は毎tick最初の子から再評価するため、`MoveTo` 等が `Running` を返している間も式が再評価されます。これにより、Blackboard の値が変化すると自動的に追従します。
 
-nullable 型の存在チェックには、カスタム Condition ノード `BlackboardExists` を使用します。
+---
+
+## 7. 変数の存在と Unset 状態 (Variable Existence and Unset)
+
+### 7.1 Unset の表現
+
+BT-DSL の Unset 変数（初期化されていない変数）は、**Blackboard エントリの不在**として表現されます。
 
 **DSL:**
 
 ```bt-dsl
-@guard(maybeValue != null)
-Process(value: maybeValue!);
+var maybeValue: int32;  // 初期状態は Unset
+```
+
+**XML:**
+（エントリを作成しない = Blackboard に存在しない状態）
+
+### 7.2 `is_set()` 関数
+
+変数が設定済み（Set）かどうかを判定する `is_set()` 関数は、カスタム Condition ノード `BlackboardExists` にマッピングされます。
+
+**DSL:**
+
+```bt-dsl
+@guard(is_set(maybeValue))
+Process(value: maybeValue);
 ```
 
 **XML:**
@@ -451,7 +452,7 @@ Process(value: maybeValue!);
 > [!NOTE]
 > `BlackboardExists` は、指定されたキーが Blackboard に存在すれば `Success`、存在しなければ `Failure` を返す Condition ノードです。
 
-### 7.4 BlackboardExists ノード仕様
+### 7.3 BlackboardExists ノード仕様
 
 ```xml
 <BlackboardExists key="variable_name" />
@@ -484,9 +485,9 @@ public:
 };
 ```
 
-### 7.5 複合条件での null チェック
+### 7.4 複合条件での存在チェック
 
-null チェックと他の条件が `&&` で結合されている場合、短絡評価をシミュレートする変換が必要です。
+`is_set(x)` と他の条件が `&&` で結合されている場合、短絡評価をシミュレートする変換が必要です。
 
 > [!NOTE]
 > BT.CPP Script では存在しないキーにアクセスすると例外が発生するため、存在チェックを先に行う必要があります。
@@ -494,7 +495,7 @@ null チェックと他の条件が `&&` で結合されている場合、短絡
 **DSL:**
 
 ```bt-dsl
-@skip_if(x != null && x > 10)
+@skip_if(is_set(x) && x > 10)
 DoWork();
 ```
 
@@ -518,42 +519,6 @@ DoWork();
         </Sequence>
     </ForceSuccess>
     <!-- ヘルパー変数でスキップ判定 -->
-    <DoWork _skipIf="{_should_skip#1}" />
-</Sequence>
-```
-
-**動作:**
-
-| 条件             | `_should_skip` の値     | 結果            |
-| :--------------- | :---------------------- | :-------------- |
-| x が存在しない   | `false`（初期値のまま） | DoWork 実行     |
-| x が存在、x > 10 | `true`                  | DoWork スキップ |
-| x が存在、x ≤ 10 | `false`                 | DoWork 実行     |
-
-#### `x == null || expr` パターン
-
-`||` で結合された null チェックも同様に変換できます。
-
-**DSL:**
-
-```bt-dsl
-@skip_if(x == null || x < 0)
-DoWork();
-```
-
-**XML:**
-
-```xml
-<Sequence>
-    <!-- 初期値: x が存在しない場合はスキップ -->
-    <Script code="_should_skip#1 := true" />
-    <!-- x が存在する場合のみ条件を評価 -->
-    <ForceSuccess>
-        <Sequence>
-            <BlackboardExists key="x#1" />
-            <Script code="_should_skip#1 := ({x#1} < 0)" />
-        </Sequence>
-    </ForceSuccess>
     <DoWork _skipIf="{_should_skip#1}" />
 </Sequence>
 ```
@@ -605,23 +570,23 @@ extern condition IsBatteryOk();
 
 ## 10. 変換規則サマリー
 
-| DSL 構文                    | XML 出力                                       |
-| :-------------------------- | :--------------------------------------------- |
-| `extern action Foo(...)`    | `<Foo ... />`                                  |
-| `extern control Bar(...)`   | `<Bar>...</Bar>`                               |
-| `extern decorator Baz(...)` | `<Baz>...</Baz>`                               |
-| `tree MyTree(...)` 定義     | `<BehaviorTree ID="MyTree">...</BehaviorTree>` |
-| `MyTree(...)` 呼び出し      | `<SubTree ID="MyTree" ... />`                  |
-| `var x = 10;`               | `<Script code="x#1 := 10" />`                  |
-| `x = expr;`                 | `<Script code="x#1 = expr" />`                 |
-| `@skip_if(cond)`            | `_skipIf="..."` 属性                           |
-| `@guard(cond)`              | 複合変換（5.1 参照）                           |
-| グローバル変数 `g`          | `@{g}`                                         |
-| ローカル変数 `x`            | `{x}` または `{x#id}`                          |
-| デフォルト引数省略          | `<Sequence>` + `<Script>` + Node（6.3.1 参照） |
-| `out var x` 構文            | `<Sequence>` + `<Script>` + Node（6.3.2 参照） |
-| in ポートへの式渡し         | `<Sequence>` + `<Script>` + Node（6.3.3 参照） |
-| nullable 存在チェック       | `<BlackboardExists key="..." />`（7.3 参照）   |
+| DSL 構文                    | XML 出力                                               |
+| :-------------------------- | :----------------------------------------------------- |
+| `extern action Foo(...)`    | `<Foo ... />`                                          |
+| `extern control Bar(...)`   | `<Bar>...</Bar>`                                       |
+| `extern decorator Baz(...)` | `<Baz>...</Baz>`                                       |
+| `tree MyTree(...)` 定義     | `<BehaviorTree ID="MyTree">...</BehaviorTree>`         |
+| `MyTree(...)` 呼び出し      | `<SubTree ID="MyTree" ... />`                          |
+| `var x = 10;`               | `<Script code="x#1 := 10" />`                          |
+| `x = expr;`                 | `<Script code="x#1 = expr" />`                         |
+| `@skip_if(cond)`            | `_skipIf="..."` 属性                                   |
+| `@guard(cond)`              | 複合変換（5.1 参照）                                   |
+| グローバル変数 `g`          | `@{g}`                                                 |
+| ローカル変数 `x`            | `{x}` または `{x#id}`                                  |
+| デフォルト引数省略          | `<Sequence>` + `<Script>` + Node（6.3.1 参照）         |
+| `out var x` 構文            | 通常のノード呼び出しと同じ（6.3.2 参照）               |
+| in ポートへの式渡し         | `<ReactiveSequence>` + `<Script>` + Node（6.3.3 参照） |
+| 存在チェック `is_set`       | `<BlackboardExists key="..." />`（7.3 参照）           |
 
 ---
 
@@ -629,10 +594,10 @@ extern condition IsBatteryOk();
 
 以下の DSL 要素は静的解析にのみ使用され、XML に出力されません。
 
-| DSL 要素                                    | 説明                                          |
-| :------------------------------------------ | :-------------------------------------------- |
-| ドキュメンテーションコメント (`///`, `//!`) | メタ情報として使用。XML には含まれない        |
-| `#[behavior(DataPolicy, FlowPolicy)]`       | 静的解析（初期化安全性）にのみ使用            |
-| `extern type`                               | DSL 固有の型宣言。BT.CPP は型情報を使用しない |
-| `const` 定義（グローバル・ローカル）        | リテラル値にインライン展開される              |
-| `type` エイリアス                           | 透過的に展開され、XML には影響しない          |
+| DSL 要素                                    | 説明                                                   |
+| :------------------------------------------ | :----------------------------------------------------- |
+| ドキュメンテーションコメント (`///`, `//!`) | メタ情報として使用。XML には含まれない                 |
+| `#[behavior(DataPolicy, FlowPolicy)]`       | コンパイラのメタデータ。静的解析（実装定義）に利用可能 |
+| `extern type`                               | DSL 固有の型宣言。BT.CPP は型情報を使用しない          |
+| `const` 定義（グローバル・ローカル）        | リテラル値にインライン展開される                       |
+| `type` エイリアス                           | 透過的に展開され、XML には影響しない                   |

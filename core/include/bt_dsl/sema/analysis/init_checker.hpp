@@ -25,7 +25,7 @@ namespace bt_dsl
 /**
  * Initialization state of a variable.
  *
- * Reference: docs/reference/static-analysis-and-safety.md §6.1.2
+ * Reference: docs/reference/diagnostics.md §5.1.2 (状態)
  */
 enum class InitState : uint8_t {
   Uninit,  ///< Uninitialized

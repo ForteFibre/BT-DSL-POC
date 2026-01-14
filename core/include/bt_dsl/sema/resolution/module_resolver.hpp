@@ -43,7 +43,7 @@ using PackageRegistry = std::unordered_map<std::string, std::filesystem::path>;
  *
  * Circular imports are allowed - modules are only parsed once.
  *
- * Reference: docs/reference/declarations-and-scopes.md §4.1.3
+ * Reference: docs/reference/semantics.md §4.1.3 (importの解決)
  */
 class ModuleResolver
 {

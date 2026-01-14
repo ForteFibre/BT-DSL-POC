@@ -211,7 +211,7 @@ private:
 /**
  * Symbol table managing Value-space scopes in a program.
  *
- * Reference: docs/reference/declarations-and-scopes.md 4.1.1
+ * Reference: docs/reference/semantics.md §4.1.1 (名前空間)
  * (Type / Node / Value namespaces are separate)
  *
  * Structure:

@@ -211,7 +211,7 @@ bool Compiler::run_semantic_analysis(
   }
 
   // 3. Constant evaluation (const decls + default arguments)
-  // Reference: docs/reference/declarations-and-scopes.md §4.3
+  // Reference: docs/reference/semantics.md §4.3 (定数評価)
   if (module.ast) {
     ConstEvaluator eval(*module.ast, types, module.values, &diags);
     if (!eval.evaluate_program(*module.program)) {
@@ -223,7 +223,7 @@ bool Compiler::run_semantic_analysis(
   }
 
   // 4. Type checking
-  // Reference: docs/reference/compiler.md §4 (Resolve & Validate)
+  // Reference: docs/internals/compiler.md §4 (Resolve & Validate)
   TypeChecker type_checker(types, module.types, module.values, &diags);
   if (!type_checker.check(*module.program)) {
     success = false;

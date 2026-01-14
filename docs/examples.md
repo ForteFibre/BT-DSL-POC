@@ -12,8 +12,8 @@
 
 - `import` により標準ノード定義（標準ライブラリ）を導入
 - グローバル黒板変数:
-  - `TargetPos: Vector3`, `Ammo: int`, `IsAlerted: bool`
-- メインループは `@[Repeat]` + `Sequence { ... }`
+  - `TargetPos: Vector3`, `Ammo: int32`, `IsAlerted: bool`
+- メインループは `Repeat { Sequence { ... } }` の形式
 
 ---
 
@@ -21,7 +21,7 @@
 
 ```bt-dsl
 var TargetPos: Vector3;
-var Ammo: int;
+var Ammo: int32;
 var IsAlerted: bool;
 ```
 
@@ -31,20 +31,21 @@ var IsAlerted: bool;
 
 ## 3. tree を SubTree として呼び出す
 
-`SearchAndDestroy` は `tree SearchAndDestroy(mut target, mut ammo, mut alert) { ... }`
+`SearchAndDestroy` は `tree SearchAndDestroy(out target: Vector3, inout ammo: int32) { ... }`
 として定義され、別 tree からはノード呼び出しとして使います。
 
 ```bt-dsl
-SearchAndDestroy(
-  target: mut TargetPos,
-  ammo: mut Ammo,
-  alert: mut IsAlerted
-);
+tree Main() {
+  root SearchAndDestroy(
+    target: out TargetPos,
+    ammo: inout Ammo
+  );
+}
 ```
 
-- `mut` を付けることで「読み書き両用」を明示。
-- 読み取りのみの場合は `ref`、書き込み専用の場合は `out` を使用。
-- 宣言側ポートが `in` の場合に `mut`
+- `inout` を付けることで「入出力」を明示。
+- 出力専用の場合は `out` を使用。
+- 宣言側ポートが `in` の場合に `inout`
   を付けると警告（入力専用ポートに対して書き込み意図を示しているため）。
 
 ---
@@ -66,8 +67,8 @@ FindEnemy(pos: out target, found: out alert);
 
 ```bt-dsl
 Fallback {
-  AlwaysFailure()
-  AlwaysSuccess()
+  AlwaysFailure();
+  AlwaysSuccess();
 }
 ```
 
@@ -95,8 +96,8 @@ ForceSuccess {
 ### 事前条件
 
 ```bt-dsl
-// null チェックで型絞り込み
-@guard(target != null)
+// 存在チェックで安全なアクセス
+@guard(is_set(target))
 MoveTo(goal: target);
 
 // 条件が真ならスキップ
